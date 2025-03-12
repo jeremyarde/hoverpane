@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Element Tracker",
+  "version": "1.0",
+  "description": "Track and monitor webpage elements",
+  "permissions": ["contextMenus", "scripting", "storage", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_title": "Click to enable element highlighting"
+  }
+}
