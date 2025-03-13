@@ -58,36 +58,44 @@ impl ApplicationHandler for App {
                 size: LogicalSize::new(size.width, (size.height - 50) / 2).into(),
             })
             .with_url("https://hackernews.com")
-            .with_on_page_load_handler(handler)
+            // .with_on_page_load_handler(handler)
             // inserts a button that reloads the page
-            .with_initialization_script(
-                r#"
-                function refreshAll() {
-                    window.location.reload();
-                }
-
-                document.body.innerHTML = '<button onclick="refreshAll()">Refresh</button>';
-            "#,
-            )
+            // .with_initialization_script(
+            //     r#"
+            //     function refreshAll() {
+            //         window.location.reload();
+            //     }
+            //     document.body.innerHTML = '<button onclick="refreshAll()">Refresh</button>';
+            // "#,
+            // )
             .build_as_child(&window)
             .unwrap();
 
-        // let control_panel = WebViewBuilder::new()
-        //     .with_bounds(Rect {
-        //         position: LogicalPosition::new(0, 0).into(),
-        //         size: LogicalSize::new(size.width, 50).into(),
-        //     })
-        //     .with_html(r#"
-        //         <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 16px;">
-        //             <button class="button" onclick="refreshAll()">Refresh All</button>
-        //             <span class="timer-display" id="timer"></span>
-        //         </div>
-        //     "#)
-        //     .build_as_child(&window)
-        //     .unwrap();
+        let control_panel = WebViewBuilder::new()
+            .with_bounds(Rect {
+                position: LogicalPosition::new(0, 0).into(),
+                size: LogicalSize::new(size.width, 50).into(),
+            })
+            .with_html(r#"
+                <script>
+                    function refreshAll() {
+                        window.ipc.postMessage('refresh-all', '*');
+                        window.location.reload();
+                    }
+                </script>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 16px;">
+                    <button class="button" onclick="refreshAll()">Refresh All</button>
+                </div>
+            "#)
+            .with_ipc_handler(|message| {
+                info!("Received message: {:?}", message);
+            })
+            .build_as_child(&window)
+            .unwrap();
 
         self.window = Some(window);
-        // self.webviews.push(control_panel);
+        self.webviews.push(control_panel);
         self.webviews.push(webview1);
         self.webviews.push(webview2);
         info!("Window and webviews created successfully");
