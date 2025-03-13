@@ -9,6 +9,7 @@ use winit::{
 };
 use wry::{
     dpi::{LogicalPosition, LogicalSize},
+    http::Response,
     Rect, WebViewBuilder,
 };
 
@@ -16,22 +17,23 @@ use wry::{
 struct App {
     window: Option<Window>,
     webviews: Vec<wry::WebView>,
-    // webview: Option<wry::WebView>,
-    // webview2: Option<wry::WebView>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
         let window_attributes = Window::default_attributes()
-            // .with_title("Message Viewer")
-            // .with_inner_size(winit::dpi::LogicalSize::new(800.0, 600.0))
-            // .with_visible(true)
             .with_inner_size(LogicalSize::new(240.0, 720.0))
             .with_transparent(true)
             .with_blur(true)
-            .with_title("Element Viewer")
+            // .with_title("Element Viewer")
             .with_movable_by_window_background(true)
+            .with_titlebar_transparent(true)
+            .with_fullsize_content_view(true)
+            .with_title_hidden(false)
+            .with_titlebar_buttons_hidden(false)
+            .with_titlebar_hidden(false)
+            .with_has_shadow(true)
             .with_resizable(true);
 
         let window = event_loop
@@ -40,10 +42,11 @@ impl ApplicationHandler for App {
 
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
+        // Adjust the positions of the content webviews to account for the control panel
         let webview1 = WebViewBuilder::new()
             .with_bounds(Rect {
-                position: LogicalPosition::new(0, 0).into(),
-                size: LogicalSize::new(size.width, size.height / 2).into(),
+                position: LogicalPosition::new(0, 50).into(),
+                size: LogicalSize::new(size.width, (size.height - 50) / 2).into(),
             })
             .with_url("https://google.com")
             .build_as_child(&window)
@@ -51,29 +54,43 @@ impl ApplicationHandler for App {
 
         let webview2 = WebViewBuilder::new()
             .with_bounds(Rect {
-                position: LogicalPosition::new(0, size.height / 2).into(),
-                size: LogicalSize::new(size.width, size.height / 2).into(),
+                position: LogicalPosition::new(0, 50 + (size.height - 50) / 2).into(),
+                size: LogicalSize::new(size.width, (size.height - 50) / 2).into(),
             })
             .with_url("https://hackernews.com")
+            .with_on_page_load_handler(handler)
+            // inserts a button that reloads the page
+            .with_initialization_script(
+                r#"
+                function refreshAll() {
+                    window.location.reload();
+                }
+
+                document.body.innerHTML = '<button onclick="refreshAll()">Refresh</button>';
+            "#,
+            )
             .build_as_child(&window)
             .unwrap();
 
-        // let webview = WebViewBuilder::new()
-        //     .with_html(
-        //         r#"
-        //         <div>
-        //             <h1>Hello, world!</h1>
+        // let control_panel = WebViewBuilder::new()
+        //     .with_bounds(Rect {
+        //         position: LogicalPosition::new(0, 0).into(),
+        //         size: LogicalSize::new(size.width, 50).into(),
+        //     })
+        //     .with_html(r#"
+        //         <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 16px;">
+        //             <button class="button" onclick="refreshAll()">Refresh All</button>
+        //             <span class="timer-display" id="timer"></span>
         //         </div>
-        //     "#,
-        //     )
-        //     .build(&window)
-        //     .expect("Failed to create webview");
+        //     "#)
+        //     .build_as_child(&window)
+        //     .unwrap();
 
         self.window = Some(window);
+        // self.webviews.push(control_panel);
         self.webviews.push(webview1);
         self.webviews.push(webview2);
-        // self.webview = Some(webview);
-        info!("Window and webview created successfully");
+        info!("Window and webviews created successfully");
     }
 
     fn window_event(
@@ -91,34 +108,6 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
-
-    // fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
-    //     info!("Application suspended");
-    //     // Clean up resources when suspended
-    //     if self.window.is_some() {
-    //         self.window.take();
-    //     }
-    //     if self.webview.is_some() {
-    //         self.webview.take();
-    //     }
-    //     // if let Some(window) = self.window.take() {
-    //     //     // window.close();
-    //     // }
-    //     // if let Some(webview) = self.webview.take() {
-    //     //     // webview.close();
-    //     // }
-    // }
-
-    // fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-    //     info!("Application exiting");
-    //     // Clean up resources when exiting
-    //     if self.webview.is_some() {
-    //         self.webview.take();
-    //     }
-    //     if self.window.is_some() {
-    //         self.window.take();
-    //     }
-    // }
 }
 
 fn main() {
