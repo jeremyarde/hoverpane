@@ -2,16 +2,28 @@ use futures_util::{SinkExt, StreamExt};
 use log::{error, info, LevelFilter};
 use scraper::{Html, Selector};
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+#[derive(Clone, Debug)]
+struct SelectedElementDetails {
+    display_text: String,
+    selector: String,
+    text: String,
+    url: String,
+    timestamp: String,
+}
 
 // Define our application state
 #[derive(Default)]
 struct AppState {
     tracked_elements: Vec<SelectedElement>,
     is_running: bool,
+    tracked_element_details: HashMap<String, SelectedElementDetails>,
 }
 
 // Text("{\"selector\":\"#ember4\",\"text\":\"crates.io\",\"url\":\"https://crates.io/crates/headless_chrome\",\"timestamp\":\"2025-03-11T21:57:40.013Z\",\"id\":\"1741731501763-ml89r48rk\"}")
@@ -30,6 +42,7 @@ impl AppState {
         Self {
             tracked_elements: Vec::new(),
             is_running: true,
+            tracked_element_details: HashMap::new(),
         }
     }
 
@@ -64,11 +77,16 @@ async fn main() {
 
     // Clone state for the frontend thread
     let frontend_state = Arc::clone(&state);
+    let ui_state = Arc::clone(&state);
 
     // Spawn the frontend thread
     std::thread::spawn(move || {
         run_frontend(frontend_state);
     });
+
+    // std::thread::spawn(move || {
+    //     send_to_ui(ui_state);
+    // });
 
     // Define the address to listen on
     let addr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
@@ -86,6 +104,21 @@ async fn main() {
         tokio::spawn(handle_connection(stream, peer, connection_state));
     }
 }
+
+// async fn send_to_ui(state: Arc<Mutex<AppState>>) {
+//     let mut stream = std::net::TcpStream::connect("127.0.0.1:8080").unwrap();
+//     // let (mut write, mut read) = stream.split();
+
+//     let mut buf = [0; 1024];
+
+//     while let Ok(bytes_read) = stream.read(&mut buf) {
+//         if bytes_read == 0 {
+//             break;
+//         }
+//         let message = String::from_utf8_lossy(&buf[..bytes_read]);
+//         info!("Received message from: {:?}", message);
+//     }
+// }
 
 async fn handle_connection(stream: TcpStream, peer: SocketAddr, state: Arc<Mutex<AppState>>) {
     match accept_async(stream).await {
@@ -162,11 +195,18 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, state: Arc<Mutex
 }
 
 fn run_frontend(state: Arc<Mutex<AppState>>) {
-    info!("Frontend thread started");
+    // let mut listener = std::net::TcpStream::connect("127.0.0.1:9090").unwrap();
+    let listener_address = "127.0.0.1:9090";
+    info!("Starting listener on {}", listener_address);
+    let listener = std::net::TcpListener::bind(listener_address).unwrap();
+    let (mut stream, _test) = listener.accept().unwrap();
+
+    let res = stream.write(b"Hello, world this is a test!");
+    println!("stream res: {:?}", res);
 
     // Example of how to access state from the frontend thread
     loop {
-        if let Ok(app_state) = state.lock() {
+        if let Ok(mut app_state) = state.lock() {
             info!("App state: {:?}", app_state.get_elements().len());
             if !app_state.is_running {
                 break;
@@ -204,6 +244,16 @@ fn run_frontend(state: Arc<Mutex<AppState>>) {
 
                 for element in elements {
                     println!("Selected details: {:?}", element.text().collect::<Vec<_>>());
+                    let details = SelectedElementDetails {
+                        display_text: element.text().collect::<Vec<_>>().join(" "),
+                        selector: element.attr("id").unwrap_or_default().to_string(),
+                        text: element.text().collect::<Vec<_>>().join(" "),
+                        url: element.attr("href").unwrap_or_default().to_string(),
+                        timestamp: element.attr("timestamp").unwrap_or_default().to_string(),
+                    };
+                    app_state
+                        .tracked_element_details
+                        .insert(element.attr("id").unwrap_or_default().to_string(), details);
                 }
             }
         }
