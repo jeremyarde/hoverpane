@@ -1,4 +1,6 @@
+use jiff;
 use log::{info, warn};
+use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use winit::{
     application::ApplicationHandler,
@@ -10,13 +12,13 @@ use winit::{
 use wry::{
     dpi::{LogicalPosition, LogicalSize},
     http::Response,
-    Rect, WebViewBuilder,
+    Rect, WebView, WebViewBuilder,
 };
 
-// use std::cell::RefCell;
-// thread_local! {
-//     static APP: RefCell<Option<Arc<Mutex<App>>>> = RefCell::new(None);
-// }
+pub const WEBVIEW_HEIGHT: u32 = 100;
+pub const WEBVIEW_WIDTH: u32 = 50;
+pub const CONTROL_PANEL_HEIGHT: u32 = 50;
+pub const CONTROL_PANEL_WIDTH: u32 = 50;
 
 #[derive(Debug)]
 enum CustomEvent {
@@ -25,13 +27,13 @@ enum CustomEvent {
     RefreshBottom,
 }
 
-#[derive(Debug)]
-struct MonitoredView {
+#[derive(Debug, Clone, Deserialize)]
+pub struct MonitoredView {
     url: String,
     title: String,
     index: usize,
     refresh_count: usize,
-    last_refresh: std::time::Instant,
+    last_refresh: jiff::Timestamp,
     refresh_interval: std::time::Duration,
 }
 
@@ -42,18 +44,21 @@ struct App {
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub enum ControlMessage {
+    Refresh(usize),
+    AddWebView(MonitoredView),
+    RemoveWebView(usize),
+}
+
+// enum ControlAction {
+//     RefreshAll,
+//     RefreshTop,
+//     RefreshBottom,
+// }
+
 impl App {
     fn refresh_webview(&mut self, index: usize) {
-        // if let Some(webview) = self.webviews.get_mut(index) {
-        //     if let Err(e) = webview.reload() {
-        //         warn!("Failed to reload webview {}: {:?}", index, e);
-        //     }
-        // }
-        // for webview in self.webviews.iter_mut() {
-        //     if let Err(e) = webview.reload() {
-        //         warn!("Failed to reload webview {}: {:?}", index, e);
-        //     }
-        // }
         if let Some(webview) = self.webviews.get_mut(index) {
             if let Err(e) = webview.reload() {
                 warn!("Failed to reload webview {}: {:?}", index, e);
@@ -64,26 +69,48 @@ impl App {
     fn add_webview(&mut self, view: MonitoredView) {
         if let Some(window) = self.window.as_ref() {
             let size = window.inner_size().to_logical::<u32>(window.scale_factor());
-            let index = self.webviews.len() - 1; // Subtract 1 to account for control panel
-
-            info!("Creating new webview {} at index {}", view.url, index);
-            let webview = WebViewBuilder::new()
-                .with_bounds(Rect {
-                    position: LogicalPosition::new(0, 150 * index as i32).into(),
-                    size: LogicalSize::new(size.width, 150).into(),
-                })
-                .with_url(&view.url)
-                .build_as_child(window)
-                .unwrap();
-
-            // Insert the new webview before the control panel
-            self.webviews.insert(self.webviews.len() - 1, webview);
+            let webview = App::create_webview(&size, window, view.clone(), self.webviews.len() - 1);
             self.monitored_views.lock().unwrap().push(view);
+            self.webviews.insert(self.webviews.len() - 1, webview);
         }
+    }
+
+    fn create_webview(
+        size: &LogicalSize<u32>,
+        window: &Window,
+        view: MonitoredView,
+        index: usize,
+    ) -> WebView {
+        let webview = WebViewBuilder::new()
+            .with_bounds(Rect {
+                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * index as u32).into(),
+                size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
+            })
+            .with_url(&view.url)
+            .build_as_child(window)
+            .unwrap();
+        // self.webviews.push(webview);
+        webview
     }
 
     fn remove_webview(&mut self, index: usize) {
         self.webviews.remove(index);
+        self.fix_webview_positions();
+    }
+
+    fn fix_webview_positions(&mut self) {
+        let size = self
+            .window
+            .as_ref()
+            .unwrap()
+            .inner_size()
+            .to_logical::<u32>(self.window.as_ref().unwrap().scale_factor());
+        for (i, webview) in self.webviews.iter_mut().enumerate() {
+            webview.set_bounds(Rect {
+                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
+                size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
+            });
+        }
     }
 }
 
@@ -118,14 +145,7 @@ impl ApplicationHandler<UserEvent> for App {
 
         for (i, view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
             info!("Creating webview for {}", view.url);
-            let webview = WebViewBuilder::new()
-                .with_bounds(Rect {
-                    position: LogicalPosition::new(0, 150 * i as i32).into(),
-                    size: LogicalSize::new(size.width, (size.height - 50) / 2).into(),
-                })
-                .with_url(view.url.clone())
-                .build_as_child(&window)
-                .unwrap();
+            let webview = App::create_webview(&size, &window, view.clone(), i);
             self.webviews.push(webview);
         }
 
@@ -179,18 +199,20 @@ impl ApplicationHandler<UserEvent> for App {
             )
             .with_ipc_handler(move |message| {
                 info!("Received message: {:?}", message);
-                proxy_clone
-                    .lock()
-                    .unwrap()
-                    .send_event(UserEvent::AddWebView(MonitoredView {
-                        url: "https://jeremyarde.com".to_string(),
-                        title: "Jeremy Arde".to_string(),
-                        index: 0,
-                        refresh_count: 0,
-                        last_refresh: std::time::Instant::now(),
-                        refresh_interval: std::time::Duration::from_secs(3),
-                    }))
-                    .unwrap();
+
+                let proxy = proxy_clone.lock().unwrap();
+                let message: ControlMessage = serde_json::from_str(&message.body()).unwrap();
+                match message {
+                    ControlMessage::Refresh(index) => {
+                        proxy.send_event(UserEvent::Refresh(index)).unwrap();
+                    }
+                    ControlMessage::AddWebView(view) => {
+                        proxy.send_event(UserEvent::AddWebView(view)).unwrap();
+                    }
+                    ControlMessage::RemoveWebView(index) => {
+                        proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
+                    }
+                }
             })
             .build_as_child(&window)
             .unwrap();
@@ -262,26 +284,18 @@ fn main() {
         },
     ]));
 
+    let monitored_views_clone = monitored_views.clone();
     let proxy_clone = event_loop_proxy.clone();
-    std::thread::spawn(move || {
-        let mut counter = 0;
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(15));
-
-            let new_view = MonitoredView {
-                url: format!("https://example.com/{}", counter),
-                title: format!("Example {}", counter),
-                index: counter + 2, // +2 because we start with 2 views
-                refresh_count: 0,
-                last_refresh: std::time::Instant::now(),
-                refresh_interval: std::time::Duration::from_secs(3),
-            };
-
-            info!("Adding new webview {}", new_view.title);
-            proxy_clone
-                .send_event(UserEvent::AddWebView(new_view))
-                .unwrap();
-            counter += 1;
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(10));
+        for view in monitored_views_clone.lock().unwrap().iter_mut() {
+            if view.last_refresh.elapsed() > view.refresh_interval {
+                view.refresh_count += 1;
+                view.last_refresh = std::time::Instant::now();
+                proxy_clone
+                    .send_event(UserEvent::Refresh(view.index))
+                    .unwrap();
+            }
         }
     });
 
