@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wry = { version = "0.50.4", features = ["protocol"] }
+wry = { version = "0.50.4", features = ["protocol", "transparent"] }
 winit = "0.30.9"
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }

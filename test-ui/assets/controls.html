@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent !important;
+        -webkit-app-region: drag;
+        height: 150px;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        -webkit-app-region: no-drag;
+        background: transparent !important;
+      }
+
+      .hidden-button {
+        width: 50px;
+        height: 100%;
+        opacity: 0;
+        transition: all 0.2s ease-in-out;
+        padding: 6px 12px;
+        border: none;
+        outline: none;
+        border-radius: 0;
+        background: transparent !important;
+        color: rgba(217, 34, 34, 0.8);
+        cursor: pointer;
+        font-size: 16px;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        -webkit-app-region: no-drag;
+      }
+
+      .hidden-button:hover {
+        opacity: 1;
+        background: rgba(217, 34, 34, 0.05) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button class="hidden-button" onclick="refresh()">⟳</button>
+    </div>
+    <script>
+      //   document.documentElement.style.background = "transparent";
+      //   document.body.style.background = "transparent";
+
+      function refresh() {
+        window.ipc.postMessage(
+          JSON.stringify({
+            refresh: $0,
+          })
+        );
+      }
+      function remove() {
+        window.ipc.postMessage(
+          JSON.stringify({
+            remove: $0,
+          })
+        );
+      }
+    </script>
+  </body>
+</html>
