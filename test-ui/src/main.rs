@@ -53,9 +53,26 @@ struct App {
 #[serde(rename_all = "lowercase")]
 pub enum ControlMessage {
     Refresh(usize),
-    AddWebView(AddWebView),
-    RemoveWebView(usize),
+    Add(AddWebView),
+    Remove(usize),
     UpdateRefreshInterval(Seconds),
+    Move(usize, Direction),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Direction {
+    Up,
+    Down,
+}
+
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Direction::Up => write!(f, "up"),
+            Direction::Down => write!(f, "down"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -164,13 +181,18 @@ impl App {
                     ControlMessage::Refresh(index) => {
                         proxy.send_event(UserEvent::Refresh(index)).unwrap();
                     }
-                    ControlMessage::AddWebView(view) => {
+                    ControlMessage::Add(view) => {
                         proxy.send_event(UserEvent::AddWebView(view)).unwrap();
                     }
-                    ControlMessage::RemoveWebView(index) => {
+                    ControlMessage::Remove(index) => {
                         proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
                     }
                     ControlMessage::UpdateRefreshInterval(_) => todo!(),
+                    ControlMessage::Move(index, direction) => {
+                        proxy
+                            .send_event(UserEvent::MoveWebView(index, direction))
+                            .unwrap();
+                    }
                 }
             })
             .with_transparent(true)
@@ -206,13 +228,18 @@ impl App {
                     ControlMessage::Refresh(index) => {
                         proxy.send_event(UserEvent::Refresh(index)).unwrap();
                     }
-                    ControlMessage::AddWebView(view) => {
+                    ControlMessage::Add(view) => {
                         proxy.send_event(UserEvent::AddWebView(view)).unwrap();
                     }
-                    ControlMessage::RemoveWebView(index) => {
+                    ControlMessage::Remove(index) => {
                         proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
                     }
                     ControlMessage::UpdateRefreshInterval(_) => todo!(),
+                    ControlMessage::Move(index, direction) => {
+                        proxy
+                            .send_event(UserEvent::MoveWebView(index, direction))
+                            .unwrap();
+                    }
                 }
             })
             .with_transparent(true)
@@ -258,6 +285,40 @@ impl App {
             });
         }
     }
+
+    fn move_webview(&mut self, index: usize, direction: Direction) {
+        let new_index = match direction {
+            Direction::Up => {
+                if index == 0 {
+                    return; // Can't move up if already at top
+                }
+                index - 1
+            }
+            Direction::Down => {
+                if index >= self.webviews.len() - 1 {
+                    return; // Can't move down if already at bottom
+                }
+                index + 1
+            }
+        };
+
+        // Swap webviews
+        self.webviews.swap(index, new_index);
+
+        // Swap controls
+        self.controls.swap(index, new_index);
+
+        // Swap monitored views and update indices
+        {
+            let mut views = self.monitored_views.lock().unwrap();
+            views.swap(index, new_index);
+            views[index].index = index;
+            views[new_index].index = new_index;
+        } // Lock is dropped here
+
+        // Update positions of all webviews and controls
+        self.fix_webview_positions();
+    }
 }
 
 #[derive(Debug)]
@@ -266,6 +327,7 @@ enum UserEvent {
     AddWebView(AddWebView),
     RemoveWebView(usize),
     ShowNewViewForm,
+    MoveWebView(usize, Direction),
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -347,6 +409,10 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Showing new view form");
                 self.new_view_form.as_ref().unwrap().set_visible(true);
             }
+            UserEvent::MoveWebView(index, direction) => {
+                info!("Moving webview at index {} {}", index, direction);
+                self.move_webview(index, direction);
+            }
         }
     }
 }
@@ -412,19 +478,26 @@ mod tests {
         let message = ControlMessage::Refresh(0);
         let json = serde_json::to_string(&message).unwrap();
         assert_eq!(json, r#"{"refresh":0}"#);
+
+        // Test move command
+        let message = ControlMessage::Move(1, Direction::Up);
+        let json = serde_json::to_string(&message).unwrap();
+        assert_eq!(json, r#"{"move":[1,"up"]}"#);
+
+        // Test deserialization
+        let message: ControlMessage = serde_json::from_str(r#"{"move":[1,"up"]}"#).unwrap();
+        assert_eq!(message, ControlMessage::Move(1, Direction::Up));
     }
 
     #[test]
     fn test_add_webview() {
-        let add_post_data =
-            "{\"addwebview\":{\"url\":\"\",\"refresh_interval\":\"\",\"title\":\"\"}}";
+        let add_post_data = "{\"add\":{\"url\":\"\",\"refresh_interval\":\"\",\"title\":\"\"}}";
 
-        let message: ControlMessage =
-            serde_json::from_str(add_post_data.to_string().as_str()).unwrap();
+        let message: ControlMessage = serde_json::from_str(add_post_data).unwrap();
 
         assert_eq!(
             message,
-            ControlMessage::AddWebView(AddWebView {
+            ControlMessage::Add(AddWebView {
                 url: "".to_string(),
                 refresh_interval: 60,
                 title: "".to_string(),

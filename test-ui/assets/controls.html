@@ -49,6 +49,8 @@
   <body>
     <div class="controls">
       <button class="hidden-button" onclick="refresh()">⟳</button>
+      <button class="hidden-button" onclick="move('up')">↑</button>
+      <button class="hidden-button" onclick="move('down')">↓</button>
     </div>
     <script>
       //   document.documentElement.style.background = "transparent";
@@ -65,6 +67,13 @@
         window.ipc.postMessage(
           JSON.stringify({
             remove: $0,
+          })
+        );
+      }
+      function move(direction) {
+        window.ipc.postMessage(
+          JSON.stringify({
+            move: [$0, direction],
           })
         );
       }
