@@ -1,0 +1,10 @@
+[package]
+name = "element-extractor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.12.13", features = ["blocking"] }
+scraper = "0.23.1"
+thiserror = "2.0.12"
+tracing = "0.1.41"

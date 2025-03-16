@@ -1,3 +1,4 @@
+use element_extractor::Extractor;
 use jiff;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
@@ -20,19 +21,13 @@ use wry::{
 
 pub const WEBVIEW_HEIGHT: u32 = 200;
 pub const WEBVIEW_WIDTH: u32 = 50;
-pub const CONTROL_PANEL_HEIGHT: u32 = 50;
+pub const CONTROL_PANEL_HEIGHT: u32 = 20;
 pub const CONTROL_PANEL_WIDTH: u32 = 50;
 pub const WINDOW_WIDTH: u32 = 240;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
-pub const NEW_VIEW_FORM_HEIGHT: u32 = 200;
-#[derive(Debug)]
-enum CustomEvent {
-    RefreshAll,
-    RefreshTop,
-    RefreshBottom,
-}
+// pub const NEW_VIEW_FORM_HEIGHT: u32 = 200;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MonitoredView {
@@ -53,6 +48,7 @@ struct App {
     controls: Vec<wry::WebView>,
     new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
+    extractor: Extractor,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -258,8 +254,8 @@ impl App {
         // put new view form at top of the window
         let control_panel = WebViewBuilder::new()
             .with_bounds(Rect {
-                position: LogicalPosition::new(0, size.height - NEW_VIEW_FORM_HEIGHT).into(),
-                size: LogicalSize::new(size.width, NEW_VIEW_FORM_HEIGHT).into(),
+                position: LogicalPosition::new(0, 0).into(),
+                size: LogicalSize::new(size.width, size.height).into(),
             })
             .with_html(include_str!("../assets/new_view.html"))
             .with_ipc_handler(move |message| {
@@ -297,6 +293,8 @@ impl App {
     }
 
     fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
+        let window_count = self.webviews.len();
+
         for (i, webview) in self.webviews.iter_mut().enumerate() {
             webview.set_bounds(Rect {
                 position: LogicalPosition::new(
@@ -315,12 +313,8 @@ impl App {
         }
         if let Some(new_view_form) = self.new_view_form.as_ref() {
             new_view_form.set_bounds(Rect {
-                position: LogicalPosition::new(
-                    0,
-                    (size.height - NEW_VIEW_FORM_HEIGHT).clamp(0, size.height),
-                )
-                .into(),
-                size: LogicalSize::new(size.width, NEW_VIEW_FORM_HEIGHT).into(),
+                position: LogicalPosition::new(0, 0).into(),
+                size: LogicalSize::new(size.width, size.height).into(),
             });
         }
     }
@@ -390,13 +384,16 @@ impl ApplicationHandler<UserEvent> for App {
             .create_window(
                 window_attributes
                     .clone()
-                    .with_inner_size(LogicalSize::new(WINDOW_WIDTH, NEW_VIEW_FORM_HEIGHT))
+                    .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
                     .with_title("new view"),
             )
             .unwrap();
+
+        let scale_factor = new_view_form_window.scale_factor();
+        // let scale_factor = 0.5;
         let form_size = new_view_form_window
             .inner_size()
-            .to_logical::<u32>(new_view_form_window.scale_factor());
+            .to_logical::<u32>(scale_factor);
         let new_view_form =
             App::create_new_view_form(&form_size, &new_view_form_window, 0, self.proxy.clone());
         self.new_view_form = Some(new_view_form);
@@ -522,6 +519,8 @@ fn main() {
         }
     });
 
+    let extractor = Extractor::new();
+
     let mut app = App {
         window: None,
         new_view_form_window: None,
@@ -530,6 +529,7 @@ fn main() {
         controls: vec![],
         new_view_form: None,
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
+        extractor,
     };
 
     event_loop.run_app(&mut app).unwrap();
