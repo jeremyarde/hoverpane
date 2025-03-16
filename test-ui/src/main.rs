@@ -38,6 +38,7 @@ pub struct MonitoredView {
     refresh_count: usize,
     last_refresh: jiff::Timestamp,
     refresh_interval: std::time::Duration,
+    element_selector: Option<String>,
 }
 
 struct App {
@@ -109,10 +110,14 @@ impl App {
                 refresh_count: 0,
                 last_refresh: jiff::Timestamp::now(),
                 refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
+                element_selector: None,
             };
-            let webview = App::create_webview(&size, window, view.clone(), self.webviews.len() - 1);
+            let webview = App::create_webview(&size, window, view.clone(), self.webviews.len());
+            let controls =
+                App::create_controls(&size, window, self.webviews.len(), self.proxy.clone());
             self.monitored_views.lock().unwrap().push(view);
-            self.webviews.insert(self.webviews.len() - 1, webview);
+            self.webviews.push(webview);
+            self.controls.push(controls);
         }
     }
 
@@ -128,6 +133,8 @@ impl App {
                 size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
             })
             .with_url(&view.url)
+            // .with_transparent(true)
+            // .with_background_color((0, 0, 0, 0))
             .build_as_child(window)
             .unwrap();
         // self.webviews.push(webview);
@@ -154,7 +161,7 @@ impl App {
         }
         for (i, control) in self.controls.iter_mut().enumerate() {
             control.set_bounds(Rect {
-                position: LogicalPosition::new(0, CONTROL_PANEL_HEIGHT * i as u32).into(),
+                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
                 size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
             });
         }
@@ -169,7 +176,7 @@ impl App {
         let control_panel = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
-                size: LogicalSize::new(size.width / 2, CONTROL_PANEL_HEIGHT).into(),
+                size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
             })
             .with_html(include_str!("../assets/controls.html").replace("$0", &i.to_string()))
             .with_ipc_handler(move |message| {
@@ -197,9 +204,6 @@ impl App {
             })
             .with_transparent(true)
             .with_background_color((0, 0, 0, 0))
-            // .with_initialization_script(
-            //     "document.documentElement.style.background = 'transparent';",
-            // )
             .build_as_child(window)
             .unwrap();
 
@@ -266,11 +270,7 @@ impl App {
         }
         for (i, control) in self.controls.iter_mut().enumerate() {
             control.set_bounds(Rect {
-                position: LogicalPosition::new(
-                    0,
-                    (CONTROL_PANEL_HEIGHT * i as u32).clamp(0, size.height),
-                )
-                .into(),
+                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
                 size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
             });
         }
@@ -289,16 +289,16 @@ impl App {
     fn move_webview(&mut self, index: usize, direction: Direction) {
         let new_index = match direction {
             Direction::Up => {
-                if index == 0 {
+                if index + 1 >= self.webviews.len() {
                     return; // Can't move up if already at top
                 }
-                index - 1
+                index + 1
             }
             Direction::Down => {
-                if index >= self.webviews.len() - 1 {
+                if index == 0 {
                     return; // Can't move down if already at bottom
                 }
-                index + 1
+                index - 1
             }
         };
 
@@ -373,7 +373,7 @@ impl ApplicationHandler<UserEvent> for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        info!("Window event received: {:?}", event);
+        // info!("Window event   received: {:?}", event);
         match event {
             WindowEvent::CloseRequested => {
                 info!("Window close requested");
@@ -431,6 +431,7 @@ fn main() {
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
             refresh_interval: std::time::Duration::from_secs(3),
+            element_selector: None,
         },
         MonitoredView {
             url: "https://hackernews.com".to_string(),
@@ -439,6 +440,7 @@ fn main() {
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
             refresh_interval: std::time::Duration::from_secs(5),
+            element_selector: None,
         },
     ]));
 

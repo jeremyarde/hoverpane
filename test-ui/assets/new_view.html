@@ -61,7 +61,7 @@
       function add() {
         window.ipc.postMessage(
           JSON.stringify({
-            addwebview: {
+            add: {
               url: document.getElementById("url").value ?? "",
               refresh_interval: parseInt(
                 document.getElementById("refresh-interval").value
