@@ -22,7 +22,11 @@ pub const WEBVIEW_HEIGHT: u32 = 200;
 pub const WEBVIEW_WIDTH: u32 = 50;
 pub const CONTROL_PANEL_HEIGHT: u32 = 50;
 pub const CONTROL_PANEL_WIDTH: u32 = 50;
-pub const NEW_VIEW_FORM_HEIGHT: u32 = 150;
+pub const WINDOW_WIDTH: u32 = 240;
+
+pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
+
+pub const NEW_VIEW_FORM_HEIGHT: u32 = 200;
 #[derive(Debug)]
 enum CustomEvent {
     RefreshAll,
@@ -43,6 +47,7 @@ pub struct MonitoredView {
 
 struct App {
     window: Option<Window>,
+    new_view_form_window: Option<Window>,
     monitored_views: Arc<Mutex<Vec<MonitoredView>>>,
     webviews: Vec<wry::WebView>,
     controls: Vec<wry::WebView>,
@@ -92,6 +97,11 @@ type Seconds = i32;
 // }
 
 impl App {
+    fn calculate_window_height(&self) -> u32 {
+        let view_count = self.monitored_views.lock().unwrap().len();
+        WEBVIEW_HEIGHT * view_count as u32
+    }
+
     fn refresh_webview(&mut self, index: usize) {
         if let Some(webview) = self.webviews.get_mut(index) {
             if let Err(e) = webview.reload() {
@@ -102,9 +112,19 @@ impl App {
 
     fn add_webview(&mut self, view: AddWebView) {
         if let Some(window) = self.window.as_ref() {
+            // First update the window size for the new view
+            let new_height = (self.webviews.len() + 1) as u32 * WEBVIEW_HEIGHT;
+            window.request_inner_size(LogicalSize::new(WINDOW_WIDTH, new_height));
+
+            // Get the updated size after the resize request
             let size = window.inner_size().to_logical::<u32>(window.scale_factor());
+
             let view = MonitoredView {
-                url: view.url,
+                url: if view.url.starts_with("https://") {
+                    view.url
+                } else {
+                    format!("https://{}", view.url)
+                },
                 title: view.title,
                 index: self.webviews.len(),
                 refresh_count: 0,
@@ -112,12 +132,20 @@ impl App {
                 refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
                 element_selector: None,
             };
+
+            // Add to monitored views first so positions are calculated correctly
+            self.monitored_views.lock().unwrap().push(view.clone());
+
+            // Create and add the webview and controls
             let webview = App::create_webview(&size, window, view.clone(), self.webviews.len());
             let controls =
                 App::create_controls(&size, window, self.webviews.len(), self.proxy.clone());
-            self.monitored_views.lock().unwrap().push(view);
+
             self.webviews.push(webview);
             self.controls.push(controls);
+
+            // Fix positions of all webviews to ensure proper layout
+            self.fix_webview_positions();
         }
     }
 
@@ -132,17 +160,28 @@ impl App {
                 position: LogicalPosition::new(0, WEBVIEW_HEIGHT * index as u32).into(),
                 size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
             })
+            .with_clipboard(true)
             .with_url(&view.url)
-            // .with_transparent(true)
-            // .with_background_color((0, 0, 0, 0))
+            .with_visible(true)
+            .with_initialization_script(
+                "window.addEventListener('load', () => { window.scrollTo(0, 0); });",
+            )
             .build_as_child(window)
             .unwrap();
-        // self.webviews.push(webview);
         webview
     }
 
     fn remove_webview(&mut self, index: usize) {
         self.webviews.remove(index);
+        self.controls.remove(index);
+        self.monitored_views.lock().unwrap().remove(index);
+
+        // Update window height
+        if let Some(window) = self.window.as_ref() {
+            let new_height = self.calculate_window_height();
+            window.request_inner_size(LogicalSize::new(WINDOW_WIDTH, new_height));
+        }
+
         self.fix_webview_positions();
     }
 
@@ -333,12 +372,12 @@ enum UserEvent {
 impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
+        let window_height = self.calculate_window_height();
         let window_attributes = Window::default_attributes()
-            .with_inner_size(LogicalSize::new(240.0, 720.0))
+            .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
             .with_transparent(true)
             .with_blur(true)
             .with_movable_by_window_background(true)
-            // .with_titlebar_transparent(true)
             .with_fullsize_content_view(true)
             .with_title_hidden(false)
             .with_titlebar_buttons_hidden(false)
@@ -346,14 +385,29 @@ impl ApplicationHandler<UserEvent> for App {
             .with_has_shadow(true)
             .with_resizable(true);
 
-        let window = event_loop
-            .create_window(window_attributes)
-            .expect("Failed to create window");
-
-        let size = window.inner_size().to_logical::<u32>(window.scale_factor());
-
-        let new_view_form = App::create_new_view_form(&size, &window, 0, self.proxy.clone());
+        // controls window
+        let new_view_form_window = event_loop
+            .create_window(
+                window_attributes
+                    .clone()
+                    .with_inner_size(LogicalSize::new(WINDOW_WIDTH, NEW_VIEW_FORM_HEIGHT))
+                    .with_title("new view"),
+            )
+            .unwrap();
+        let form_size = new_view_form_window
+            .inner_size()
+            .to_logical::<u32>(new_view_form_window.scale_factor());
+        let new_view_form =
+            App::create_new_view_form(&form_size, &new_view_form_window, 0, self.proxy.clone());
         self.new_view_form = Some(new_view_form);
+
+        // creating the main window
+        let window = event_loop
+            .create_window(
+                window_attributes.with_title("viewer"), // .with_title_hidden(true),
+            )
+            .expect("Failed to create window");
+        let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
         for (i, view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
             info!("Creating webview for {}", view.url);
@@ -364,6 +418,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
 
         self.window = Some(window);
+        self.new_view_form_window = Some(new_view_form_window);
         info!("Window and webviews created successfully");
     }
 
@@ -382,11 +437,19 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::RedrawRequested => {
                 info!("Redraw requested");
                 // window.request_redraw();
+                self.window.as_ref().unwrap().request_redraw();
             }
             WindowEvent::Resized(size) => {
                 // info!("Window resized to {:?}", size);
                 let size = size.to_logical::<u32>(self.window.as_ref().unwrap().scale_factor());
                 self.resize_webviews(&size);
+            }
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                info!("Keyboard input event: {:?}", event);
             }
             _ => {}
         }
@@ -430,7 +493,7 @@ fn main() {
             index: 0,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(3),
+            refresh_interval: std::time::Duration::from_secs(1),
             element_selector: None,
         },
         MonitoredView {
@@ -461,6 +524,7 @@ fn main() {
 
     let mut app = App {
         window: None,
+        new_view_form_window: None,
         monitored_views,
         webviews: vec![],
         controls: vec![],

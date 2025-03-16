@@ -8,8 +8,9 @@
         padding: 0;
         background: transparent !important;
         -webkit-app-region: drag;
-        height: 100%;
-        width: 100%;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
       }
 
       .newview-form {
@@ -17,20 +18,48 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 2px;
+        padding: 2px;
         height: 100%;
         width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
       }
 
       .newview-form-input {
-        width: 100%;
-        /* height: 100%; */
-        background: transparent !important;
+        width: calc(100% - 16px); /* Account for padding */
+        padding: 8px;
+        border: 1px solid rgba(217, 34, 34, 0.2);
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: rgba(217, 34, 34, 0.8);
+        font-size: 14px;
+        -webkit-app-region: no-drag;
+        margin: 2px 0;
+      }
+
+      .newview-form-input:focus {
+        outline: none;
+        border-color: rgba(217, 34, 34, 0.5);
+        background: rgba(255, 255, 255, 0.2) !important;
       }
 
       .newview-form-button {
-        width: 100%;
-        /* height: 100%; */
-        background: transparent !important;
+        width: calc(100% - 4px); /* Account for padding */
+        padding: 2px;
+        border: none;
+        border-radius: 4px;
+        background: rgba(217, 34, 34, 0.1) !important;
+        color: rgba(217, 34, 34, 0.8);
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        -webkit-app-region: no-drag;
+        margin: 2px 0;
+      }
+
+      .newview-form-button:hover {
+        background: rgba(217, 34, 34, 0.2) !important;
       }
     </style>
   </head>
@@ -41,34 +70,48 @@
         type="text"
         id="url"
         placeholder="URL"
+        spellcheck="false"
+        autocomplete="off"
+        contenteditable="true"
       />
       <input
         class="newview-form-input"
         type="number"
         id="refresh-interval"
-        placeholder="60"
+        placeholder="Refresh interval (seconds)"
         min="1"
+        value="60"
+        spellcheck="false"
+        autocomplete="off"
       />
       <input
         class="newview-form-input"
         type="text"
         id="title"
         placeholder="Title"
+        spellcheck="false"
+        autocomplete="off"
+        contenteditable="true"
       />
       <button class="newview-form-button" onclick="add()">Add</button>
     </div>
     <script>
+      // Make sure inputs are not draggable
+      document.querySelectorAll(".newview-form-input").forEach((input) => {
+        input.addEventListener("mousedown", (e) => {
+          e.stopPropagation();
+        });
+      });
+
       function add() {
         window.ipc.postMessage(
           JSON.stringify({
             add: {
-              url: document.getElementById("url").value ?? "",
-              refresh_interval: parseInt(
-                document.getElementById("refresh-interval").value
-              )
-                ? parseInt(document.getElementById("refresh-interval").value)
-                : 60,
-              title: document.getElementById("title").value ?? "",
+              url: document.getElementById("url").value || "",
+              refresh_interval:
+                parseInt(document.getElementById("refresh-interval").value) ||
+                60,
+              title: document.getElementById("title").value || "",
             },
           })
         );
