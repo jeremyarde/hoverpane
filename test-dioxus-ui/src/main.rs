@@ -27,19 +27,19 @@ pub fn app() -> Element {
     //     }
     // });
 
-    use_future(move || async move {
-        loop {
-            if running() {
-                let mut stream = std::net::TcpStream::connect("127.0.0.1:9090").unwrap();
-                let mut reader = std::io::BufReader::new(stream);
-                let mut buf = [0; 1024];
-                let bytes_read = reader.read(&mut buf).unwrap();
-                let new_message = String::from_utf8_lossy(&buf[..bytes_read]);
-                message.set(new_message.to_string());
-            }
-            std::thread::sleep(std::time::Duration::from_secs(5));
-        }
-    });
+    // use_future(move || async move {
+    //     loop {
+    //         if running() {
+    //             let mut stream = std::net::TcpStream::connect("127.0.0.1:9090").unwrap();
+    //             let mut reader = std::io::BufReader::new(stream);
+    //             let mut buf = [0; 1024];
+    //             let bytes_read = reader.read(&mut buf).unwrap();
+    //             let new_message = String::from_utf8_lossy(&buf[..bytes_read]);
+    //             message.set(new_message.to_string());
+    //         }
+    //         std::thread::sleep(std::time::Duration::from_secs(5));
+    //     }
+    // });
 
     // let client = use_coroutine(|mut rx: UnboundedReceiver<String>| async move {
     //     while let Some(message) = rx.next().await {
@@ -51,6 +51,7 @@ pub fn app() -> Element {
 
     rsx! {
         // document::Link { href: asset!("/assets/hello.css"), rel: "stylesheet" }
+        iframe { src: "https://www.google.com" }
         h1 { "High-Five counter: {count}" }
         button { onclick: move |_| count += 1, "Up high!" }
         button { onclick: move |_| count -= 1, "Down low!" }

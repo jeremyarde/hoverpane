@@ -27,7 +27,13 @@ impl Extractor {
                 .unwrap(),
         }
     }
-    fn extract(&self, url: String, selector: &str) -> Result<String, ExtractorError> {
+    pub fn extract(&self, url: String, selector: &str) -> Result<String, ExtractorError> {
+        if selector.is_empty() {
+            return Err(ExtractorError::SelectorParseError {
+                selector: selector.to_string(),
+                error: "Selector is empty".to_string(),
+            });
+        }
         let client_response = self.client.get(url).send();
 
         let mut response = match client_response {
@@ -43,7 +49,11 @@ impl Extractor {
         info!("Response text: {:?}", &text);
 
         let document = Html::parse_document(&text);
-        let selector = Selector::parse(selector).unwrap();
+        let selector =
+            Selector::parse(selector).map_err(|e| ExtractorError::SelectorParseError {
+                selector: selector.to_string(),
+                error: e.to_string(),
+            })?;
 
         let mut elements = document.select(&selector);
 
@@ -54,6 +64,12 @@ impl Extractor {
 
         Ok(result)
     }
+
+    pub fn extract_with_id(&self, url: String, id: String) -> Result<String, ExtractorError> {
+        // Selector::parse(selectors)
+        let url = format!("{}/{}", url, id);
+        self.extract(url, "#")
+    }
 }
 
 #[cfg(test)]
@@ -61,8 +77,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn test_extract() {
+        let extractor = Extractor::new();
+        let result = extractor.extract("https://news.ycombinator.com/item?id=43379262".to_string(), "#hnmain > tbody > tr:nth-child(3) > td > table.fatitem > tbody > tr:nth-child(2) > td.subtext > span > a:nth-child(8)");
+        info!("Result: {:?}", result);
+
+        assert!(result.is_ok());
+        // assert!(!result.unwrap().is_empty());
+        assert!(result.unwrap().contains("comments"));
     }
 }

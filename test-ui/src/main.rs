@@ -38,6 +38,7 @@ pub struct MonitoredView {
     last_refresh: jiff::Timestamp,
     refresh_interval: std::time::Duration,
     element_selector: Option<String>,
+    element_value: Option<String>,
 }
 
 struct App {
@@ -59,6 +60,8 @@ pub enum ControlMessage {
     Remove(usize),
     UpdateRefreshInterval(Seconds),
     Move(usize, Direction),
+    ExtractResult(String),
+    // Extract(String, String),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -127,15 +130,16 @@ impl App {
                 last_refresh: jiff::Timestamp::now(),
                 refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
                 element_selector: None,
+                element_value: None,
             };
 
             // Add to monitored views first so positions are calculated correctly
             self.monitored_views.lock().unwrap().push(view.clone());
 
             // Create and add the webview and controls
-            let webview = App::create_webview(&size, window, view.clone(), self.webviews.len());
+            let webview = self.create_webview(&size, window, view.clone(), self.webviews.len());
             let controls =
-                App::create_controls(&size, window, self.webviews.len(), self.proxy.clone());
+                self.create_controls(&size, window, self.webviews.len(), self.proxy.clone());
 
             self.webviews.push(webview);
             self.controls.push(controls);
@@ -146,24 +150,43 @@ impl App {
     }
 
     fn create_webview(
+        &self,
         size: &LogicalSize<u32>,
         window: &Window,
         view: MonitoredView,
         index: usize,
     ) -> WebView {
-        let webview = WebViewBuilder::new()
+        let mut webviewbuilder = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, WEBVIEW_HEIGHT * index as u32).into(),
                 size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
             })
             .with_clipboard(true)
-            .with_url(&view.url)
-            .with_visible(true)
-            .with_initialization_script(
-                "window.addEventListener('load', () => { window.scrollTo(0, 0); });",
-            )
-            .build_as_child(window)
-            .unwrap();
+            // .with_url(&view.url)
+            .with_ipc_handler(move |message| {
+                info!("Received message: {:?}", message);
+            })
+            .with_visible(true);
+        // .with_initialization_script(
+        //     "window.addEventListener('load', () => { window.scrollTo(0, 0); });",
+        // )
+
+        webviewbuilder = webviewbuilder.with_url(&view.url);
+
+        let webview = webviewbuilder.build_as_child(window).unwrap();
+        if let Some(selector) = view.element_selector {
+            info!("Extracting from {} with selector {}", view.url, selector);
+            let proxyclone = self.proxy.clone();
+            let script_content =
+                include_str!("../assets/find_element.js").replace("$pattern", &selector);
+
+            info!("Script content: {}", script_content);
+            webview.evaluate_script(&script_content).unwrap();
+            info!(
+                "Extraction interval set for {} with selector {}",
+                view.url, selector
+            );
+        }
         webview
     }
 
@@ -203,6 +226,7 @@ impl App {
     }
 
     fn create_controls(
+        &self,
         size: &LogicalSize<u32>,
         window: &Window,
         i: usize,
@@ -234,6 +258,10 @@ impl App {
                         proxy
                             .send_event(UserEvent::MoveWebView(index, direction))
                             .unwrap();
+                    }
+                    ControlMessage::ExtractResult(result) => {
+                        info!("Extracted result: {}", result);
+                        proxy.send_event(UserEvent::ExtractResult(result)).unwrap();
                     }
                 }
             })
@@ -279,13 +307,14 @@ impl App {
                             .send_event(UserEvent::MoveWebView(index, direction))
                             .unwrap();
                     }
+                    ControlMessage::ExtractResult(result) => {
+                        info!("Extracted result: {}", result);
+                        proxy.send_event(UserEvent::ExtractResult(result)).unwrap();
+                    }
                 }
             })
             .with_transparent(true)
             .with_background_color((0, 0, 0, 0))
-            // .with_initialization_script(
-            //     "document.documentElement.style.background = 'transparent';",
-            // )
             .build_as_child(window)
             .unwrap();
 
@@ -361,6 +390,9 @@ enum UserEvent {
     RemoveWebView(usize),
     ShowNewViewForm,
     MoveWebView(usize, Direction),
+    ExtractResult(String),
+    // Extract(String, String),
+    // ExtractResult(String),
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -408,8 +440,8 @@ impl ApplicationHandler<UserEvent> for App {
 
         for (i, view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
             info!("Creating webview for {}", view.url);
-            let webview = App::create_webview(&size, &window, view.clone(), i);
-            let controls = App::create_controls(&size, &window, i, self.proxy.clone());
+            let webview = self.create_webview(&size, &window, view.clone(), i);
+            let controls = self.create_controls(&size, &window, i, self.proxy.clone());
             self.webviews.push(webview);
             self.controls.push(controls);
         }
@@ -432,9 +464,9 @@ impl ApplicationHandler<UserEvent> for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                info!("Redraw requested");
+                // info!("Redraw requested");
                 // window.request_redraw();
-                self.window.as_ref().unwrap().request_redraw();
+                // self.window.as_ref().unwrap().request_redraw();
             }
             WindowEvent::Resized(size) => {
                 // info!("Window resized to {:?}", size);
@@ -473,6 +505,9 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Moving webview at index {} {}", index, direction);
                 self.move_webview(index, direction);
             }
+            UserEvent::ExtractResult(result) => {
+                info!("Extracted result: {}", result);
+            }
         }
     }
 }
@@ -484,23 +519,24 @@ fn main() {
     let event_loop = EventLoop::<UserEvent>::with_user_event().build().unwrap();
     let event_loop_proxy = event_loop.create_proxy();
     let monitored_views = Arc::new(Mutex::new(vec![
+        // MonitoredView {
+        //     url: "https://google.com".to_string(),
+        //     title: "Google".to_string(),
+        //     index: 0,
+        //     refresh_count: 0,
+        //     last_refresh: jiff::Timestamp::now(),
+        //     refresh_interval: std::time::Duration::from_secs(1),
+        //     element_selector: None,
+        // },
         MonitoredView {
-            url: "https://google.com".to_string(),
-            title: "Google".to_string(),
-            index: 0,
-            refresh_count: 0,
-            last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(1),
-            element_selector: None,
-        },
-        MonitoredView {
-            url: "https://hackernews.com".to_string(),
-            title: "Hacker News".to_string(),
+            url: "https://finance.yahoo.com/quote/GME/".to_string(),
+            title: "Price".to_string(),
             index: 1,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
             refresh_interval: std::time::Duration::from_secs(5),
-            element_selector: None,
+            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(1) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+            element_value: None,
         },
     ]));
 
