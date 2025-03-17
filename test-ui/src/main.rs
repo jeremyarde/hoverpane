@@ -1,10 +1,13 @@
 use element_extractor::Extractor;
 use jiff;
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{
     cmp::max,
+    collections::HashMap,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 use winit::{
     application::ApplicationHandler,
@@ -24,6 +27,7 @@ pub const WEBVIEW_WIDTH: u32 = 50;
 pub const CONTROL_PANEL_HEIGHT: u32 = 40;
 pub const CONTROL_PANEL_WIDTH: u32 = 50;
 pub const WINDOW_WIDTH: u32 = 240;
+pub const RESIZE_DEBOUNCE_TIME: u128 = 500;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
@@ -59,15 +63,32 @@ struct ScrapeResult {
     timestamp: jiff::Timestamp,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
+pub struct NanoId(String);
+
+impl std::fmt::Display for NanoId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 struct App {
     window: Option<Window>,
     new_view_form_window: Option<Window>,
     monitored_views: Arc<Mutex<Vec<MonitoredView>>>,
     webviews: Vec<wry::WebView>,
+    element_views: HashMap<NanoId, ElementView>,
     controls: Vec<wry::WebView>,
     new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
+    last_resize: Option<Instant>,
     // extractor: Extractor,
+}
+
+struct ElementView {
+    webview: wry::WebView,
+    nano_id: NanoId,
+    visible: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -78,8 +99,9 @@ pub enum ControlMessage {
     Remove(usize),
     UpdateRefreshInterval(Seconds),
     Move(usize, Direction),
-    ExtractResult(usize, String),
+    ExtractResult(NanoId, String),
     Minimize(usize),
+    ToggleElementView(NanoId),
     // Extract(String, String),
 }
 
@@ -161,11 +183,46 @@ impl App {
                 views.push(view.clone());
                 num_views = views.len();
             }
-
             // Create and add the webview and controls
             let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
-            let controls =
-                self.create_controls(&size, window, self.webviews.len(), self.proxy.clone());
+
+            if view.element_selector.is_some() {
+                info!("Creating element view for {}", view.title);
+                let starting_height = window.inner_size().height / num_views as u32;
+                let starting_width = size.width;
+                let element_view = WebViewBuilder::new()
+                    .with_bounds(Rect {
+                        position: LogicalPosition::new(0, starting_height * num_views as u32)
+                            .into(),
+                        size: LogicalSize::new(400, 400).into(),
+                    })
+                    .with_html(include_str!("../assets/element_view.html"))
+                    .with_transparent(true)
+                    .with_background_color((0, 0, 0, 0))
+                    .build_as_child(window)
+                    .unwrap();
+
+                element_view.set_visible(true);
+                self.element_views.insert(
+                    NanoId(view.title.clone()),
+                    ElementView {
+                        webview: element_view,
+                        nano_id: NanoId(view.title.clone()),
+                        visible: false,
+                    },
+                );
+            }
+
+            let controls = {
+                let webview_len = self.webviews.len();
+                self.create_controls(
+                    &size,
+                    window,
+                    webview_len,
+                    self.proxy.clone(),
+                    NanoId(view.title.clone()),
+                )
+            };
 
             self.webviews.push(webview);
             self.controls.push(controls);
@@ -186,12 +243,11 @@ impl App {
         let proxy = self.proxy.clone();
         let starting_height = window.inner_size().height / num_views as u32;
         let starting_width = size.width;
-        // let starting_height = WEBVIEW_HEIGHT;
-        // let starting_height = size.height;
         view.original_size = ViewSize {
             width: starting_width,
             height: starting_height,
         };
+
         let mut webviewbuilder = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, starting_height * index as u32).into(),
@@ -199,7 +255,6 @@ impl App {
             })
             .with_visible(true)
             .with_clipboard(true)
-            // .with_url(&view.url)
             .with_ipc_handler(move |message| {
                 match serde_json::from_str::<JsScrapeResult>(&message.body()) {
                     Ok(scrape_result) => {
@@ -208,7 +263,7 @@ impl App {
                             .lock()
                             .unwrap()
                             .send_event(UserEvent::ExtractResult(
-                                scrape_result.view_id,
+                                NanoId(scrape_result.view_id.to_string()),
                                 scrape_result.value,
                             ))
                             .unwrap();
@@ -225,7 +280,6 @@ impl App {
 
         if let Some(selector) = &mut view.element_selector {
             info!("Extracting from {} with selector {}", view.url, selector);
-            let proxyclone = self.proxy.clone();
             let script_content = include_str!("../assets/find_element.js")
                 .replace("$pattern", &selector)
                 .replace("$interval", &view.refresh_interval.as_millis().to_string())
@@ -238,6 +292,7 @@ impl App {
                 view.url, selector
             );
         }
+
         webview
     }
 
@@ -258,27 +313,7 @@ impl App {
     fn fix_webview_positions(&mut self) {
         let window = self.window.as_ref().unwrap();
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
-        let num_views = self.webviews.len();
-        if num_views == 0 {
-            return;
-        }
-
-        let webview_height = size.height / num_views as u32;
-
-        for (i, webview) in self.webviews.iter_mut().enumerate() {
-            webview.set_bounds(Rect {
-                position: LogicalPosition::new(0, webview_height * i as u32).into(),
-                size: LogicalSize::new(size.width, webview_height).into(),
-            });
-        }
-
-        // Controls stay at the top of each webview
-        for (i, control) in self.controls.iter_mut().enumerate() {
-            control.set_bounds(Rect {
-                position: LogicalPosition::new(0, webview_height * i as u32).into(),
-                size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
-            });
-        }
+        self.resize_webviews(&size);
     }
 
     fn create_controls(
@@ -287,13 +322,19 @@ impl App {
         window: &Window,
         i: usize,
         proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
+        webview_id: NanoId,
     ) -> WebView {
+        let script_contents = include_str!("../assets/controls.html")
+            .replace("$0", &i.to_string())
+            .replace("$id", &webview_id.to_string());
+        debug!("Controls script contents: {}", script_contents);
+
         let control_panel = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
                 size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
             })
-            .with_html(include_str!("../assets/controls.html").replace("$0", &i.to_string()))
+            .with_html(script_contents)
             .with_ipc_handler(move |message| {
                 info!("Received message: {:?}", message);
 
@@ -323,6 +364,12 @@ impl App {
                     }
                     ControlMessage::Minimize(index) => {
                         proxy.send_event(UserEvent::Minimize(index)).unwrap();
+                    }
+                    ControlMessage::ToggleElementView(nano_id) => {
+                        info!("Toggling element view for {}", nano_id);
+                        proxy
+                            .send_event(UserEvent::ToggleElementView(nano_id))
+                            .unwrap();
                     }
                 }
             })
@@ -359,24 +406,6 @@ impl App {
                     ControlMessage::Add(view) => {
                         proxy.send_event(UserEvent::AddWebView(view)).unwrap();
                     }
-                    // ControlMessage::Remove(index) => {
-                    //     proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
-                    // }
-                    // ControlMessage::UpdateRefreshInterval(_) => todo!(),
-                    // ControlMessage::Move(index, direction) => {
-                    //     proxy
-                    //         .send_event(UserEvent::MoveWebView(index, direction))
-                    //         .unwrap();
-                    // }
-                    // ControlMessage::ExtractResult(view_id, result) => {
-                    //     info!("Extracted result: {}", result);
-                    //     proxy
-                    //         .send_event(UserEvent::ExtractResult(view_id, result))
-                    //         .unwrap();
-                    // }
-                    // ControlMessage::Minimize(index) => {
-                    //     proxy.send_event(UserEvent::Minimize(index)).unwrap();
-                    // }
                     _ => {}
                 }
             })
@@ -390,54 +419,53 @@ impl App {
 
     fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
         let window = self.window.as_ref().unwrap();
-        let window_size = window.inner_size();
         let num_views = self.webviews.len();
         if num_views == 0 {
             return;
         }
 
         let webview_height = size.height / num_views as u32;
-        // let hidden_views = self
-        //     .monitored_views
-        //     .lock()
-        //     .iter()
-        //     .map(|view| view.hidden)
-        //     .collect();
 
-        for (i, webview) in self.webviews.iter_mut().enumerate() {
-            let current_size = webview
-                .bounds()
-                .unwrap()
-                .size
-                .to_logical::<u32>(window.scale_factor());
-            if current_size.width == 0 {
-                // webview is hidden, so don't resize it
-                continue;
+        // Pre-calculate common values
+        let width = size.width;
+
+        // Update all webviews in a single pass
+        for i in 0..num_views {
+            let y_position = webview_height * i as u32;
+
+            // Only resize if the webview is visible
+            if let Some(webview) = self.webviews.get_mut(i) {
+                if let Ok(bounds) = webview.bounds() {
+                    let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
+                    if current_size.width > 0 {
+                        // Only resize visible webviews
+                        webview.set_bounds(Rect {
+                            position: LogicalPosition::new(0, y_position).into(),
+                            size: LogicalSize::new(width, webview_height).into(),
+                        });
+                    }
+                }
             }
-            // if current_size.
-            webview.set_bounds(Rect {
-                position: LogicalPosition::new(0, webview_height * i as u32).into(),
-                size: LogicalSize::new(size.width, webview_height).into(),
-            });
-        }
 
-        // Controls stay at a fixed position in each webview
-        for (i, control) in self.controls.iter_mut().enumerate() {
-            control.set_bounds(Rect {
-                position: LogicalPosition::new(0, webview_height * i as u32).into(),
-                size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
-            });
+            // Update control position
+            if let Some(control) = self.controls.get_mut(i) {
+                control.set_bounds(Rect {
+                    position: LogicalPosition::new(0, y_position).into(),
+                    size: LogicalSize::new(width, CONTROL_PANEL_HEIGHT).into(),
+                });
+            }
         }
 
         if let Some(new_view_form) = self.new_view_form.as_ref() {
-            let new_form_window = self.new_view_form_window.as_ref().unwrap();
-            let new_form_size = new_form_window
-                .inner_size()
-                .to_logical::<u32>(window.scale_factor());
-            new_view_form.set_bounds(Rect {
-                position: LogicalPosition::new(0, 0).into(),
-                size: LogicalSize::new(new_form_size.width, new_form_size.height).into(),
-            });
+            if let Some(new_form_window) = self.new_view_form_window.as_ref() {
+                let new_form_size = new_form_window
+                    .inner_size()
+                    .to_logical::<u32>(window.scale_factor());
+                new_view_form.set_bounds(Rect {
+                    position: LogicalPosition::new(0, 0).into(),
+                    size: LogicalSize::new(new_form_size.width, new_form_size.height).into(),
+                });
+            }
         }
     }
 
@@ -510,6 +538,19 @@ impl App {
             views[index].hidden = true;
         }
     }
+
+    fn update_element_view(&mut self, view_id: NanoId, result: String) {
+        if let Some(element_view) = self.element_views.get_mut(&view_id) {
+            // element_view.webview.set_html(result);
+            element_view
+                .webview
+                .evaluate_script(&format!(
+                    "document.getElementById('value').textContent = '{}';",
+                    result
+                ))
+                .unwrap();
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -519,8 +560,9 @@ enum UserEvent {
     RemoveWebView(usize),
     ShowNewViewForm,
     MoveWebView(usize, Direction),
-    ExtractResult(usize, String),
+    ExtractResult(NanoId, String),
     Minimize(usize),
+    ToggleElementView(NanoId),
     // Extract(String, String),
     // ExtractResult(String),
 }
@@ -538,7 +580,8 @@ impl ApplicationHandler<UserEvent> for App {
             .with_title_hidden(false)
             .with_titlebar_buttons_hidden(false)
             .with_titlebar_hidden(false)
-            .with_has_shadow(true)
+            .with_title("Watcher")
+            .with_has_shadow(false)
             .with_resizable(true);
 
         // controls window
@@ -575,7 +618,13 @@ impl ApplicationHandler<UserEvent> for App {
         for (i, mut view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
             info!("Creating webview for {}", view.url);
             let webview = self.create_webview(&size, &window, &mut view, i, num_views);
-            let controls = self.create_controls(&size, &window, i, self.proxy.clone());
+            let controls = self.create_controls(
+                &size,
+                &window,
+                i,
+                self.proxy.clone(),
+                NanoId(view.title.clone()),
+            );
             self.webviews.push(webview);
             self.controls.push(controls);
         }
@@ -603,7 +652,16 @@ impl ApplicationHandler<UserEvent> for App {
                 // self.window.as_ref().unwrap().request_redraw();
             }
             WindowEvent::Resized(size) => {
-                // info!("Window resized to {:?}", size);
+                // Debounce resize events to improve performance
+                let now = Instant::now();
+                if let Some(last_resize) = self.last_resize {
+                    if now.duration_since(last_resize).as_millis() < RESIZE_DEBOUNCE_TIME {
+                        // Skip this resize event if less than 50ms since last one
+                        return;
+                    }
+                }
+                self.last_resize = Some(now);
+
                 let size = size.to_logical::<u32>(self.window.as_ref().unwrap().scale_factor());
                 self.resize_webviews(&size);
             }
@@ -641,10 +699,22 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::ExtractResult(view_id, result) => {
                 info!("Extracted result: {}", result);
+                self.update_element_view(view_id, result);
             }
             UserEvent::Minimize(index) => {
                 info!("Minimizing webview at index {}", index);
                 self.minimize_webview(index);
+            }
+            UserEvent::ToggleElementView(nano_id) => {
+                info!("UserEvent: Toggling element view for {}", nano_id);
+                if let Some(mut element_view) = self.element_views.get_mut(&nano_id) {
+                    element_view.visible = !element_view.visible;
+                    if element_view.visible {
+                        element_view.webview.set_visible(true);
+                    } else {
+                        element_view.webview.set_visible(false);
+                    }
+                }
             }
         }
     }
@@ -698,7 +768,7 @@ fn main() {
         }
     });
 
-    let extractor = Extractor::new();
+    // let extractor = Extractor::new();
 
     let mut app = App {
         window: None,
@@ -707,7 +777,9 @@ fn main() {
         webviews: vec![],
         controls: vec![],
         new_view_form: None,
+        element_views: HashMap::new(),
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
+        last_resize: None,
         // extractor,
     };
 

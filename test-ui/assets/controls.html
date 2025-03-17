@@ -62,6 +62,13 @@
       <button class="hidden-button" id="minimize-button" onclick="minimize()">
         Hide
       </button>
+      <button
+        class="hidden-button"
+        id="toggle-element-view"
+        onclick="toggleElementView()"
+      >
+        Element
+      </button>
     </div>
     <script>
       let hidden = false;
@@ -96,6 +103,13 @@
         window.ipc.postMessage(
           JSON.stringify({
             minimize: $0,
+          })
+        );
+      }
+      function toggleElementView() {
+        window.ipc.postMessage(
+          JSON.stringify({
+            toggleelementview: "$id",
           })
         );
       }
