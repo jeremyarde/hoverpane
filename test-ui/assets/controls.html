@@ -44,7 +44,7 @@
         opacity: 1;
         background: rgba(217, 34, 34, 0.2) !important;
         color: rgb(217, 34, 34);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); */
       }
 
       /* Add hover effect to the entire controls bar */
@@ -59,9 +59,12 @@
       <button class="hidden-button" onclick="move('up')">↑</button>
       <button class="hidden-button" onclick="move('down')">↓</button>
       <button class="hidden-button" onclick="remove()">X</button>
-      <button class="hidden-button" onclick="minimize()">Hide</button>
+      <button class="hidden-button" id="minimize-button" onclick="minimize()">
+        Hide
+      </button>
     </div>
     <script>
+      let hidden = false;
       //   document.documentElement.style.background = "transparent";
       //   document.body.style.background = "transparent";
 
@@ -87,6 +90,9 @@
         );
       }
       function minimize() {
+        hidden = !hidden;
+        const minimizeButton = document.getElementById("minimize-button");
+        minimizeButton.textContent = hidden ? "Show" : "Hide";
         window.ipc.postMessage(
           JSON.stringify({
             minimize: $0,

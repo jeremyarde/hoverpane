@@ -21,13 +21,11 @@ use wry::{
 
 pub const WEBVIEW_HEIGHT: u32 = 200;
 pub const WEBVIEW_WIDTH: u32 = 50;
-pub const CONTROL_PANEL_HEIGHT: u32 = 20;
+pub const CONTROL_PANEL_HEIGHT: u32 = 40;
 pub const CONTROL_PANEL_WIDTH: u32 = 50;
 pub const WINDOW_WIDTH: u32 = 240;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
-
-// pub const NEW_VIEW_FORM_HEIGHT: u32 = 200;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MonitoredView {
@@ -40,6 +38,7 @@ pub struct MonitoredView {
     element_selector: Option<String>,
     element_values: Vec<ScrapeResult>,
     original_size: ViewSize,
+    hidden: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -68,7 +67,7 @@ struct App {
     controls: Vec<wry::WebView>,
     new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
-    extractor: Extractor,
+    // extractor: Extractor,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -152,6 +151,7 @@ impl App {
                     width: size.width,
                     height: size.height,
                 },
+                hidden: false,
             };
 
             // Add to monitored views first so positions are calculated correctly
@@ -353,30 +353,31 @@ impl App {
                 let proxy = proxy.lock().unwrap();
                 let message: ControlMessage = serde_json::from_str(&message.body()).unwrap();
                 match message {
-                    ControlMessage::Refresh(index) => {
-                        proxy.send_event(UserEvent::Refresh(index)).unwrap();
-                    }
+                    // ControlMessage::Refresh(index) => {
+                    //     proxy.send_event(UserEvent::Refresh(index)).unwrap();
+                    // }
                     ControlMessage::Add(view) => {
                         proxy.send_event(UserEvent::AddWebView(view)).unwrap();
                     }
-                    ControlMessage::Remove(index) => {
-                        proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
-                    }
-                    ControlMessage::UpdateRefreshInterval(_) => todo!(),
-                    ControlMessage::Move(index, direction) => {
-                        proxy
-                            .send_event(UserEvent::MoveWebView(index, direction))
-                            .unwrap();
-                    }
-                    ControlMessage::ExtractResult(view_id, result) => {
-                        info!("Extracted result: {}", result);
-                        proxy
-                            .send_event(UserEvent::ExtractResult(view_id, result))
-                            .unwrap();
-                    }
-                    ControlMessage::Minimize(index) => {
-                        proxy.send_event(UserEvent::Minimize(index)).unwrap();
-                    }
+                    // ControlMessage::Remove(index) => {
+                    //     proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
+                    // }
+                    // ControlMessage::UpdateRefreshInterval(_) => todo!(),
+                    // ControlMessage::Move(index, direction) => {
+                    //     proxy
+                    //         .send_event(UserEvent::MoveWebView(index, direction))
+                    //         .unwrap();
+                    // }
+                    // ControlMessage::ExtractResult(view_id, result) => {
+                    //     info!("Extracted result: {}", result);
+                    //     proxy
+                    //         .send_event(UserEvent::ExtractResult(view_id, result))
+                    //         .unwrap();
+                    // }
+                    // ControlMessage::Minimize(index) => {
+                    //     proxy.send_event(UserEvent::Minimize(index)).unwrap();
+                    // }
+                    _ => {}
                 }
             })
             .with_transparent(true)
@@ -388,21 +389,39 @@ impl App {
     }
 
     fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
+        let window = self.window.as_ref().unwrap();
+        let window_size = window.inner_size();
         let num_views = self.webviews.len();
         if num_views == 0 {
             return;
         }
 
         let webview_height = size.height / num_views as u32;
+        // let hidden_views = self
+        //     .monitored_views
+        //     .lock()
+        //     .iter()
+        //     .map(|view| view.hidden)
+        //     .collect();
 
         for (i, webview) in self.webviews.iter_mut().enumerate() {
+            let current_size = webview
+                .bounds()
+                .unwrap()
+                .size
+                .to_logical::<u32>(window.scale_factor());
+            if current_size.width == 0 {
+                // webview is hidden, so don't resize it
+                continue;
+            }
+            // if current_size.
             webview.set_bounds(Rect {
                 position: LogicalPosition::new(0, webview_height * i as u32).into(),
                 size: LogicalSize::new(size.width, webview_height).into(),
             });
         }
 
-        // Controls stay at the top of each webview
+        // Controls stay at a fixed position in each webview
         for (i, control) in self.controls.iter_mut().enumerate() {
             control.set_bounds(Rect {
                 position: LogicalPosition::new(0, webview_height * i as u32).into(),
@@ -411,9 +430,13 @@ impl App {
         }
 
         if let Some(new_view_form) = self.new_view_form.as_ref() {
+            let new_form_window = self.new_view_form_window.as_ref().unwrap();
+            let new_form_size = new_form_window
+                .inner_size()
+                .to_logical::<u32>(window.scale_factor());
             new_view_form.set_bounds(Rect {
                 position: LogicalPosition::new(0, 0).into(),
-                size: LogicalSize::new(size.width, size.height).into(),
+                size: LogicalSize::new(new_form_size.width, new_form_size.height).into(),
             });
         }
     }
@@ -454,31 +477,37 @@ impl App {
 
     fn minimize_webview(&mut self, index: usize) {
         info!("Minimizing webview at index {}", index);
+        let window = self.window.as_ref().unwrap();
         if let Some(webview) = self.webviews.get_mut(index) {
-            if let Some(window) = self.window.as_ref() {
-                if let Ok(bounds) = webview.bounds() {
-                    let original_size = self.monitored_views.lock().unwrap()[index]
-                        .original_size
-                        .clone();
-                    let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
-                    info!(
-                        "Current size, Original size: {:?}, {:?}",
-                        current_size, original_size
-                    );
-                    if current_size.width > 0 {
-                        webview.set_bounds(Rect {
-                            position: LogicalPosition::new(0, 0).into(),
-                            size: LogicalSize::new(0, 0).into(),
-                        });
-                    } else {
-                        webview.set_bounds(Rect {
-                            position: LogicalPosition::new(0, 0).into(),
-                            size: LogicalSize::new(original_size.width, original_size.height)
-                                .into(),
-                        });
-                    }
+            if let Ok(bounds) = webview.bounds() {
+                let original_size = self.monitored_views.lock().unwrap()[index]
+                    .original_size
+                    .clone();
+                let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
+                info!(
+                    "Current size, Original size: {:?}, {:?}",
+                    current_size, original_size
+                );
+                if current_size.width > 0 {
+                    webview.set_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: LogicalSize::new(0, 0).into(),
+                    });
+                } else {
+                    webview.set_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: LogicalSize::new(
+                            window.inner_size().width,
+                            window.inner_size().height,
+                        )
+                        .into(),
+                    });
                 }
             }
+        }
+        {
+            let mut views = self.monitored_views.lock().unwrap();
+            views[index].hidden = true;
         }
     }
 }
@@ -650,6 +679,7 @@ fn main() {
                 width: 0,
                 height: 0,
             },
+            hidden: false,
         },
     ]));
 
@@ -678,7 +708,7 @@ fn main() {
         controls: vec![],
         new_view_form: None,
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
-        extractor,
+        // extractor,
     };
 
     event_loop.run_app(&mut app).unwrap();
