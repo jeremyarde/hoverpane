@@ -112,7 +112,10 @@ type Seconds = i32;
 impl App {
     fn calculate_window_height(&self) -> u32 {
         let view_count = self.monitored_views.lock().unwrap().len();
-        WEBVIEW_HEIGHT * view_count as u32
+        if view_count == 0 {
+            return WINDOW_WIDTH; // Default height for empty window
+        }
+        WINDOW_WIDTH // Let the window be resizable instead of calculating fixed height
     }
 
     fn refresh_webview(&mut self, index: usize) {
@@ -152,10 +155,15 @@ impl App {
             };
 
             // Add to monitored views first so positions are calculated correctly
-            self.monitored_views.lock().unwrap().push(view.clone());
+            let mut num_views = 0;
+            {
+                let mut views = self.monitored_views.lock().unwrap();
+                views.push(view.clone());
+                num_views = views.len();
+            }
 
             // Create and add the webview and controls
-            let webview = self.create_webview(&size, window, &mut view, self.webviews.len());
+            let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
             let controls =
                 self.create_controls(&size, window, self.webviews.len(), self.proxy.clone());
 
@@ -173,17 +181,20 @@ impl App {
         window: &Window,
         view: &mut MonitoredView,
         index: usize,
+        num_views: usize,
     ) -> WebView {
         let proxy = self.proxy.clone();
+        let starting_height = window.inner_size().height / num_views as u32;
         let starting_width = size.width;
-        let starting_height = WEBVIEW_HEIGHT;
+        // let starting_height = WEBVIEW_HEIGHT;
+        // let starting_height = size.height;
         view.original_size = ViewSize {
             width: starting_width,
             height: starting_height,
         };
         let mut webviewbuilder = WebViewBuilder::new()
             .with_bounds(Rect {
-                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * index as u32).into(),
+                position: LogicalPosition::new(0, starting_height * index as u32).into(),
                 size: LogicalSize::new(starting_width, starting_height).into(),
             })
             .with_visible(true)
@@ -245,21 +256,26 @@ impl App {
     }
 
     fn fix_webview_positions(&mut self) {
-        let size = self
-            .window
-            .as_ref()
-            .unwrap()
-            .inner_size()
-            .to_logical::<u32>(self.window.as_ref().unwrap().scale_factor());
+        let window = self.window.as_ref().unwrap();
+        let size = window.inner_size().to_logical::<u32>(window.scale_factor());
+        let num_views = self.webviews.len();
+        if num_views == 0 {
+            return;
+        }
+
+        let webview_height = size.height / num_views as u32;
+
         for (i, webview) in self.webviews.iter_mut().enumerate() {
             webview.set_bounds(Rect {
-                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
-                size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
+                position: LogicalPosition::new(0, webview_height * i as u32).into(),
+                size: LogicalSize::new(size.width, webview_height).into(),
             });
         }
+
+        // Controls stay at the top of each webview
         for (i, control) in self.controls.iter_mut().enumerate() {
             control.set_bounds(Rect {
-                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
+                position: LogicalPosition::new(0, webview_height * i as u32).into(),
                 size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
             });
         }
@@ -372,24 +388,28 @@ impl App {
     }
 
     fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
-        let window_count = self.webviews.len();
+        let num_views = self.webviews.len();
+        if num_views == 0 {
+            return;
+        }
+
+        let webview_height = size.height / num_views as u32;
 
         for (i, webview) in self.webviews.iter_mut().enumerate() {
             webview.set_bounds(Rect {
-                position: LogicalPosition::new(
-                    0,
-                    (WEBVIEW_HEIGHT * i as u32).clamp(0, size.height),
-                )
-                .into(),
-                size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
+                position: LogicalPosition::new(0, webview_height * i as u32).into(),
+                size: LogicalSize::new(size.width, webview_height).into(),
             });
         }
+
+        // Controls stay at the top of each webview
         for (i, control) in self.controls.iter_mut().enumerate() {
             control.set_bounds(Rect {
-                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
+                position: LogicalPosition::new(0, webview_height * i as u32).into(),
                 size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
             });
         }
+
         if let Some(new_view_form) = self.new_view_form.as_ref() {
             new_view_form.set_bounds(Rect {
                 position: LogicalPosition::new(0, 0).into(),
@@ -519,9 +539,13 @@ impl ApplicationHandler<UserEvent> for App {
             .expect("Failed to create window");
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
+        let mut num_views = 0;
+        {
+            num_views = self.monitored_views.lock().unwrap().len();
+        }
         for (i, mut view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
             info!("Creating webview for {}", view.url);
-            let webview = self.create_webview(&size, &window, &mut view, i);
+            let webview = self.create_webview(&size, &window, &mut view, i, num_views);
             let controls = self.create_controls(&size, &window, i, self.proxy.clone());
             self.webviews.push(webview);
             self.controls.push(controls);
