@@ -2,7 +2,7 @@ setInterval(() => {
   const element = document.querySelector("$pattern");
   if (element) {
     window.ipc.postMessage(
-      JSON.stringify({ extractresult: element.textContent })
+      JSON.stringify({ value: element.textContent, view_id: $view_id })
     );
   }
-}, 3000);
+}, parseInt("$interval"));

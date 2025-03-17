@@ -38,7 +38,26 @@ pub struct MonitoredView {
     last_refresh: jiff::Timestamp,
     refresh_interval: std::time::Duration,
     element_selector: Option<String>,
-    element_value: Option<String>,
+    element_values: Vec<ScrapeResult>,
+    original_size: ViewSize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ViewSize {
+    width: u32,
+    height: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct JsScrapeResult {
+    value: String,
+    view_id: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ScrapeResult {
+    element_value: String,
+    timestamp: jiff::Timestamp,
 }
 
 struct App {
@@ -60,7 +79,8 @@ pub enum ControlMessage {
     Remove(usize),
     UpdateRefreshInterval(Seconds),
     Move(usize, Direction),
-    ExtractResult(String),
+    ExtractResult(usize, String),
+    Minimize(usize),
     // Extract(String, String),
 }
 
@@ -89,12 +109,6 @@ pub struct AddWebView {
 
 type Seconds = i32;
 
-// enum ControlAction {
-//     RefreshAll,
-//     RefreshTop,
-//     RefreshBottom,
-// }
-
 impl App {
     fn calculate_window_height(&self) -> u32 {
         let view_count = self.monitored_views.lock().unwrap().len();
@@ -118,7 +132,7 @@ impl App {
             // Get the updated size after the resize request
             let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
-            let view = MonitoredView {
+            let mut view = MonitoredView {
                 url: if view.url.starts_with("https://") {
                     view.url
                 } else {
@@ -130,14 +144,18 @@ impl App {
                 last_refresh: jiff::Timestamp::now(),
                 refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
                 element_selector: None,
-                element_value: None,
+                element_values: vec![],
+                original_size: ViewSize {
+                    width: size.width,
+                    height: size.height,
+                },
             };
 
             // Add to monitored views first so positions are calculated correctly
             self.monitored_views.lock().unwrap().push(view.clone());
 
             // Create and add the webview and controls
-            let webview = self.create_webview(&size, window, view.clone(), self.webviews.len());
+            let webview = self.create_webview(&size, window, &mut view, self.webviews.len());
             let controls =
                 self.create_controls(&size, window, self.webviews.len(), self.proxy.clone());
 
@@ -153,32 +171,54 @@ impl App {
         &self,
         size: &LogicalSize<u32>,
         window: &Window,
-        view: MonitoredView,
+        view: &mut MonitoredView,
         index: usize,
     ) -> WebView {
+        let proxy = self.proxy.clone();
+        let starting_width = size.width;
+        let starting_height = WEBVIEW_HEIGHT;
+        view.original_size = ViewSize {
+            width: starting_width,
+            height: starting_height,
+        };
         let mut webviewbuilder = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, WEBVIEW_HEIGHT * index as u32).into(),
-                size: LogicalSize::new(size.width, WEBVIEW_HEIGHT).into(),
+                size: LogicalSize::new(starting_width, starting_height).into(),
             })
+            .with_visible(true)
             .with_clipboard(true)
             // .with_url(&view.url)
             .with_ipc_handler(move |message| {
-                info!("Received message: {:?}", message);
+                match serde_json::from_str::<JsScrapeResult>(&message.body()) {
+                    Ok(scrape_result) => {
+                        info!("Scrape result: {:?}", scrape_result);
+                        proxy
+                            .lock()
+                            .unwrap()
+                            .send_event(UserEvent::ExtractResult(
+                                scrape_result.view_id,
+                                scrape_result.value,
+                            ))
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse message: {:?}", e);
+                    }
+                }
             })
             .with_visible(true);
-        // .with_initialization_script(
-        //     "window.addEventListener('load', () => { window.scrollTo(0, 0); });",
-        // )
 
         webviewbuilder = webviewbuilder.with_url(&view.url);
-
         let webview = webviewbuilder.build_as_child(window).unwrap();
-        if let Some(selector) = view.element_selector {
+
+        if let Some(selector) = &mut view.element_selector {
             info!("Extracting from {} with selector {}", view.url, selector);
             let proxyclone = self.proxy.clone();
-            let script_content =
-                include_str!("../assets/find_element.js").replace("$pattern", &selector);
+            let script_content = include_str!("../assets/find_element.js")
+                .replace("$pattern", &selector)
+                .replace("$interval", &view.refresh_interval.as_millis().to_string())
+                .replace("$view_id", &view.index.to_string());
 
             info!("Script content: {}", script_content);
             webview.evaluate_script(&script_content).unwrap();
@@ -259,9 +299,14 @@ impl App {
                             .send_event(UserEvent::MoveWebView(index, direction))
                             .unwrap();
                     }
-                    ControlMessage::ExtractResult(result) => {
+                    ControlMessage::ExtractResult(view_id, result) => {
                         info!("Extracted result: {}", result);
-                        proxy.send_event(UserEvent::ExtractResult(result)).unwrap();
+                        proxy
+                            .send_event(UserEvent::ExtractResult(view_id, result))
+                            .unwrap();
+                    }
+                    ControlMessage::Minimize(index) => {
+                        proxy.send_event(UserEvent::Minimize(index)).unwrap();
                     }
                 }
             })
@@ -307,9 +352,14 @@ impl App {
                             .send_event(UserEvent::MoveWebView(index, direction))
                             .unwrap();
                     }
-                    ControlMessage::ExtractResult(result) => {
+                    ControlMessage::ExtractResult(view_id, result) => {
                         info!("Extracted result: {}", result);
-                        proxy.send_event(UserEvent::ExtractResult(result)).unwrap();
+                        proxy
+                            .send_event(UserEvent::ExtractResult(view_id, result))
+                            .unwrap();
+                    }
+                    ControlMessage::Minimize(index) => {
+                        proxy.send_event(UserEvent::Minimize(index)).unwrap();
                     }
                 }
             })
@@ -381,6 +431,36 @@ impl App {
         // Update positions of all webviews and controls
         self.fix_webview_positions();
     }
+
+    fn minimize_webview(&mut self, index: usize) {
+        info!("Minimizing webview at index {}", index);
+        if let Some(webview) = self.webviews.get_mut(index) {
+            if let Some(window) = self.window.as_ref() {
+                if let Ok(bounds) = webview.bounds() {
+                    let original_size = self.monitored_views.lock().unwrap()[index]
+                        .original_size
+                        .clone();
+                    let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
+                    info!(
+                        "Current size, Original size: {:?}, {:?}",
+                        current_size, original_size
+                    );
+                    if current_size.width > 0 {
+                        webview.set_bounds(Rect {
+                            position: LogicalPosition::new(0, 0).into(),
+                            size: LogicalSize::new(0, 0).into(),
+                        });
+                    } else {
+                        webview.set_bounds(Rect {
+                            position: LogicalPosition::new(0, 0).into(),
+                            size: LogicalSize::new(original_size.width, original_size.height)
+                                .into(),
+                        });
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -390,7 +470,8 @@ enum UserEvent {
     RemoveWebView(usize),
     ShowNewViewForm,
     MoveWebView(usize, Direction),
-    ExtractResult(String),
+    ExtractResult(usize, String),
+    Minimize(usize),
     // Extract(String, String),
     // ExtractResult(String),
 }
@@ -438,9 +519,9 @@ impl ApplicationHandler<UserEvent> for App {
             .expect("Failed to create window");
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
-        for (i, view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
+        for (i, mut view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
             info!("Creating webview for {}", view.url);
-            let webview = self.create_webview(&size, &window, view.clone(), i);
+            let webview = self.create_webview(&size, &window, &mut view, i);
             let controls = self.create_controls(&size, &window, i, self.proxy.clone());
             self.webviews.push(webview);
             self.controls.push(controls);
@@ -505,8 +586,12 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Moving webview at index {} {}", index, direction);
                 self.move_webview(index, direction);
             }
-            UserEvent::ExtractResult(result) => {
+            UserEvent::ExtractResult(view_id, result) => {
                 info!("Extracted result: {}", result);
+            }
+            UserEvent::Minimize(index) => {
+                info!("Minimizing webview at index {}", index);
+                self.minimize_webview(index);
             }
         }
     }
@@ -536,7 +621,11 @@ fn main() {
             last_refresh: jiff::Timestamp::now(),
             refresh_interval: std::time::Duration::from_secs(5),
             element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(1) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-            element_value: None,
+            element_values: vec![],
+            original_size: ViewSize {
+                width: 0,
+                height: 0,
+            },
         },
     ]));
 
