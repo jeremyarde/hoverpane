@@ -33,6 +33,7 @@ pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separat
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MonitoredView {
+    id: NanoId,
     url: String,
     title: String,
     index: usize,
@@ -54,7 +55,7 @@ struct ViewSize {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct JsScrapeResult {
     value: String,
-    view_id: usize,
+    view_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -75,10 +76,10 @@ impl std::fmt::Display for NanoId {
 struct App {
     window: Option<Window>,
     new_view_form_window: Option<Window>,
-    monitored_views: Arc<Mutex<Vec<MonitoredView>>>,
-    webviews: Vec<wry::WebView>,
+    monitored_views: Arc<Mutex<HashMap<NanoId, MonitoredView>>>,
+    webviews: HashMap<NanoId, wry::WebView>,
     element_views: HashMap<NanoId, ElementView>,
-    controls: Vec<wry::WebView>,
+    controls: HashMap<NanoId, wry::WebView>,
     new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
     last_resize: Option<Instant>,
@@ -94,13 +95,13 @@ struct ElementView {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ControlMessage {
-    Refresh(usize),
+    Refresh(NanoId),
     Add(AddWebView),
-    Remove(usize),
+    Remove(NanoId),
     UpdateRefreshInterval(Seconds),
-    Move(usize, Direction),
+    Move(NanoId, Direction),
     ExtractResult(NanoId, String),
-    Minimize(usize),
+    Minimize(NanoId),
     ToggleElementView(NanoId),
     // Extract(String, String),
 }
@@ -139,10 +140,29 @@ impl App {
         WINDOW_WIDTH // Let the window be resizable instead of calculating fixed height
     }
 
-    fn refresh_webview(&mut self, index: usize) {
-        if let Some(webview) = self.webviews.get_mut(index) {
+    // TODO: possibly split out the refresh timer and the extraction logic - maybe a page auto reloads already, and we just need to grab the newest value
+    fn refresh_webview(&mut self, id: NanoId) {
+        let view_details: MonitoredView;
+        {
+            let mut views = self.monitored_views.lock().unwrap();
+            // info!("TEMP: index: {}, Views: {:#?}", id, views);
+            view_details = views.get(&id).unwrap().clone();
+        }
+
+        if let Some(webview) = self.webviews.get_mut(&id) {
+            info!("TEMP: attempting to extract a value now...");
+            let script_content = String::from(
+                r#"
+                window.ipc.postMessage(
+                    JSON.stringify({ value: document.querySelector("$pattern").textContent, view_id: "$id" })
+                );
+                "#,
+            )
+            .replace("$pattern", &view_details.element_selector.as_ref().unwrap())
+            .replace("$id", &view_details.id.0);
+            let result = webview.evaluate_script(&script_content);
             if let Err(e) = webview.reload() {
-                warn!("Failed to reload webview {}: {:?}", index, e);
+                warn!("Failed to reload webview {}: {:?}", id, e);
             }
         }
     }
@@ -157,6 +177,7 @@ impl App {
             let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
             let mut view = MonitoredView {
+                id: NanoId(view.title.clone()),
                 url: if view.url.starts_with("https://") {
                     view.url
                 } else {
@@ -180,38 +201,13 @@ impl App {
             let mut num_views = 0;
             {
                 let mut views = self.monitored_views.lock().unwrap();
-                views.push(view.clone());
+                views.insert(view.id.clone(), view.clone());
                 num_views = views.len();
             }
             // Create and add the webview and controls
             let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
 
-            if view.element_selector.is_some() {
-                info!("Creating element view for {}", view.title);
-                let starting_height = window.inner_size().height / num_views as u32;
-                let starting_width = size.width;
-                let element_view = WebViewBuilder::new()
-                    .with_bounds(Rect {
-                        position: LogicalPosition::new(0, starting_height * num_views as u32)
-                            .into(),
-                        size: LogicalSize::new(400, 400).into(),
-                    })
-                    .with_html(include_str!("../assets/element_view.html"))
-                    .with_transparent(true)
-                    .with_background_color((0, 0, 0, 0))
-                    .build_as_child(window)
-                    .unwrap();
-
-                element_view.set_visible(true);
-                self.element_views.insert(
-                    NanoId(view.title.clone()),
-                    ElementView {
-                        webview: element_view,
-                        nano_id: NanoId(view.title.clone()),
-                        visible: false,
-                    },
-                );
-            }
+            // TODO: create element view and insert here
 
             let controls = {
                 let webview_len = self.webviews.len();
@@ -224,8 +220,8 @@ impl App {
                 )
             };
 
-            self.webviews.push(webview);
-            self.controls.push(controls);
+            self.webviews.insert(view.id.clone(), webview);
+            self.controls.insert(view.id.clone(), controls);
 
             // Fix positions of all webviews to ensure proper layout
             self.fix_webview_positions();
@@ -254,8 +250,11 @@ impl App {
                 size: LogicalSize::new(starting_width, starting_height).into(),
             })
             .with_visible(true)
+            .with_focused(false)
             .with_clipboard(true)
+            .with_background_throttling(wry::BackgroundThrottlingPolicy::Throttle)
             .with_ipc_handler(move |message| {
+                info!("Received message from webview: {:?}", message);
                 match serde_json::from_str::<JsScrapeResult>(&message.body()) {
                     Ok(scrape_result) => {
                         info!("Scrape result: {:?}", scrape_result);
@@ -263,7 +262,7 @@ impl App {
                             .lock()
                             .unwrap()
                             .send_event(UserEvent::ExtractResult(
-                                NanoId(scrape_result.view_id.to_string()),
+                                NanoId(scrape_result.view_id),
                                 scrape_result.value,
                             ))
                             .unwrap();
@@ -272,20 +271,35 @@ impl App {
                         warn!("Failed to parse message: {:?}", e);
                     }
                 }
-            })
-            .with_visible(true);
+            });
+
+        // if view.element_selector.is_some() {
+        //     webviewbuilder.with_navigation_handler(move |url| {
+        //         info!("Navigating to {}", url);
+        //     });
+        // }
 
         webviewbuilder = webviewbuilder.with_url(&view.url);
         let webview = webviewbuilder.build_as_child(window).unwrap();
-
         if let Some(selector) = &mut view.element_selector {
             info!("Extracting from {} with selector {}", view.url, selector);
-            let script_content = include_str!("../assets/find_element.js")
-                .replace("$pattern", &selector)
-                .replace("$interval", &view.refresh_interval.as_millis().to_string())
-                .replace("$view_id", &view.index.to_string());
+            // let script_content = include_str!("../assets/find_element.js")
+            //     .replace("$pattern", &selector)
+            //     .replace("$interval", &view.refresh_interval.as_millis().to_string())
+            //     .replace("$view_id", &view.title);
 
-            info!("Script content: {}", script_content);
+            // info!("Script content: {}", script_content);
+            let script_content = format!(
+                r#"
+                setTimeout(function() {{
+                    {}
+                }}, 1000);
+                "#,
+                include_str!("../assets/find_element.js")
+                    .replace("$pattern", &selector)
+                    .replace("$interval", &view.refresh_interval.as_millis().to_string())
+                    .replace("$view_id", &view.title)
+            );
             webview.evaluate_script(&script_content).unwrap();
             info!(
                 "Extraction interval set for {} with selector {}",
@@ -296,10 +310,10 @@ impl App {
         webview
     }
 
-    fn remove_webview(&mut self, index: usize) {
-        self.webviews.remove(index);
-        self.controls.remove(index);
-        self.monitored_views.lock().unwrap().remove(index);
+    fn remove_webview(&mut self, id: NanoId) {
+        self.webviews.remove(&id);
+        self.controls.remove(&id);
+        self.monitored_views.lock().unwrap().remove(&id);
 
         // Update window height
         if let Some(window) = self.window.as_ref() {
@@ -324,9 +338,7 @@ impl App {
         proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
         webview_id: NanoId,
     ) -> WebView {
-        let script_contents = include_str!("../assets/controls.html")
-            .replace("$0", &i.to_string())
-            .replace("$id", &webview_id.to_string());
+        let script_contents = include_str!("../assets/controls.html").replace("$id", &webview_id.0);
         debug!("Controls script contents: {}", script_contents);
 
         let control_panel = WebViewBuilder::new()
@@ -341,19 +353,19 @@ impl App {
                 let proxy = proxy.lock().unwrap();
                 let message: ControlMessage = serde_json::from_str(&message.body()).unwrap();
                 match message {
-                    ControlMessage::Refresh(index) => {
-                        proxy.send_event(UserEvent::Refresh(index)).unwrap();
+                    ControlMessage::Refresh(id) => {
+                        proxy.send_event(UserEvent::Refresh(id)).unwrap();
                     }
                     ControlMessage::Add(view) => {
                         proxy.send_event(UserEvent::AddWebView(view)).unwrap();
                     }
-                    ControlMessage::Remove(index) => {
-                        proxy.send_event(UserEvent::RemoveWebView(index)).unwrap();
+                    ControlMessage::Remove(id) => {
+                        proxy.send_event(UserEvent::RemoveWebView(id)).unwrap();
                     }
                     ControlMessage::UpdateRefreshInterval(_) => todo!(),
-                    ControlMessage::Move(index, direction) => {
+                    ControlMessage::Move(id, direction) => {
                         proxy
-                            .send_event(UserEvent::MoveWebView(index, direction))
+                            .send_event(UserEvent::MoveWebView(id, direction))
                             .unwrap();
                     }
                     ControlMessage::ExtractResult(view_id, result) => {
@@ -362,8 +374,8 @@ impl App {
                             .send_event(UserEvent::ExtractResult(view_id, result))
                             .unwrap();
                     }
-                    ControlMessage::Minimize(index) => {
-                        proxy.send_event(UserEvent::Minimize(index)).unwrap();
+                    ControlMessage::Minimize(id) => {
+                        proxy.send_event(UserEvent::Minimize(id)).unwrap();
                     }
                     ControlMessage::ToggleElementView(nano_id) => {
                         info!("Toggling element view for {}", nano_id);
@@ -430,25 +442,23 @@ impl App {
         let width = size.width;
 
         // Update all webviews in a single pass
-        for i in 0..num_views {
+        for (i, (id, webview)) in self.webviews.iter_mut().enumerate() {
             let y_position = webview_height * i as u32;
 
             // Only resize if the webview is visible
-            if let Some(webview) = self.webviews.get_mut(i) {
-                if let Ok(bounds) = webview.bounds() {
-                    let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
-                    if current_size.width > 0 {
-                        // Only resize visible webviews
-                        webview.set_bounds(Rect {
-                            position: LogicalPosition::new(0, y_position).into(),
-                            size: LogicalSize::new(width, webview_height).into(),
-                        });
-                    }
+            if let Ok(bounds) = webview.bounds() {
+                let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
+                if current_size.width > 0 {
+                    // Only resize visible webviews
+                    webview.set_bounds(Rect {
+                        position: LogicalPosition::new(0, y_position).into(),
+                        size: LogicalSize::new(width, webview_height).into(),
+                    });
                 }
             }
 
             // Update control position
-            if let Some(control) = self.controls.get_mut(i) {
+            if let Some(control) = self.controls.get_mut(&id) {
                 control.set_bounds(Rect {
                     position: LogicalPosition::new(0, y_position).into(),
                     size: LogicalSize::new(width, CONTROL_PANEL_HEIGHT).into(),
@@ -469,46 +479,47 @@ impl App {
         }
     }
 
-    fn move_webview(&mut self, index: usize, direction: Direction) {
-        let new_index = match direction {
-            Direction::Up => {
-                if index + 1 >= self.webviews.len() {
-                    return; // Can't move up if already at top
-                }
-                index + 1
-            }
-            Direction::Down => {
-                if index == 0 {
-                    return; // Can't move down if already at bottom
-                }
-                index - 1
-            }
-        };
+    fn move_webview(&mut self, id: NanoId, direction: Direction) {
+        // let new_index = match direction {
+        //     Direction::Up => {
+        //         if index + 1 >= self.webviews.len() {
+        //             return; // Can't move up if already at top
+        //         }
+        //         index + 1
+        //     }
+        //     Direction::Down => {
+        //         if index == 0 {
+        //             return; // Can't move down if already at bottom
+        //         }
+        //         index - 1
+        //     }
+        // };
 
-        // Swap webviews
-        self.webviews.swap(index, new_index);
+        todo!("Actualy implement this");
+        // // Swap webviews
+        // self.webviews.swap(index, new_index);
 
-        // Swap controls
-        self.controls.swap(index, new_index);
+        // // Swap controls
+        // self.controls.swap(index, new_index);
 
-        // Swap monitored views and update indices
-        {
-            let mut views = self.monitored_views.lock().unwrap();
-            views.swap(index, new_index);
-            views[index].index = index;
-            views[new_index].index = new_index;
-        } // Lock is dropped here
+        // // Swap monitored views and update indices
+        // {
+        //     let mut views = self.monitored_views.lock().unwrap();
+        //     views.swap(index, new_index);
+        //     views[index].index = index;
+        //     views[new_index].index = new_index;
+        // } // Lock is dropped here
 
         // Update positions of all webviews and controls
         self.fix_webview_positions();
     }
 
-    fn minimize_webview(&mut self, index: usize) {
-        info!("Minimizing webview at index {}", index);
+    fn minimize_webview(&mut self, id: NanoId) {
+        info!("Minimizing webview at index {}", id);
         let window = self.window.as_ref().unwrap();
-        if let Some(webview) = self.webviews.get_mut(index) {
+        if let Some(webview) = self.webviews.get_mut(&id) {
             if let Ok(bounds) = webview.bounds() {
-                let original_size = self.monitored_views.lock().unwrap()[index]
+                let original_size = self.monitored_views.lock().unwrap()[&id]
                     .original_size
                     .clone();
                 let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
@@ -535,33 +546,63 @@ impl App {
         }
         {
             let mut views = self.monitored_views.lock().unwrap();
-            views[index].hidden = true;
+            views.entry(id).and_modify(|view| view.hidden = true);
         }
     }
 
     fn update_element_view(&mut self, view_id: NanoId, result: String) {
+        info!("Updating element view for {}", view_id);
         if let Some(element_view) = self.element_views.get_mut(&view_id) {
             // element_view.webview.set_html(result);
             element_view
                 .webview
-                .evaluate_script(&format!(
-                    "document.getElementById('value').textContent = '{}';",
-                    result
-                ))
+                .evaluate_script(
+                    &format!(
+                        "document.getElementById('value').textContent = '$title: {}';",
+                        result
+                    )
+                    .replace("$title", &element_view.nano_id.0),
+                )
                 .unwrap();
         }
+    }
+
+    fn create_element_view(
+        &self,
+        size: &LogicalSize<u32>,
+        window: &Window,
+        view: &mut MonitoredView,
+        index: usize,
+        num_views: usize,
+    ) -> WebView {
+        let starting_height = window.inner_size().height / num_views as u32;
+
+        // if view.element_selector.is_some() {
+        let element_view = WebViewBuilder::new()
+            .with_bounds(Rect {
+                position: LogicalPosition::new(0, starting_height * index as u32 + 50).into(),
+                size: LogicalSize::new(200, 100).into(),
+            })
+            .with_html(include_str!("../assets/element_view.html"))
+            // .with_url("https://www.google.com")
+            .with_transparent(false)
+            // .with_background_color((0, 200, 90, 100))
+            .with_visible(true) // Make sure it's visible
+            .build_as_child(window)
+            .unwrap();
+        element_view
     }
 }
 
 #[derive(Debug)]
 enum UserEvent {
-    Refresh(usize),
+    Refresh(NanoId),
     AddWebView(AddWebView),
-    RemoveWebView(usize),
+    RemoveWebView(NanoId),
     ShowNewViewForm,
-    MoveWebView(usize, Direction),
+    MoveWebView(NanoId, Direction),
     ExtractResult(NanoId, String),
-    Minimize(usize),
+    Minimize(NanoId),
     ToggleElementView(NanoId),
     // Extract(String, String),
     // ExtractResult(String),
@@ -611,24 +652,30 @@ impl ApplicationHandler<UserEvent> for App {
             .expect("Failed to create window");
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
-        let mut num_views = 0;
         {
-            num_views = self.monitored_views.lock().unwrap().len();
-        }
-        for (i, mut view) in self.monitored_views.lock().unwrap().iter_mut().enumerate() {
-            info!("Creating webview for {}", view.url);
-            let webview = self.create_webview(&size, &window, &mut view, i, num_views);
-            let controls = self.create_controls(
-                &size,
-                &window,
-                i,
-                self.proxy.clone(),
-                NanoId(view.title.clone()),
-            );
-            self.webviews.push(webview);
-            self.controls.push(controls);
-        }
+            let mut num_views = 0;
+            let mut views = self.monitored_views.lock().unwrap();
+            num_views = views.len();
+            for (i, (id, mut view)) in views.iter_mut().enumerate() {
+                info!("Creating webview for {}", view.url);
+                let webview = self.create_webview(&size, &window, &mut view, i, num_views);
+                let controls =
+                    self.create_controls(&size, &window, i, self.proxy.clone(), id.clone());
+                let element_view =
+                    self.create_element_view(&size, &window, &mut view, i, num_views);
 
+                self.element_views.insert(
+                    id.clone(),
+                    ElementView {
+                        webview: element_view,
+                        nano_id: NanoId(view.title.clone()),
+                        visible: true, // Set to true by default
+                    },
+                );
+                self.webviews.insert(id.clone(), webview);
+                self.controls.insert(id.clone(), controls);
+            }
+        }
         self.window = Some(window);
         self.new_view_form_window = Some(new_view_form_window);
         info!("Window and webviews created successfully");
@@ -677,33 +724,33 @@ impl ApplicationHandler<UserEvent> for App {
     }
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
-            UserEvent::Refresh(index) => {
-                info!("Refresh event received for index {}", index);
-                self.refresh_webview(index);
+            UserEvent::Refresh(id) => {
+                info!("Refresh event received for index {}", id);
+                self.refresh_webview(id);
             }
             UserEvent::AddWebView(view) => {
                 info!("Adding new webview: {:?}", view);
                 self.add_webview(view);
             }
-            UserEvent::RemoveWebView(index) => {
-                info!("Removing webview at index {}", index);
-                self.remove_webview(index);
+            UserEvent::RemoveWebView(id) => {
+                info!("Removing webview at index {}", id);
+                self.remove_webview(id);
             }
             UserEvent::ShowNewViewForm => {
                 info!("Showing new view form");
                 self.new_view_form.as_ref().unwrap().set_visible(true);
             }
-            UserEvent::MoveWebView(index, direction) => {
-                info!("Moving webview at index {} {}", index, direction);
-                self.move_webview(index, direction);
+            UserEvent::MoveWebView(id, direction) => {
+                info!("Moving webview at index {} {}", id, direction);
+                self.move_webview(id, direction);
             }
             UserEvent::ExtractResult(view_id, result) => {
                 info!("Extracted result: {}", result);
                 self.update_element_view(view_id, result);
             }
-            UserEvent::Minimize(index) => {
-                info!("Minimizing webview at index {}", index);
-                self.minimize_webview(index);
+            UserEvent::Minimize(id) => {
+                info!("Minimizing webview at index {}", id);
+                self.minimize_webview(id);
             }
             UserEvent::ToggleElementView(nano_id) => {
                 info!("UserEvent: Toggling element view for {}", nano_id);
@@ -727,43 +774,59 @@ fn main() {
     let event_loop = EventLoop::<UserEvent>::with_user_event().build().unwrap();
     let event_loop_proxy = event_loop.create_proxy();
     let monitored_views = Arc::new(Mutex::new(vec![
-        // MonitoredView {
-        //     url: "https://google.com".to_string(),
-        //     title: "Google".to_string(),
-        //     index: 0,
-        //     refresh_count: 0,
-        //     last_refresh: jiff::Timestamp::now(),
-        //     refresh_interval: std::time::Duration::from_secs(1),
-        //     element_selector: None,
-        // },
         MonitoredView {
-            url: "https://finance.yahoo.com/quote/GME/".to_string(),
-            title: "Price".to_string(),
-            index: 1,
+            url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+            title: "SPY".to_string(),
+            index: 2,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(5),
-            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(1) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+            refresh_interval: std::time::Duration::from_secs(10),
+            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
             element_values: vec![],
             original_size: ViewSize {
                 width: 0,
                 height: 0,
             },
             hidden: false,
+            id: NanoId("SPY".to_string()),
         },
-    ]));
+        MonitoredView {
+            url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
+            title: "NVDA".to_string(),
+            index: 1,
+            refresh_count: 0,
+            last_refresh: jiff::Timestamp::now(),
+            refresh_interval: std::time::Duration::from_secs(10),
+            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+            element_values: vec![],
+            original_size: ViewSize {
+                width: 0,
+                height: 0,
+            },
+            hidden: false,
+                id: NanoId("NVDA".to_string()),
+            },
+        ]
+        .iter()
+        .map(|view| (view.id.clone(), view.clone()))
+        .collect::<HashMap<NanoId, MonitoredView>>()
+    ));
 
     let monitored_views_clone = monitored_views.clone();
     let proxy_clone = event_loop_proxy.clone();
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(10));
-        for view in monitored_views_clone.lock().unwrap().iter_mut() {
-            if view.last_refresh + view.refresh_interval < jiff::Timestamp::now() {
-                view.refresh_count += 1;
-                view.last_refresh = jiff::Timestamp::now();
-                proxy_clone
-                    .send_event(UserEvent::Refresh(view.index))
-                    .unwrap();
+        {
+            let mut views = monitored_views_clone.lock().unwrap();
+            for (id, view) in views.iter_mut() {
+                info!("Refreshing view {}", view.title);
+                if view.last_refresh + view.refresh_interval < jiff::Timestamp::now() {
+                    view.refresh_count += 1;
+                    view.last_refresh = jiff::Timestamp::now();
+                    proxy_clone
+                        .send_event(UserEvent::Refresh(view.id.clone()))
+                        .unwrap();
+                }
             }
         }
     });
@@ -773,9 +836,9 @@ fn main() {
     let mut app = App {
         window: None,
         new_view_form_window: None,
-        monitored_views,
-        webviews: vec![],
-        controls: vec![],
+        monitored_views: monitored_views,
+        webviews: HashMap::new(),
+        controls: HashMap::new(),
         new_view_form: None,
         element_views: HashMap::new(),
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
@@ -792,18 +855,21 @@ mod tests {
 
     #[test]
     fn test_control_message() {
-        let message = ControlMessage::Refresh(0);
+        let message = ControlMessage::Refresh(NanoId("0".to_string()));
         let json = serde_json::to_string(&message).unwrap();
         assert_eq!(json, r#"{"refresh":0}"#);
 
         // Test move command
-        let message = ControlMessage::Move(1, Direction::Up);
+        let message = ControlMessage::Move(NanoId("1".to_string()), Direction::Up);
         let json = serde_json::to_string(&message).unwrap();
         assert_eq!(json, r#"{"move":[1,"up"]}"#);
 
         // Test deserialization
         let message: ControlMessage = serde_json::from_str(r#"{"move":[1,"up"]}"#).unwrap();
-        assert_eq!(message, ControlMessage::Move(1, Direction::Up));
+        assert_eq!(
+            message,
+            ControlMessage::Move(NanoId("1".to_string()), Direction::Up)
+        );
     }
 
     #[test]
