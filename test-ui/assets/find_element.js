@@ -1,11 +1,28 @@
-(function () {
-  const interval = setInterval(() => {
-    const element = document.querySelector("$pattern");
-    console.log("Scraped element: ", element);
-    if (element) {
-      window.ipc.postMessage(
-        JSON.stringify({ value: element.textContent, view_id: "$view_id" })
-      );
-    }
-  }, parseInt("$interval"));
-})();
+try {
+  const element = document.querySelector("$selector");
+  if (!element) {
+    window.ipc.postMessage(
+      JSON.stringify({
+        error: "Element not found",
+        value: null,
+        id: "$id",
+      })
+    );
+  }
+
+  window.ipc.postMessage(
+    JSON.stringify({
+      error: null,
+      value: element,
+      id: "$id",
+    })
+  );
+} catch (e) {
+  window.ipc.postMessage(
+    JSON.stringify({
+      error: e.message,
+      value: null,
+      id: "$id",
+    })
+  );
+}

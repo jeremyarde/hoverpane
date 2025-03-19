@@ -2,7 +2,7 @@ use element_extractor::Extractor;
 use jiff;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     cmp::max,
     collections::HashMap,
@@ -27,7 +27,7 @@ pub const WEBVIEW_WIDTH: u32 = 50;
 pub const CONTROL_PANEL_HEIGHT: u32 = 40;
 pub const CONTROL_PANEL_WIDTH: u32 = 50;
 pub const WINDOW_WIDTH: u32 = 240;
-pub const RESIZE_DEBOUNCE_TIME: u128 = 500;
+pub const RESIZE_DEBOUNCE_TIME: u128 = 300;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
@@ -40,10 +40,39 @@ pub struct MonitoredView {
     refresh_count: usize,
     last_refresh: jiff::Timestamp,
     refresh_interval: std::time::Duration,
+    last_scrape: jiff::Timestamp,
+    scrape_interval: std::time::Duration,
     element_selector: Option<String>,
-    element_values: Vec<ScrapeResult>,
-    original_size: ViewSize,
+    scraped_history: Vec<ScrapedValue>,
+    // original_size: ViewSize,
     hidden: bool,
+}
+
+use nanoid::nanoid_gen;
+
+impl MonitoredView {
+    pub fn from(
+        title: String,
+        url: String,
+        refresh_interval: std::time::Duration,
+        scrape_interval: std::time::Duration,
+        element_selector: Option<String>,
+    ) -> Self {
+        Self {
+            id: NanoId(nanoid_gen(8)),
+            url,
+            title,
+            index: 0,
+            refresh_count: 0,
+            last_refresh: jiff::Timestamp::now(),
+            refresh_interval,
+            last_scrape: jiff::Timestamp::now(),
+            scrape_interval,
+            element_selector,
+            scraped_history: vec![],
+            hidden: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -52,16 +81,11 @@ struct ViewSize {
     height: u32,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct JsScrapeResult {
-    value: String,
-    view_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct ScrapeResult {
-    element_value: String,
-    timestamp: jiff::Timestamp,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScrapedValue {
+    pub id: NanoId,
+    pub value: String,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
@@ -76,6 +100,8 @@ impl std::fmt::Display for NanoId {
 struct App {
     window: Option<Window>,
     new_view_form_window: Option<Window>,
+    react_ui_window: Option<Window>,
+    react_webview: Option<AppWebView>,
     monitored_views: Arc<Mutex<HashMap<NanoId, MonitoredView>>>,
     webviews: HashMap<NanoId, wry::WebView>,
     element_views: HashMap<NanoId, ElementView>,
@@ -100,7 +126,7 @@ pub enum ControlMessage {
     Remove(NanoId),
     UpdateRefreshInterval(Seconds),
     Move(NanoId, Direction),
-    ExtractResult(NanoId, String),
+    ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
     // Extract(String, String),
@@ -133,7 +159,7 @@ type Seconds = i32;
 
 impl App {
     fn calculate_window_height(&self) -> u32 {
-        let view_count = self.monitored_views.lock().unwrap().len();
+        let view_count = self.monitored_views.lock().expect("Something failed").len();
         if view_count == 0 {
             return WINDOW_WIDTH; // Default height for empty window
         }
@@ -142,28 +168,16 @@ impl App {
 
     // TODO: possibly split out the refresh timer and the extraction logic - maybe a page auto reloads already, and we just need to grab the newest value
     fn refresh_webview(&mut self, id: NanoId) {
+        info!("Refreshing webview for {}", id);
         let view_details: MonitoredView;
         {
-            let mut views = self.monitored_views.lock().unwrap();
+            let mut views = self.monitored_views.lock().expect("Something failed");
             // info!("TEMP: index: {}, Views: {:#?}", id, views);
-            view_details = views.get(&id).unwrap().clone();
+            view_details = views.get(&id).expect("Something failed").clone();
         }
 
         if let Some(webview) = self.webviews.get_mut(&id) {
-            info!("TEMP: attempting to extract a value now...");
-            let script_content = String::from(
-                r#"
-                window.ipc.postMessage(
-                    JSON.stringify({ value: document.querySelector("$pattern").textContent, view_id: "$id" })
-                );
-                "#,
-            )
-            .replace("$pattern", &view_details.element_selector.as_ref().unwrap())
-            .replace("$id", &view_details.id.0);
-            let result = webview.evaluate_script(&script_content);
-            if let Err(e) = webview.reload() {
-                warn!("Failed to reload webview {}: {:?}", id, e);
-            }
+            webview.reload().expect("Something failed");
         }
     }
 
@@ -188,27 +202,37 @@ impl App {
                 refresh_count: 0,
                 last_refresh: jiff::Timestamp::now(),
                 refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
+                last_scrape: jiff::Timestamp::now(),
+                scrape_interval: std::time::Duration::from_secs(1),
                 element_selector: None,
-                element_values: vec![],
-                original_size: ViewSize {
-                    width: size.width,
-                    height: size.height,
-                },
+                // original_size: ViewSize {
+                //     width: size.width,
+                //     height: size.height,
+                // },
                 hidden: false,
+                scraped_history: vec![],
             };
 
             // Add to monitored views first so positions are calculated correctly
             let mut num_views = 0;
             {
-                let mut views = self.monitored_views.lock().unwrap();
+                let mut views = self.monitored_views.lock().expect("Something failed");
                 views.insert(view.id.clone(), view.clone());
                 num_views = views.len();
             }
             // Create and add the webview and controls
             let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
 
-            // TODO: create element view and insert here
-
+            let element_view =
+                self.create_element_view(&size, window, &mut view, num_views, num_views);
+            self.element_views.insert(
+                view.id.clone(),
+                ElementView {
+                    webview: element_view,
+                    nano_id: view.id.clone(),
+                    visible: false,
+                },
+            );
             let controls = {
                 let webview_len = self.webviews.len();
                 self.create_controls(
@@ -237,17 +261,21 @@ impl App {
         num_views: usize,
     ) -> WebView {
         let proxy = self.proxy.clone();
+
         let starting_height = window.inner_size().height / num_views as u32;
         let starting_width = size.width;
-        view.original_size = ViewSize {
-            width: starting_width,
-            height: starting_height,
-        };
+        let width = if view.hidden { 0 } else { starting_width };
+        let height = if view.hidden { 0 } else { starting_height };
+
+        // view.original_size = ViewSize {
+        //     width: starting_width,
+        //     height: starting_height,
+        // };
 
         let mut webviewbuilder = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, starting_height * index as u32).into(),
-                size: LogicalSize::new(starting_width, starting_height).into(),
+                size: LogicalSize::new(width, height).into(),
             })
             .with_visible(true)
             .with_focused(false)
@@ -255,17 +283,14 @@ impl App {
             .with_background_throttling(wry::BackgroundThrottlingPolicy::Throttle)
             .with_ipc_handler(move |message| {
                 info!("Received message from webview: {:?}", message);
-                match serde_json::from_str::<JsScrapeResult>(&message.body()) {
+                match serde_json::from_str::<ScrapedValue>(&message.body()) {
                     Ok(scrape_result) => {
                         info!("Scrape result: {:?}", scrape_result);
                         proxy
                             .lock()
-                            .unwrap()
-                            .send_event(UserEvent::ExtractResult(
-                                NanoId(scrape_result.view_id),
-                                scrape_result.value,
-                            ))
-                            .unwrap();
+                            .expect("Something failed")
+                            .send_event(UserEvent::ExtractResult(scrape_result))
+                            .expect("Something failed");
                     }
                     Err(e) => {
                         warn!("Failed to parse message: {:?}", e);
@@ -273,39 +298,10 @@ impl App {
                 }
             });
 
-        // if view.element_selector.is_some() {
-        //     webviewbuilder.with_navigation_handler(move |url| {
-        //         info!("Navigating to {}", url);
-        //     });
-        // }
-
         webviewbuilder = webviewbuilder.with_url(&view.url);
-        let webview = webviewbuilder.build_as_child(window).unwrap();
-        if let Some(selector) = &mut view.element_selector {
-            info!("Extracting from {} with selector {}", view.url, selector);
-            // let script_content = include_str!("../assets/find_element.js")
-            //     .replace("$pattern", &selector)
-            //     .replace("$interval", &view.refresh_interval.as_millis().to_string())
-            //     .replace("$view_id", &view.title);
-
-            // info!("Script content: {}", script_content);
-            let script_content = format!(
-                r#"
-                setTimeout(function() {{
-                    {}
-                }}, 1000);
-                "#,
-                include_str!("../assets/find_element.js")
-                    .replace("$pattern", &selector)
-                    .replace("$interval", &view.refresh_interval.as_millis().to_string())
-                    .replace("$view_id", &view.title)
-            );
-            webview.evaluate_script(&script_content).unwrap();
-            info!(
-                "Extraction interval set for {} with selector {}",
-                view.url, selector
-            );
-        }
+        let webview = webviewbuilder
+            .build_as_child(window)
+            .expect("Something failed");
 
         webview
     }
@@ -313,7 +309,10 @@ impl App {
     fn remove_webview(&mut self, id: NanoId) {
         self.webviews.remove(&id);
         self.controls.remove(&id);
-        self.monitored_views.lock().unwrap().remove(&id);
+        self.monitored_views
+            .lock()
+            .expect("Something failed")
+            .remove(&id);
 
         // Update window height
         if let Some(window) = self.window.as_ref() {
@@ -325,7 +324,7 @@ impl App {
     }
 
     fn fix_webview_positions(&mut self) {
-        let window = self.window.as_ref().unwrap();
+        let window = self.window.as_ref().expect("Something failed");
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
         self.resize_webviews(&size);
     }
@@ -350,45 +349,54 @@ impl App {
             .with_ipc_handler(move |message| {
                 info!("Received message: {:?}", message);
 
-                let proxy = proxy.lock().unwrap();
-                let message: ControlMessage = serde_json::from_str(&message.body()).unwrap();
+                let proxy = proxy.lock().expect("Something failed");
+                let message: ControlMessage =
+                    serde_json::from_str(&message.body()).expect("Something failed");
                 match message {
                     ControlMessage::Refresh(id) => {
-                        proxy.send_event(UserEvent::Refresh(id)).unwrap();
+                        proxy
+                            .send_event(UserEvent::Refresh(id))
+                            .expect("Something failed");
                     }
                     ControlMessage::Add(view) => {
-                        proxy.send_event(UserEvent::AddWebView(view)).unwrap();
+                        proxy
+                            .send_event(UserEvent::AddWebView(view))
+                            .expect("Something failed");
                     }
                     ControlMessage::Remove(id) => {
-                        proxy.send_event(UserEvent::RemoveWebView(id)).unwrap();
+                        proxy
+                            .send_event(UserEvent::RemoveWebView(id))
+                            .expect("Something failed");
                     }
                     ControlMessage::UpdateRefreshInterval(_) => todo!(),
                     ControlMessage::Move(id, direction) => {
                         proxy
                             .send_event(UserEvent::MoveWebView(id, direction))
-                            .unwrap();
+                            .expect("Something failed");
                     }
-                    ControlMessage::ExtractResult(view_id, result) => {
-                        info!("Extracted result: {}", result);
+                    ControlMessage::ExtractResult(result) => {
+                        info!("Extracted result: {:?}", result);
                         proxy
-                            .send_event(UserEvent::ExtractResult(view_id, result))
-                            .unwrap();
+                            .send_event(UserEvent::ExtractResult(result))
+                            .expect("Something failed");
                     }
                     ControlMessage::Minimize(id) => {
-                        proxy.send_event(UserEvent::Minimize(id)).unwrap();
+                        proxy
+                            .send_event(UserEvent::Minimize(id))
+                            .expect("Something failed");
                     }
                     ControlMessage::ToggleElementView(nano_id) => {
                         info!("Toggling element view for {}", nano_id);
                         proxy
                             .send_event(UserEvent::ToggleElementView(nano_id))
-                            .unwrap();
+                            .expect("Something failed");
                     }
                 }
             })
             .with_transparent(true)
             .with_background_color((0, 0, 0, 0))
             .build_as_child(window)
-            .unwrap();
+            .expect("Something failed");
 
         control_panel
     }
@@ -409,14 +417,17 @@ impl App {
             .with_ipc_handler(move |message| {
                 info!("Received message: {:?}", message);
 
-                let proxy = proxy.lock().unwrap();
-                let message: ControlMessage = serde_json::from_str(&message.body()).unwrap();
+                let proxy = proxy.lock().expect("Something failed");
+                let message: ControlMessage =
+                    serde_json::from_str(&message.body()).expect("Something failed");
                 match message {
                     // ControlMessage::Refresh(index) => {
-                    //     proxy.send_event(UserEvent::Refresh(index)).unwrap();
+                    //     proxy.send_event(UserEvent::Refresh(index)).expect("Something failed");
                     // }
                     ControlMessage::Add(view) => {
-                        proxy.send_event(UserEvent::AddWebView(view)).unwrap();
+                        proxy
+                            .send_event(UserEvent::AddWebView(view))
+                            .expect("Something failed");
                     }
                     _ => {}
                 }
@@ -424,13 +435,13 @@ impl App {
             .with_transparent(true)
             .with_background_color((0, 0, 0, 0))
             .build_as_child(window)
-            .unwrap();
+            .expect("Something failed");
 
         control_panel
     }
 
     fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
-        let window = self.window.as_ref().unwrap();
+        let window = self.window.as_ref().expect("Something failed");
         let num_views = self.webviews.len();
         if num_views == 0 {
             return;
@@ -504,7 +515,7 @@ impl App {
 
         // // Swap monitored views and update indices
         // {
-        //     let mut views = self.monitored_views.lock().unwrap();
+        //     let mut views = self.monitored_views.lock().expect("Something failed");
         //     views.swap(index, new_index);
         //     views[index].index = index;
         //     views[new_index].index = new_index;
@@ -516,17 +527,14 @@ impl App {
 
     fn minimize_webview(&mut self, id: NanoId) {
         info!("Minimizing webview at index {}", id);
-        let window = self.window.as_ref().unwrap();
+        let window = self.window.as_ref().expect("Something failed");
         if let Some(webview) = self.webviews.get_mut(&id) {
             if let Ok(bounds) = webview.bounds() {
-                let original_size = self.monitored_views.lock().unwrap()[&id]
-                    .original_size
-                    .clone();
+                // let original_size = self.monitored_views.lock().expect("Something failed")[&id]
+                //     .original_size
+                //     .clone();
                 let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
-                info!(
-                    "Current size, Original size: {:?}, {:?}",
-                    current_size, original_size
-                );
+                info!("Current size: {:?}", current_size);
                 if current_size.width > 0 {
                     webview.set_bounds(Rect {
                         position: LogicalPosition::new(0, 0).into(),
@@ -545,26 +553,31 @@ impl App {
             }
         }
         {
-            let mut views = self.monitored_views.lock().unwrap();
+            let mut views = self.monitored_views.lock().expect("Something failed");
             views.entry(id).and_modify(|view| view.hidden = true);
         }
     }
 
-    fn update_element_view(&mut self, view_id: NanoId, result: String) {
-        info!("Updating element view for {}", view_id);
-        if let Some(element_view) = self.element_views.get_mut(&view_id) {
-            // element_view.webview.set_html(result);
-            element_view
-                .webview
-                .evaluate_script(
-                    &format!(
-                        "document.getElementById('value').textContent = '$title: {}';",
-                        result
-                    )
-                    .replace("$title", &element_view.nano_id.0),
-                )
-                .unwrap();
+    fn update_element_view(&mut self, result: ScrapedValue) {
+        if self.element_views.is_empty() {
+            info!("No element views to update");
+            return;
         }
+
+        let element_view = self
+            .element_views
+            .values()
+            .next()
+            .expect("Something failed");
+        element_view
+            .webview
+            .evaluate_script(
+                String::from("document.getElementById('value').textContent = '$title: $value';")
+                    .replace("$title", &element_view.nano_id.0)
+                    .replace("$value", &result.value)
+                    .as_str(),
+            )
+            .expect("Something failed");
     }
 
     fn create_element_view(
@@ -577,11 +590,13 @@ impl App {
     ) -> WebView {
         let starting_height = window.inner_size().height / num_views as u32;
 
-        // if view.element_selector.is_some() {
+        let width = if view.hidden { 0 } else { 200 };
+        let height = if view.hidden { 0 } else { 100 };
+
         let element_view = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, starting_height * index as u32 + 50).into(),
-                size: LogicalSize::new(200, 100).into(),
+                size: LogicalSize::new(width, height).into(),
             })
             .with_html(include_str!("../assets/element_view.html"))
             // .with_url("https://www.google.com")
@@ -589,19 +604,141 @@ impl App {
             // .with_background_color((0, 200, 90, 100))
             .with_visible(true) // Make sure it's visible
             .build_as_child(window)
-            .unwrap();
+            .expect("Something failed");
         element_view
+    }
+
+    fn scrape_webview(&self, id: NanoId) {
+        if self.webviews.get(&id).is_none() {
+            info!("Webview not found");
+            return;
+        }
+
+        let webview = self.webviews.get(&id).expect("Something failed");
+
+        let view_details: MonitoredView;
+        {
+            let views = self.monitored_views.lock().expect("Something failed");
+            view_details = views.get(&id).expect("Something failed").clone();
+        }
+
+        info!("TEMP: attempting to extract a value now...");
+        let script_content = String::from(
+            r#"
+try {
+const element = document.querySelector("$selector");
+if (!element) {
+window.ipc.postMessage(
+  JSON.stringify({
+    error: "Element not found",
+    value: null,
+    id: "$id",
+  })
+);
+}
+
+window.ipc.postMessage(
+JSON.stringify({
+  error: null,
+  value: element.textContent,
+  id: "$id",
+})
+);
+} catch (e) {
+window.ipc.postMessage(
+JSON.stringify({
+  error: JSON.stringify(e.message),
+  value: null,
+  id: "$id",
+})
+);
+}
+
+            "#,
+        );
+
+        let script_content = script_content
+            .replace(
+                "$selector",
+                &view_details
+                    .element_selector
+                    .as_ref()
+                    .expect("Something failed"),
+            )
+            .replace("$id", &view_details.id.0);
+        // let result = webview.evaluate_script(&script_content);
+
+        // let script_content = include_str!("../assets/find_element.js")
+        //     .replace(
+        //         "$selector",
+        //         &view_details.element_selector.as_ref().expect("Something failed"),
+        //     )
+        //     .replace("$id", &view_details.id.0);
+        let result = webview.evaluate_script(&script_content);
+
+        // if let Some(react_webview) = self.react_webview.as_ref() {
+        //     info!("Sending message to react...");
+        //     react_webview.send_message("Hello from Rust");
+        // }
+
+        info!("Scrape completed");
+    }
+
+    fn add_scrape_result(&self, result: ScrapedValue) {
+        let mut views = self.monitored_views.lock().expect("Something failed");
+        let view = views.get_mut(&result.id).expect("Something failed");
+        view.scraped_history.push(result.clone());
+        self.react_webview
+            .as_ref()
+            .expect("Something failed")
+            .send_message(&Message {
+                window_id: result.id.0.clone(),
+                data_key: view.title.clone(),
+                message: json!({ "key": result.value }).to_string(),
+                timestamp: jiff::Timestamp::now().to_string(),
+            });
+    }
+
+    fn resize_react_ui_window(&self, size: &LogicalSize<u32>) {
+        if let Some(react_webview) = self.react_webview.as_ref() {
+            react_webview.webview.set_bounds(Rect {
+                position: LogicalPosition::new(0, 0).into(),
+                size: size.clone().into(),
+            });
+        }
+    }
+}
+
+struct AppWebView {
+    webview: WebView,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Message {
+    data_key: String,
+    window_id: String,
+    message: String, // JSON string
+    timestamp: String,
+}
+
+impl AppWebView {
+    fn send_message(&self, message: &Message) {
+        info!("Sending message to react: {:?}", message);
+        self.webview
+            .evaluate_script(format!("window.onRustMessage('{}');", json!(message)).as_str())
+            .expect("Something failed");
     }
 }
 
 #[derive(Debug)]
 enum UserEvent {
     Refresh(NanoId),
+    Scrape(NanoId),
     AddWebView(AddWebView),
     RemoveWebView(NanoId),
     ShowNewViewForm,
     MoveWebView(NanoId, Direction),
-    ExtractResult(NanoId, String),
+    ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
     // Extract(String, String),
@@ -609,6 +746,10 @@ enum UserEvent {
 }
 
 impl ApplicationHandler<UserEvent> for App {
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        info!("Application suspended");
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
         let window_height = self.calculate_window_height();
@@ -617,7 +758,7 @@ impl ApplicationHandler<UserEvent> for App {
             .with_transparent(true)
             .with_blur(true)
             .with_movable_by_window_background(true)
-            .with_fullsize_content_view(true)
+            .with_fullsize_content_view(false)
             .with_title_hidden(false)
             .with_titlebar_buttons_hidden(false)
             .with_titlebar_hidden(false)
@@ -633,7 +774,7 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
                     .with_title("new view"),
             )
-            .unwrap();
+            .expect("Something failed");
 
         let scale_factor = new_view_form_window.scale_factor();
         // let scale_factor = 0.5;
@@ -647,14 +788,14 @@ impl ApplicationHandler<UserEvent> for App {
         // creating the main window
         let window = event_loop
             .create_window(
-                window_attributes.with_title("viewer"), // .with_title_hidden(true),
+                window_attributes.clone().with_title("viewer"), // .with_title_hidden(true),
             )
             .expect("Failed to create window");
         let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
         {
             let mut num_views = 0;
-            let mut views = self.monitored_views.lock().unwrap();
+            let mut views = self.monitored_views.lock().expect("Something failed");
             num_views = views.len();
             for (i, (id, mut view)) in views.iter_mut().enumerate() {
                 info!("Creating webview for {}", view.url);
@@ -676,6 +817,28 @@ impl ApplicationHandler<UserEvent> for App {
                 self.controls.insert(id.clone(), controls);
             }
         }
+
+        let reactui_window = event_loop
+            .create_window(window_attributes.with_title("reactui"))
+            .expect("Something failed");
+        let react_webview = WebViewBuilder::new()
+            .with_bounds(Rect {
+                position: LogicalPosition::new(0, 0).into(),
+                size: LogicalSize::new(WINDOW_WIDTH, window_height).into(),
+            })
+            .with_url("http://localhost:5173")
+            // .with_html("<div>Hello from Rust</div>")
+            .with_ipc_handler(|message| {
+                info!("Received message from react: {:?}", message);
+            })
+            .build_as_child(&reactui_window)
+            .expect("Something failed");
+        self.react_webview = Some(AppWebView {
+            webview: react_webview,
+        });
+        self.react_ui_window = Some(reactui_window);
+        // self.react_webview = Some(react_webview);
+
         self.window = Some(window);
         self.new_view_form_window = Some(new_view_form_window);
         info!("Window and webviews created successfully");
@@ -687,7 +850,7 @@ impl ApplicationHandler<UserEvent> for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        // info!("Window event   received: {:?}", event);
+        info!("Window event   received: {:?}", event);
         match event {
             WindowEvent::CloseRequested => {
                 info!("Window close requested");
@@ -696,7 +859,7 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::RedrawRequested => {
                 // info!("Redraw requested");
                 // window.request_redraw();
-                // self.window.as_ref().unwrap().request_redraw();
+                // self.window.as_ref().expect("Something failed").request_redraw();
             }
             WindowEvent::Resized(size) => {
                 // Debounce resize events to improve performance
@@ -709,8 +872,14 @@ impl ApplicationHandler<UserEvent> for App {
                 }
                 self.last_resize = Some(now);
 
-                let size = size.to_logical::<u32>(self.window.as_ref().unwrap().scale_factor());
+                let size = size.to_logical::<u32>(
+                    self.window
+                        .as_ref()
+                        .expect("Something failed")
+                        .scale_factor(),
+                );
                 self.resize_webviews(&size);
+                self.resize_react_ui_window(&size);
             }
             WindowEvent::KeyboardInput {
                 device_id,
@@ -738,15 +907,19 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::ShowNewViewForm => {
                 info!("Showing new view form");
-                self.new_view_form.as_ref().unwrap().set_visible(true);
+                self.new_view_form
+                    .as_ref()
+                    .expect("New view form not found")
+                    .set_visible(true);
             }
             UserEvent::MoveWebView(id, direction) => {
                 info!("Moving webview at index {} {}", id, direction);
                 self.move_webview(id, direction);
             }
-            UserEvent::ExtractResult(view_id, result) => {
-                info!("Extracted result: {}", result);
-                self.update_element_view(view_id, result);
+            UserEvent::ExtractResult(result) => {
+                info!("Extracted result: {:?}", result);
+                self.add_scrape_result(result.clone());
+                self.update_element_view(result);
             }
             UserEvent::Minimize(id) => {
                 info!("Minimizing webview at index {}", id);
@@ -763,6 +936,10 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                 }
             }
+            UserEvent::Scrape(id) => {
+                info!("Scraping webview at index {}", id);
+                self.scrape_webview(id);
+            }
         }
     }
 }
@@ -771,7 +948,9 @@ fn main() {
     env_logger::init();
     info!("Starting application...");
 
-    let event_loop = EventLoop::<UserEvent>::with_user_event().build().unwrap();
+    let event_loop = EventLoop::<UserEvent>::with_user_event()
+        .build()
+        .expect("Something failed");
     let event_loop_proxy = event_loop.create_proxy();
     let monitored_views = Arc::new(Mutex::new(vec![
         MonitoredView {
@@ -780,14 +959,16 @@ fn main() {
             index: 2,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(10),
-            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-            element_values: vec![],
-            original_size: ViewSize {
-                width: 0,
-                height: 0,
-            },
-            hidden: false,
+            refresh_interval: std::time::Duration::from_secs(240),
+            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+            scraped_history: vec![],
+            // original_size: ViewSize {
+            //     width: 0,
+            //     height: 0,
+            // },
+            hidden: true,
+            last_scrape: jiff::Timestamp::now(),
+            scrape_interval: std::time::Duration::from_secs(1),
             id: NanoId("SPY".to_string()),
         },
         MonitoredView {
@@ -796,16 +977,25 @@ fn main() {
             index: 1,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(10),
-            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-            element_values: vec![],
-            original_size: ViewSize {
-                width: 0,
-                height: 0,
-            },
-            hidden: false,
-                id: NanoId("NVDA".to_string()),
-            },
+            refresh_interval: std::time::Duration::from_secs(240),
+            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+            scraped_history: vec![],
+            // original_size: ViewSize {
+            //     width: 0,
+            //     height: 0,4
+            // },
+            hidden: true,
+            last_scrape: jiff::Timestamp::now(),
+            scrape_interval: std::time::Duration::from_secs(1),
+            id: NanoId("NVDA".to_string()),
+        },
+        MonitoredView::from(
+            "Twitch Viewers".to_string(),
+            "https://www.twitch.tv/atrioc".to_string(),
+            std::time::Duration::from_secs(240),
+            std::time::Duration::from_secs(10),
+            Some(String::from(r#"#live-channel-stream-information > div > div > div.Layout-sc-1xcs6mc-0.kYbRHX > div.Layout-sc-1xcs6mc-0.evfzyg > div.Layout-sc-1xcs6mc-0.iStNQt > div.Layout-sc-1xcs6mc-0.hJHxso > div > div > div.Layout-sc-1xcs6mc-0.bKPhAm > div:nth-child(1) > div > p.CoreText-sc-1txzju1-0.fiDbWi > span"#)),
+        )
         ]
         .iter()
         .map(|view| (view.id.clone(), view.clone()))
@@ -814,18 +1004,32 @@ fn main() {
 
     let monitored_views_clone = monitored_views.clone();
     let proxy_clone = event_loop_proxy.clone();
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(10));
-        {
-            let mut views = monitored_views_clone.lock().unwrap();
-            for (id, view) in views.iter_mut() {
-                info!("Refreshing view {}", view.title);
-                if view.last_refresh + view.refresh_interval < jiff::Timestamp::now() {
-                    view.refresh_count += 1;
-                    view.last_refresh = jiff::Timestamp::now();
-                    proxy_clone
-                        .send_event(UserEvent::Refresh(view.id.clone()))
-                        .unwrap();
+    std::thread::spawn(move || {
+        let mut min_refresh_interval = std::time::Duration::from_secs(4);
+        loop {
+            std::thread::sleep(min_refresh_interval);
+            {
+                let now = jiff::Timestamp::now();
+                let mut views = monitored_views_clone.lock().expect("Something failed");
+                for (id, view) in views.iter_mut() {
+                    info!("Refreshing view {}", view.title);
+                    if view.last_refresh + view.refresh_interval < now {
+                        view.refresh_count += 1;
+                        view.last_refresh = now;
+                        proxy_clone
+                            .send_event(UserEvent::Refresh(view.id.clone()))
+                            .expect("Something failed");
+                    }
+                    if view.refresh_interval < min_refresh_interval {
+                        min_refresh_interval = view.refresh_interval;
+                    }
+
+                    if view.last_scrape + view.scrape_interval < now {
+                        view.last_scrape = now;
+                        proxy_clone
+                            .send_event(UserEvent::Scrape(view.id.clone()))
+                            .expect("Something failed");
+                    }
                 }
             }
         }
@@ -836,6 +1040,8 @@ fn main() {
     let mut app = App {
         window: None,
         new_view_form_window: None,
+        react_ui_window: None,
+        react_webview: None,
         monitored_views: monitored_views,
         webviews: HashMap::new(),
         controls: HashMap::new(),
@@ -846,7 +1052,7 @@ fn main() {
         // extractor,
     };
 
-    event_loop.run_app(&mut app).unwrap();
+    event_loop.run_app(&mut app).expect("Something failed");
 }
 
 #[cfg(test)]
@@ -856,16 +1062,17 @@ mod tests {
     #[test]
     fn test_control_message() {
         let message = ControlMessage::Refresh(NanoId("0".to_string()));
-        let json = serde_json::to_string(&message).unwrap();
+        let json = serde_json::to_string(&message).expect("Something failed");
         assert_eq!(json, r#"{"refresh":0}"#);
 
         // Test move command
         let message = ControlMessage::Move(NanoId("1".to_string()), Direction::Up);
-        let json = serde_json::to_string(&message).unwrap();
+        let json = serde_json::to_string(&message).expect("Something failed");
         assert_eq!(json, r#"{"move":[1,"up"]}"#);
 
         // Test deserialization
-        let message: ControlMessage = serde_json::from_str(r#"{"move":[1,"up"]}"#).unwrap();
+        let message: ControlMessage =
+            serde_json::from_str(r#"{"move":[1,"up"]}"#).expect("Something failed");
         assert_eq!(
             message,
             ControlMessage::Move(NanoId("1".to_string()), Direction::Up)
@@ -876,7 +1083,8 @@ mod tests {
     fn test_add_webview() {
         let add_post_data = "{\"add\":{\"url\":\"\",\"refresh_interval\":\"\",\"title\":\"\"}}";
 
-        let message: ControlMessage = serde_json::from_str(add_post_data).unwrap();
+        let message: ControlMessage =
+            serde_json::from_str(add_post_data).expect("Something failed");
 
         assert_eq!(
             message,
