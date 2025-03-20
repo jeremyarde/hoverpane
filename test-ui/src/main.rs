@@ -2,7 +2,7 @@ use axum::{extract::State, routing::get, Json, Router};
 use element_extractor::Extractor;
 use http::HeaderValue;
 use jiff;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -27,7 +27,7 @@ use wry::{
     Rect, WebView, WebViewBuilder,
 };
 
-use rusqlite;
+use rusqlite::{self, types::FromSql};
 
 pub const WEBVIEW_HEIGHT: u32 = 200;
 pub const WEBVIEW_WIDTH: u32 = 50;
@@ -111,6 +111,30 @@ struct Record {
     data: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct MonitoredSite {
+    id: i32,
+    site_id: NanoId,
+    url: String,
+    title: String,
+    refresh_interval: Seconds,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct MonitoredElement {
+    id: i32,
+    site_id: i32,
+    selector: String,
+    data_key: String,
+}
+
+impl FromSql for NanoId {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let id = value.as_str().unwrap();
+        Ok(NanoId(id.to_string()))
+    }
+}
+
 struct Database {
     // data: HashMap<String, Vec<Record>>, // table -> data????
     connection: rusqlite::Connection,
@@ -129,11 +153,63 @@ impl Database {
                 (),
             )
             .unwrap();
-        Self {
-            // data: Arc::new(Mutex::new(HashMap::new())),
-            connection,
-        }
+        connection
+            .execute(
+                "CREATE TABLE sites (
+                id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL
+            )",
+                (),
+            )
+            .unwrap();
+        connection
+            .execute(
+                "CREATE TABLE elements (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                selector TEXT NOT NULL,
+                data_key TEXT NOT NULL
+            )",
+                (),
+            )
+            .unwrap();
+        Self { connection }
     }
+
+    fn get_elements(&self) -> Result<Vec<MonitoredElement>, rusqlite::Error> {
+        let mut stmt = self.connection.prepare("SELECT * FROM elements")?;
+        let elements = stmt
+            .query_map([], |row| {
+                Ok(MonitoredElement {
+                    id: row.get(0)?,
+                    site_id: row.get(1)?,
+                    selector: row.get(2)?,
+                    data_key: row.get(3)?,
+                })
+            })?
+            .filter_map(|element| element.ok())
+            .collect();
+        Ok(elements)
+    }
+
+    fn get_sites(&self) -> Result<Vec<MonitoredSite>, rusqlite::Error> {
+        let mut stmt = self.connection.prepare("SELECT * FROM sites")?;
+        let sites = stmt
+            .query_map([], |row| {
+                Ok(MonitoredSite {
+                    id: row.get(0)?,
+                    site_id: row.get(1)?,
+                    url: row.get(2)?,
+                    title: row.get(3)?,
+                    refresh_interval: row.get(4)?,
+                })
+            })?
+            .filter_map(|site| site.ok())
+            .collect();
+        Ok(sites)
+    }
+
     fn get_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
         let mut stmt = self.connection.prepare("SELECT * FROM test")?;
         let records = stmt
@@ -197,7 +273,14 @@ struct App {
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
     last_resize: Option<Instant>,
     db: Arc<Mutex<Database>>,
-    // extractor: Extractor,
+    widgets: HashMap<NanoId, WidgetView>,
+}
+
+struct WidgetView {
+    webview: wry::WebView,
+    window: Window,
+    nano_id: NanoId,
+    visible: bool,
 }
 
 struct ElementView {
@@ -209,6 +292,7 @@ struct ElementView {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ControlMessage {
+    CreateWidget(bool),
     Refresh(NanoId),
     Add(AddWebView),
     Remove(NanoId),
@@ -441,6 +525,15 @@ impl App {
                 let message: ControlMessage =
                     serde_json::from_str(&message.body()).expect("Something failed");
                 match message {
+                    ControlMessage::CreateWidget(create_widget) => {
+                        info!("Create widget: {}", create_widget);
+                        if create_widget {
+                            info!("Sending CreateNewWidget event");
+                            proxy
+                                .send_event(UserEvent::CreateNewWidget)
+                                .expect("Something failed");
+                        }
+                    }
                     ControlMessage::Refresh(id) => {
                         proxy
                             .send_event(UserEvent::Refresh(id))
@@ -517,7 +610,17 @@ impl App {
                             .send_event(UserEvent::AddWebView(view))
                             .expect("Something failed");
                     }
-                    _ => {}
+                    ControlMessage::CreateWidget(create_widget) => {
+                        if create_widget {
+                            info!("Sending CreateNewWidget event");
+                            proxy
+                                .send_event(UserEvent::CreateNewWidget)
+                                .expect("Something failed");
+                        }
+                    }
+                    _ => {
+                        error!("Unknown message from controls: {:?}", message);
+                    }
                 }
             })
             .with_transparent(true)
@@ -710,6 +813,11 @@ impl App {
             view_details = views.get(&id).expect("Something failed").clone();
         }
 
+        if view_details.element_selector.is_none() {
+            info!("No element to scrape for {}", id);
+            return;
+        }
+
         info!("TEMP: attempting to extract a value now...");
         let script_content = String::from(
             r#"
@@ -804,6 +912,35 @@ JSON.stringify({
             });
         }
     }
+
+    fn create_new_widget(&mut self, event_loop: &ActiveEventLoop) {
+        let new_window = event_loop
+            .create_window(Window::default_attributes())
+            .unwrap();
+        let new_webview = WebViewBuilder::new()
+            // .with_bounds(Rect {
+            //     position: LogicalPosition::new(0, 0).into(),
+            //     size: size.clone().into(),
+            // })
+            .with_url("https://www.google.com")
+            .build_as_child(&new_window)
+            .unwrap();
+
+        let widget_id = NanoId(nanoid_gen(8));
+        let widget_view = WidgetView {
+            webview: new_webview,
+            window: new_window,
+            nano_id: widget_id.clone(),
+            visible: true,
+        };
+        self.widgets.insert(widget_id, widget_view);
+    }
+
+    // fn widget_attributes() -> WindowAttributes {
+    //     Window::default_attributes()
+    //         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
+    //         .with_title("new view")
+    // }
 }
 
 struct AppWebView {
@@ -829,6 +966,7 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
+    CreateNewWidget,
     Refresh(NanoId),
     Scrape(NanoId),
     AddWebView(AddWebView),
@@ -1037,6 +1175,10 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Scraping webview at index {}", id);
                 self.scrape_webview(id);
             }
+            UserEvent::CreateNewWidget => {
+                info!("Creating new widget");
+                self.create_new_widget(event_loop);
+            }
         }
     }
 }
@@ -1146,7 +1288,7 @@ fn main() {
         element_views: HashMap::new(),
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
         last_resize: None,
-        // extractor,
+        widgets: HashMap::new(),
     };
 
     thread::spawn(move || {
@@ -1162,6 +1304,8 @@ fn main() {
                 .allow_origin(http::HeaderValue::from_static("http://localhost:5173"));
             let router = Router::new()
                 .route("/values", get(get_values))
+                .route("/sites", get(get_sites))
+                .route("/elements", get(get_elements))
                 .route("/latest", get(get_latest_values))
                 // .route("/values", post(update_value))
                 .layer(cors_layer)
@@ -1187,6 +1331,18 @@ async fn get_latest_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
     let state = state.db.lock().unwrap();
     let values: Vec<Record> = state.get_latest_data().unwrap();
     Json(values)
+}
+
+async fn get_sites(State(state): State<ApiState>) -> Json<Vec<MonitoredSite>> {
+    let state = state.db.lock().unwrap();
+    let sites: Vec<MonitoredSite> = state.get_sites().unwrap();
+    Json(sites)
+}
+
+async fn get_elements(State(state): State<ApiState>) -> Json<Vec<MonitoredElement>> {
+    let state = state.db.lock().unwrap();
+    let elements: Vec<MonitoredElement> = state.get_elements().unwrap();
+    Json(elements)
 }
 
 #[derive(Clone)]

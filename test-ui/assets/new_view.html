@@ -176,6 +176,9 @@
         <button class="newview-form-button" onclick="add()">Add View →</button>
       </div>
     </div>
+    <div>
+      <button onclick="createNewWidget()">Create New Widget</button>
+    </div>
     <script>
       // Make sure inputs are not draggable
       document.querySelectorAll(".newview-form-input").forEach((input) => {
@@ -196,6 +199,10 @@
             },
           })
         );
+      }
+
+      function createNewWidget() {
+        window.ipc.postMessage(JSON.stringify({ createwidget: true }));
       }
     </script>
   </body>
