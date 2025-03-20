@@ -1,4 +1,6 @@
+use axum::{extract::State, routing::get, Json, Router};
 use element_extractor::Extractor;
+use http::HeaderValue;
 use jiff;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
@@ -7,8 +9,11 @@ use std::{
     cmp::max,
     collections::HashMap,
     sync::{Arc, Mutex},
+    thread,
     time::Instant,
 };
+use tokio::{runtime::Runtime, time::sleep};
+use tower_http::cors::CorsLayer;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -21,6 +26,8 @@ use wry::{
     http::Response,
     Rect, WebView, WebViewBuilder,
 };
+
+use rusqlite;
 
 pub const WEBVIEW_HEIGHT: u32 = 200;
 pub const WEBVIEW_WIDTH: u32 = 50;
@@ -97,6 +104,86 @@ impl std::fmt::Display for NanoId {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct Record {
+    id: i32,
+    window_id: String,
+    data: String,
+}
+
+struct Database {
+    // data: HashMap<String, Vec<Record>>, // table -> data????
+    connection: rusqlite::Connection,
+}
+
+impl Database {
+    fn new() -> Self {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute(
+                "CREATE TABLE test (
+                id INTEGER PRIMARY KEY,
+                window_id TEXT NOT NULL,
+                data TEXT NOT NULL
+            )",
+                (),
+            )
+            .unwrap();
+        Self {
+            // data: Arc::new(Mutex::new(HashMap::new())),
+            connection,
+        }
+    }
+    fn get_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
+        let mut stmt = self.connection.prepare("SELECT * FROM test")?;
+        let records = stmt
+            .query_map([], |row| {
+                info!("querying row: {:?}", row);
+                Ok(Record {
+                    id: row.get(0)?,
+                    window_id: row.get(1)?,
+                    data: row.get(2)?,
+                })
+            })?
+            .filter_map(|record| record.ok())
+            .collect();
+        Ok(records)
+    }
+
+    fn get_latest_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
+        info!("Getting latest data");
+        let mut stmt = self.connection.prepare(
+            r#"SELECT *
+FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY window_id ORDER BY id DESC) AS rn
+    FROM test
+)
+WHERE rn = 1"#,
+        )?;
+        let data = stmt
+            .query_map([], |row| {
+                Ok(Record {
+                    id: row.get(0)?,
+                    window_id: row.get(1)?,
+                    data: row.get(2)?,
+                })
+            })?
+            .filter_map(|record| record.ok())
+            .collect();
+
+        Ok(data)
+    }
+
+    fn insert_data(&mut self, table: &str, insert_data: Record) -> Result<(), rusqlite::Error> {
+        info!("Inserting data into table: {}, {:?}", table, insert_data);
+        let mut stmt = self
+            .connection
+            .prepare("INSERT INTO test (window_id, data) VALUES (?1, ?2)")?;
+        stmt.execute([insert_data.window_id, insert_data.data])?;
+        Ok(())
+    }
+}
+
 struct App {
     window: Option<Window>,
     new_view_form_window: Option<Window>,
@@ -109,6 +196,7 @@ struct App {
     new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
     last_resize: Option<Instant>,
+    db: Arc<Mutex<Database>>,
     // extractor: Extractor,
 }
 
@@ -684,7 +772,16 @@ JSON.stringify({
         info!("Scrape completed");
     }
 
-    fn add_scrape_result(&self, result: ScrapedValue) {
+    fn add_scrape_result(&mut self, result: ScrapedValue) {
+        let res = self.db.try_lock().expect("Something failed").insert_data(
+            "scraped_values",
+            Record {
+                id: 0,
+                window_id: result.id.0.clone(),
+                data: result.value.clone(),
+            },
+        );
+
         let mut views = self.monitored_views.lock().expect("Something failed");
         let view = views.get_mut(&result.id).expect("Something failed");
         view.scraped_history.push(result.clone());
@@ -1035,9 +1132,9 @@ fn main() {
         }
     });
 
-    // let extractor = Extractor::new();
-
+    let db = Arc::new(Mutex::new(Database::new()));
     let mut app = App {
+        db: db.clone(),
         window: None,
         new_view_form_window: None,
         react_ui_window: None,
@@ -1052,7 +1149,49 @@ fn main() {
         // extractor,
     };
 
+    thread::spawn(move || {
+        let rt = Runtime::new().unwrap();
+
+        // Execute the future, blocking the current thread until completion
+        rt.block_on(async {
+            let state = ApiState { db: db.clone() };
+
+            let cors_layer = CorsLayer::new()
+                .allow_methods(vec![http::Method::GET, http::Method::POST])
+                .allow_headers(vec![http::HeaderName::from_static("content-type")])
+                .allow_origin(http::HeaderValue::from_static("http://localhost:5173"));
+            let router = Router::new()
+                .route("/values", get(get_values))
+                .route("/latest", get(get_latest_values))
+                // .route("/values", post(update_value))
+                .layer(cors_layer)
+                .with_state(state);
+
+            let addr = format!("{}:{}", "127.0.0.1", 3000);
+            let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+            println!("API listening on http://{}", addr);
+            axum::serve(listener, router).await.unwrap();
+        });
+    });
+
     event_loop.run_app(&mut app).expect("Something failed");
+}
+
+async fn get_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
+    let state = state.db.lock().unwrap();
+    let values: Vec<Record> = state.get_data().unwrap();
+    Json(values)
+}
+
+async fn get_latest_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
+    let state = state.db.lock().unwrap();
+    let values: Vec<Record> = state.get_latest_data().unwrap();
+    Json(values)
+}
+
+#[derive(Clone)]
+struct ApiState {
+    db: Arc<Mutex<Database>>,
 }
 
 #[cfg(test)]

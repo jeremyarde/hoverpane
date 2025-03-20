@@ -86,20 +86,40 @@ const DataView = ({ filter }: { filter: string }) => {
 const App = () => {
   const [views, setViews] = useState<ReactNode[]>([]);
   const [filter, setFilter] = useState<string>("");
+  const [values, setValues] = useState<Record[]>([]);
   return (
-    <MessageProvider>
+    <>
       <input type="text" onChange={(e) => setFilter(e.target.value)} />
       <button
-        onClick={() => setViews([...views, <DataView filter={filter} />])}
+        onClick={() => {
+          fetch("http://127.0.0.1:3000/latest", {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          })
+            .then((res) => res.json())
+            .then((data) => setValues(data));
+        }}
       >
-        Add DataView
+        Get Values
       </button>
-      <div>
-        {views.map((view, index) => (
-          <div key={index}>{view}</div>
-        ))}
-      </div>
-    </MessageProvider>
+      <h3>Values</h3>
+      <div>{JSON.stringify(values)}</div>
+      <MessageProvider>
+        <input type="text" onChange={(e) => setFilter(e.target.value)} />
+        <button
+          onClick={() => setViews([...views, <DataView filter={filter} />])}
+        >
+          Add DataView
+        </button>
+        <div>
+          {views.map((view, index) => (
+            <div key={index}>{view}</div>
+          ))}
+        </div>
+      </MessageProvider>
+    </>
   );
 };
 
