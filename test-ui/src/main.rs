@@ -792,6 +792,7 @@ impl App {
     }
 
     fn scrape_webview(&self, id: NanoId) {
+        info!("Scraping webview: {:?}", id);
         let window_id = self.webview_to_window[&id];
         if self.all_windows.get(&window_id).is_none() {
             info!("Webview not found");
@@ -1006,7 +1007,7 @@ enum UserEvent {
     Scrape(NanoId),
     AddWebView(AddWebView),
     RemoveWebView(NanoId),
-    ShowNewViewForm,
+    // ShowNewViewForm,
     MoveWebView(NanoId, Direction),
     ExtractResult(ScrapedValue),
     Minimize(NanoId),
@@ -1055,6 +1056,9 @@ impl ApplicationHandler<UserEvent> for App {
             App::create_new_view_form(&form_size, &new_view_form_window, 0, self.proxy.clone());
         // self.new_view_form = Some(new_view_form);
 
+        let new_view_form_id = NanoId(nanoid_gen(8));
+        self.webview_to_window
+            .insert(new_view_form_id.clone(), new_view_form_window.id());
         self.all_windows.insert(
             new_view_form_window.id(),
             WidgetView {
@@ -1062,44 +1066,11 @@ impl ApplicationHandler<UserEvent> for App {
                     webview: new_view_form,
                 },
                 window: new_view_form_window,
-                nano_id: NanoId(nanoid_gen(8)),
+                nano_id: new_view_form_id,
                 visible: true,
                 options: WidgetOptions::default(),
             },
         );
-
-        // creating the main window
-        // let window = event_loop
-        //     .create_window(
-        //         window_attributes.clone().with_title("viewer"), // .with_title_hidden(true),
-        //     )
-        //     .expect("Failed to create window");
-        // let size = window.inner_size().to_logical::<u32>(window.scale_factor());
-
-        // {
-        //     let mut num_views = 0;
-        //     let mut views = self.monitored_views.lock().expect("Something failed");
-        //     num_views = views.len();
-        //     for (i, (id, mut view)) in views.iter_mut().enumerate() {
-        //         info!("Creating webview for {}", view.url);
-        //         let webview = self.create_webview(&size, &window, &mut view, i, num_views);
-        //         let controls =
-        //             self.create_controls(&size, &window, i, self.proxy.clone(), id.clone());
-        //         let element_view =
-        //             self.create_element_view(&size, &window, &mut view, i, num_views);
-
-        //         self.element_views.insert(
-        //             id.clone(),
-        //             ElementView {
-        //                 webview: element_view,
-        //                 nano_id: NanoId(view.title.clone()),
-        //                 visible: true, // Set to true by default
-        //             },
-        //         );
-        //         self.webviews.insert(id.clone(), webview);
-        //         self.controls.insert(id.clone(), controls);
-        //     }
-        // }
 
         let reactui_window = event_loop
             .create_window(window_attributes.with_title("reactui"))
@@ -1122,6 +1093,9 @@ impl ApplicationHandler<UserEvent> for App {
         // self.react_ui_window = Some(reactui_window);
         // self.react_webview = Some(react_webview);
 
+        let reactui_window_id = NanoId(nanoid_gen(8));
+        self.webview_to_window
+            .insert(reactui_window_id.clone(), reactui_window.id());
         self.all_windows.insert(
             reactui_window.id(),
             WidgetView {
@@ -1129,11 +1103,12 @@ impl ApplicationHandler<UserEvent> for App {
                     webview: react_webview,
                 },
                 window: reactui_window,
-                nano_id: NanoId(nanoid_gen(8)),
+                nano_id: reactui_window_id,
                 visible: true,
                 options: WidgetOptions::default(),
             },
         );
+
         info!("Window and webviews created successfully");
     }
 
@@ -1204,13 +1179,13 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Removing webview at index {}", id);
                 self.remove_webview(id);
             }
-            UserEvent::ShowNewViewForm => {
-                info!("Showing new view form");
-                self.new_view_form
-                    .as_ref()
-                    .expect("New view form not found")
-                    .set_visible(true);
-            }
+            // UserEvent::ShowNewViewForm => {
+            //     info!("Showing new view form");
+            //     self.new_view_form
+            //         .as_ref()
+            //         .expect("New view form not found")
+            //         .set_visible(true);
+            // }
             UserEvent::MoveWebView(id, direction) => {
                 info!("Moving webview at index {} {}", id, direction);
                 self.move_webview(id, direction);
@@ -1218,23 +1193,23 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::ExtractResult(result) => {
                 info!("Extracted result: {:?}", result);
                 self.add_scrape_result(result.clone());
-                self.update_element_view(result);
+                // self.update_element_view(result);
             }
             UserEvent::Minimize(id) => {
                 info!("Minimizing webview at index {}", id);
                 self.minimize_webview(id);
             }
-            UserEvent::ToggleElementView(nano_id) => {
-                info!("UserEvent: Toggling element view for {}", nano_id);
-                if let Some(mut element_view) = self.element_views.get_mut(&nano_id) {
-                    element_view.visible = !element_view.visible;
-                    if element_view.visible {
-                        element_view.webview.set_visible(true);
-                    } else {
-                        element_view.webview.set_visible(false);
-                    }
-                }
-            }
+            // UserEvent::ToggleElementView(nano_id) => {
+            //     info!("UserEvent: Toggling element view for {}", nano_id);
+            //     if let Some(mut element_view) = self.element_views.get_mut(&nano_id) {
+            //         element_view.visible = !element_view.visible;
+            //         if element_view.visible {
+            //             element_view.webview.set_visible(true);
+            //         } else {
+            //             element_view.webview.set_visible(false);
+            //         }
+            //     }
+            // }
             UserEvent::Scrape(id) => {
                 info!("Scraping webview at index {}", id);
                 self.scrape_webview(id);
@@ -1242,6 +1217,10 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::CreateNewWidget => {
                 info!("Creating new widget");
                 self.create_widget(event_loop, WidgetOptions::default());
+            }
+            _ => {
+                info!("Unknown event: {:?}", event);
+                todo!("User event not handled: {:?}", event);
             }
         }
     }
@@ -1259,7 +1238,7 @@ fn main() {
         MonitoredView {
             url: "https://finance.yahoo.com/quote/SPY/".to_string(),
             title: "SPY".to_string(),
-            index: 2,
+            // index: 2,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
             refresh_interval: std::time::Duration::from_secs(240),
@@ -1277,7 +1256,7 @@ fn main() {
         MonitoredView {
             url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
             title: "NVDA".to_string(),
-            index: 1,
+            // index: 1,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
             refresh_interval: std::time::Duration::from_secs(240),
@@ -1340,19 +1319,21 @@ fn main() {
 
     let db = Arc::new(Mutex::new(Database::new()));
     let mut app = App {
+        all_windows: HashMap::new(),
+        webview_to_window: HashMap::new(),
         db: db.clone(),
-        window: None,
-        new_view_form_window: None,
-        react_ui_window: None,
-        react_webview: None,
+        // window: None,
+        // new_view_form_window: None,
+        // react_ui_window: None,
+        // react_webview: None,
         monitored_views: monitored_views,
-        webviews: HashMap::new(),
-        controls: HashMap::new(),
-        new_view_form: None,
-        element_views: HashMap::new(),
+        // webviews: HashMap::new(),
+        // controls: HashMap::new(),
+        // new_view_form: None,
+        // element_views: HashMap::new(),
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
         last_resize: None,
-        widgets: HashMap::new(),
+        // widgets: HashMap::new(),
     };
 
     thread::spawn(move || {
