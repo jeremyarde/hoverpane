@@ -792,12 +792,14 @@ impl App {
     }
 
     fn scrape_webview(&self, id: NanoId) {
-        if self.webviews.get(&id).is_none() {
+        let window_id = self.webview_to_window[&id];
+        if self.all_windows.get(&window_id).is_none() {
             info!("Webview not found");
             return;
         }
 
-        let webview = self.webviews.get(&id).expect("Something failed");
+        let widget_view = self.all_windows.get(&window_id).expect("Something failed");
+        // TODO: check if widget type is something you can scrape against?
 
         let view_details: MonitoredView;
         {
@@ -862,7 +864,10 @@ JSON.stringify({
         //         &view_details.element_selector.as_ref().expect("Something failed"),
         //     )
         //     .replace("$id", &view_details.id.0);
-        let result = webview.evaluate_script(&script_content);
+        let result = widget_view
+            .app_webview
+            .webview
+            .evaluate_script(&script_content);
 
         // if let Some(react_webview) = self.react_webview.as_ref() {
         //     info!("Sending message to react...");
@@ -885,20 +890,20 @@ JSON.stringify({
         let mut views = self.monitored_views.lock().expect("Something failed");
         let view = views.get_mut(&result.id).expect("Something failed");
         view.scraped_history.push(result.clone());
-        self.react_webview
-            .as_ref()
-            .expect("Something failed")
-            .send_message(&Message {
-                window_id: result.id.0.clone(),
-                data_key: view.title.clone(),
-                message: json!({ "key": result.value }).to_string(),
-                timestamp: jiff::Timestamp::now().to_string(),
-            });
+        // self.react_webview
+        //     .as_ref()
+        //     .expect("Something failed")
+        //     .send_message(&Message {
+        //         window_id: result.id.0.clone(),
+        //         data_key: view.title.clone(),
+        //         message: json!({ "key": result.value }).to_string(),
+        //         timestamp: jiff::Timestamp::now().to_string(),
+        //     });
     }
 
-    fn resize_react_ui_window(&self, size: &LogicalSize<u32>) {
-        if let Some(react_webview) = self.react_webview.as_ref() {
-            react_webview.webview.set_bounds(Rect {
+    fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
+        if let Some(window) = self.all_windows.get_mut(&id) {
+            window.app_webview.webview.set_bounds(Rect {
                 position: LogicalPosition::new(0, 0).into(),
                 size: size.clone().into(),
             });
@@ -906,74 +911,13 @@ JSON.stringify({
     }
 
     fn create_widget(&mut self, event_loop: &ActiveEventLoop, widget_options: WidgetOptions) {
-        // let window_id = self.webview_to_window[&id];
-        // if let Some(window) = self.all_windows.get_mut(&window_id) {
-        // let mut view = MonitoredView {
-        //     id: NanoId(view.title.clone()),
-        //     url: if view.url.starts_with("https://") {
-        //         view.url
-        //     } else {
-        //         format!("https://{}", view.url)
-        //     },
-        //     title: view.title,
-        //     // index: self.monitored_views.len(),
-        //     refresh_count: 0,
-        //     last_refresh: jiff::Timestamp::now(),
-        //     refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
-        //     last_scrape: jiff::Timestamp::now(),
-        //     scrape_interval: std::time::Duration::from_secs(1),
-        //     element_selector: None,
-        //     hidden: false,
-        //     scraped_history: vec![],
-        // };
-
-        // // Add to monitored views first so positions are calculated correctly
-        // let mut num_views = 0;
-        // {
-        //     let mut views = self.monitored_views.lock().expect("Something failed");
-        //     views.insert(view.id.clone(), view.clone());
-        //     num_views = views.len();
-        // }
-
-        // let widget_options = WidgetOptions {
-        //     title: view.title,
-        //     url: view.url,
-        //     width: WINDOW_WIDTH,
-        //     height: WINDOW_HEIGHT,
-        // };
-
-        // let window_id = self.create_new_widget(event_loop, widget_options);
-
-        // // Create and add the webview and controls
-        // let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
-
-        // let element_view = self.create_element_view(&size, window, &mut view, num_views, num_views);
-        // self.element_views.insert(
-        //     view.id.clone(),
-        //     ElementView {
-        //         webview: element_view,
-        //         nano_id: view.id.clone(),
-        //         visible: false,
-        //     },
-        // );
-        // let controls = {
-        //     let webview_len = self.webviews.len();
-        //     self.create_controls(
-        //         &size,
-        //         window,
-        //         webview_len,
-        //         self.proxy.clone(),
-        //         NanoId(view.title.clone()),
-        //     )
-        // };
-
         let cloned_widget_options = widget_options.clone();
         let new_window = event_loop
             .create_window(
                 Window::default_attributes()
                     .with_active(true)
                     .with_decorations(true)
-                    .with_title(widget_options.title)
+                    .with_title(widget_options.title.clone())
                     .with_has_shadow(false)
                     .with_title_hidden(false)
                     .with_titlebar_hidden(false)
@@ -989,19 +933,15 @@ JSON.stringify({
         //     .build_as_child(&new_window)
         //     .unwrap();
 
-        let view = MonitoredView {
+        let mut view = MonitoredView {
             id: NanoId(nanoid_gen(8)),
-            url: cloned_widget_options.url,
-            title: cloned_widget_options.title,
+            url: widget_options.url.clone(),
+            title: widget_options.title,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(
-                cloned_widget_options.refresh_interval as u64,
-            ),
+            refresh_interval: std::time::Duration::from_secs(10),
             last_scrape: jiff::Timestamp::now(),
-            scrape_interval: std::time::Duration::from_secs(
-                cloned_widget_options.scrape_interval as u64,
-            ),
+            scrape_interval: std::time::Duration::from_secs(10),
             element_selector: None,
             scraped_history: vec![],
             hidden: false,
@@ -1013,14 +953,15 @@ JSON.stringify({
         let webview = self.create_webview(&size, &new_window, &mut view);
 
         let widget_id = NanoId(nanoid_gen(8));
+        let window_id = new_window.id();
         let widget_view = WidgetView {
-            app_webview: new_webview,
+            app_webview: AppWebView { webview },
             window: new_window,
             nano_id: widget_id.clone(),
             visible: true,
             options: cloned_widget_options,
         };
-        self.widgets.insert(widget_id, widget_view);
+        self.all_windows.insert(window_id, widget_view);
     }
 }
 
@@ -1112,40 +1053,53 @@ impl ApplicationHandler<UserEvent> for App {
             .to_logical::<u32>(scale_factor);
         let new_view_form =
             App::create_new_view_form(&form_size, &new_view_form_window, 0, self.proxy.clone());
-        self.new_view_form = Some(new_view_form);
+        // self.new_view_form = Some(new_view_form);
+
+        self.all_windows.insert(
+            new_view_form_window.id(),
+            WidgetView {
+                app_webview: AppWebView {
+                    webview: new_view_form,
+                },
+                window: new_view_form_window,
+                nano_id: NanoId(nanoid_gen(8)),
+                visible: true,
+                options: WidgetOptions::default(),
+            },
+        );
 
         // creating the main window
-        let window = event_loop
-            .create_window(
-                window_attributes.clone().with_title("viewer"), // .with_title_hidden(true),
-            )
-            .expect("Failed to create window");
-        let size = window.inner_size().to_logical::<u32>(window.scale_factor());
+        // let window = event_loop
+        //     .create_window(
+        //         window_attributes.clone().with_title("viewer"), // .with_title_hidden(true),
+        //     )
+        //     .expect("Failed to create window");
+        // let size = window.inner_size().to_logical::<u32>(window.scale_factor());
 
-        {
-            let mut num_views = 0;
-            let mut views = self.monitored_views.lock().expect("Something failed");
-            num_views = views.len();
-            for (i, (id, mut view)) in views.iter_mut().enumerate() {
-                info!("Creating webview for {}", view.url);
-                let webview = self.create_webview(&size, &window, &mut view, i, num_views);
-                let controls =
-                    self.create_controls(&size, &window, i, self.proxy.clone(), id.clone());
-                let element_view =
-                    self.create_element_view(&size, &window, &mut view, i, num_views);
+        // {
+        //     let mut num_views = 0;
+        //     let mut views = self.monitored_views.lock().expect("Something failed");
+        //     num_views = views.len();
+        //     for (i, (id, mut view)) in views.iter_mut().enumerate() {
+        //         info!("Creating webview for {}", view.url);
+        //         let webview = self.create_webview(&size, &window, &mut view, i, num_views);
+        //         let controls =
+        //             self.create_controls(&size, &window, i, self.proxy.clone(), id.clone());
+        //         let element_view =
+        //             self.create_element_view(&size, &window, &mut view, i, num_views);
 
-                self.element_views.insert(
-                    id.clone(),
-                    ElementView {
-                        webview: element_view,
-                        nano_id: NanoId(view.title.clone()),
-                        visible: true, // Set to true by default
-                    },
-                );
-                self.webviews.insert(id.clone(), webview);
-                self.controls.insert(id.clone(), controls);
-            }
-        }
+        //         self.element_views.insert(
+        //             id.clone(),
+        //             ElementView {
+        //                 webview: element_view,
+        //                 nano_id: NanoId(view.title.clone()),
+        //                 visible: true, // Set to true by default
+        //             },
+        //         );
+        //         self.webviews.insert(id.clone(), webview);
+        //         self.controls.insert(id.clone(), controls);
+        //     }
+        // }
 
         let reactui_window = event_loop
             .create_window(window_attributes.with_title("reactui"))
@@ -1162,14 +1116,24 @@ impl ApplicationHandler<UserEvent> for App {
             })
             .build_as_child(&reactui_window)
             .expect("Something failed");
-        self.react_webview = Some(AppWebView {
-            webview: react_webview,
-        });
-        self.react_ui_window = Some(reactui_window);
+        // self.react_webview = Some(AppWebView {
+        //     webview: react_webview,
+        // });
+        // self.react_ui_window = Some(reactui_window);
         // self.react_webview = Some(react_webview);
 
-        self.window = Some(window);
-        self.new_view_form_window = Some(new_view_form_window);
+        self.all_windows.insert(
+            reactui_window.id(),
+            WidgetView {
+                app_webview: AppWebView {
+                    webview: react_webview,
+                },
+                window: reactui_window,
+                nano_id: NanoId(nanoid_gen(8)),
+                visible: true,
+                options: WidgetOptions::default(),
+            },
+        );
         info!("Window and webviews created successfully");
     }
 
@@ -1191,13 +1155,6 @@ impl ApplicationHandler<UserEvent> for App {
                 // self.window.as_ref().expect("Something failed").request_redraw();
             }
             WindowEvent::Resized(size) => {
-                self.widgets.iter_mut().for_each(|(_, widget)| {
-                    widget.webview.set_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: size.clone().into(),
-                    });
-                });
-                // Debounce resize events to improve performance
                 let now = Instant::now();
                 if let Some(last_resize) = self.last_resize {
                     if now.duration_since(last_resize).as_millis() < RESIZE_DEBOUNCE_TIME {
@@ -1205,16 +1162,14 @@ impl ApplicationHandler<UserEvent> for App {
                         return;
                     }
                 }
+                self.all_windows.iter_mut().for_each(|(_, widget)| {
+                    widget.app_webview.webview.set_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: size.clone().into(),
+                    });
+                });
+                // Debounce resize events to improve performance
                 self.last_resize = Some(now);
-
-                let size = size.to_logical::<u32>(
-                    self.window
-                        .as_ref()
-                        .expect("Something failed")
-                        .scale_factor(),
-                );
-                self.resize_webviews(&size);
-                self.resize_react_ui_window(&size);
             }
             WindowEvent::KeyboardInput {
                 device_id,
