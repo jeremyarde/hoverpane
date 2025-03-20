@@ -38,12 +38,19 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 300;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
+pub enum WidgetType {
+    Display,
+    Source,
+    Tracker,
+    Controls,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MonitoredView {
     id: NanoId,
     url: String,
     title: String,
-    index: usize,
+    // index: usize,
     refresh_count: usize,
     last_refresh: jiff::Timestamp,
     refresh_interval: std::time::Duration,
@@ -69,7 +76,6 @@ impl MonitoredView {
             id: NanoId(nanoid_gen(8)),
             url,
             title,
-            index: 0,
             refresh_count: 0,
             last_refresh: jiff::Timestamp::now(),
             refresh_interval,
@@ -261,26 +267,30 @@ WHERE rn = 1"#,
 }
 
 struct App {
-    window: Option<Window>,
-    new_view_form_window: Option<Window>,
-    react_ui_window: Option<Window>,
-    react_webview: Option<AppWebView>,
+    // window: Option<Window>,
+    // new_view_form_window: Option<Window>,
+    // react_ui_window: Option<Window>,
+    // react_webview: Option<AppWebView>,
     monitored_views: Arc<Mutex<HashMap<NanoId, MonitoredView>>>,
-    webviews: HashMap<NanoId, wry::WebView>,
-    element_views: HashMap<NanoId, ElementView>,
-    controls: HashMap<NanoId, wry::WebView>,
-    new_view_form: Option<wry::WebView>,
+    // webviews: HashMap<NanoId, wry::WebView>,
+    // element_views: HashMap<NanoId, ElementView>,
+    // controls: HashMap<NanoId, wry::WebView>,
+    // new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
     last_resize: Option<Instant>,
     db: Arc<Mutex<Database>>,
-    widgets: HashMap<NanoId, WidgetView>,
+    // widgets: HashMap<NanoId, WidgetView>,
+    all_windows: HashMap<WindowId, WidgetView>,
+    webview_to_window: HashMap<NanoId, WindowId>,
 }
 
 struct WidgetView {
-    webview: wry::WebView,
+    // webview: wry::WebView,
+    app_webview: AppWebView,
     window: Window,
     nano_id: NanoId,
     visible: bool,
+    options: WidgetOptions,
 }
 
 struct ElementView {
@@ -348,93 +358,98 @@ impl App {
             view_details = views.get(&id).expect("Something failed").clone();
         }
 
-        if let Some(webview) = self.webviews.get_mut(&id) {
-            webview.reload().expect("Something failed");
+        let window_id = self.webview_to_window[&id];
+        if let Some(webview) = self.all_windows.get_mut(&window_id) {
+            webview
+                .app_webview
+                .webview
+                .reload()
+                .expect("Something failed");
         }
     }
 
-    fn add_webview(&mut self, view: AddWebView) {
-        if let Some(window) = self.window.as_ref() {
-            // First update the window size for the new view
-            let new_height = (self.webviews.len() + 1) as u32 * WEBVIEW_HEIGHT;
-            window.request_inner_size(LogicalSize::new(WINDOW_WIDTH, new_height));
+    // fn add_webview(&mut self, view: AddWebView, event_loop: &ActiveEventLoop) {
+    //     // let window_id = self.webview_to_window[&id];
+    //     // if let Some(window) = self.all_windows.get_mut(&window_id) {
 
-            // Get the updated size after the resize request
-            let size = window.inner_size().to_logical::<u32>(window.scale_factor());
+    //     let mut view = MonitoredView {
+    //         id: NanoId(view.title.clone()),
+    //         url: if view.url.starts_with("https://") {
+    //             view.url
+    //         } else {
+    //             format!("https://{}", view.url)
+    //         },
+    //         title: view.title,
+    //         // index: self.monitored_views.len(),
+    //         refresh_count: 0,
+    //         last_refresh: jiff::Timestamp::now(),
+    //         refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
+    //         last_scrape: jiff::Timestamp::now(),
+    //         scrape_interval: std::time::Duration::from_secs(1),
+    //         element_selector: None,
+    //         hidden: false,
+    //         scraped_history: vec![],
+    //     };
 
-            let mut view = MonitoredView {
-                id: NanoId(view.title.clone()),
-                url: if view.url.starts_with("https://") {
-                    view.url
-                } else {
-                    format!("https://{}", view.url)
-                },
-                title: view.title,
-                index: self.webviews.len(),
-                refresh_count: 0,
-                last_refresh: jiff::Timestamp::now(),
-                refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
-                last_scrape: jiff::Timestamp::now(),
-                scrape_interval: std::time::Duration::from_secs(1),
-                element_selector: None,
-                // original_size: ViewSize {
-                //     width: size.width,
-                //     height: size.height,
-                // },
-                hidden: false,
-                scraped_history: vec![],
-            };
+    //     // Add to monitored views first so positions are calculated correctly
+    //     let mut num_views = 0;
+    //     {
+    //         let mut views = self.monitored_views.lock().expect("Something failed");
+    //         views.insert(view.id.clone(), view.clone());
+    //         num_views = views.len();
+    //     }
 
-            // Add to monitored views first so positions are calculated correctly
-            let mut num_views = 0;
-            {
-                let mut views = self.monitored_views.lock().expect("Something failed");
-                views.insert(view.id.clone(), view.clone());
-                num_views = views.len();
-            }
-            // Create and add the webview and controls
-            let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
+    //     let widget_options = WidgetOptions {
+    //         title: view.title,
+    //         url: view.url,
+    //         width: WINDOW_WIDTH,
+    //         height: WINDOW_HEIGHT,
+    //     };
 
-            let element_view =
-                self.create_element_view(&size, window, &mut view, num_views, num_views);
-            self.element_views.insert(
-                view.id.clone(),
-                ElementView {
-                    webview: element_view,
-                    nano_id: view.id.clone(),
-                    visible: false,
-                },
-            );
-            let controls = {
-                let webview_len = self.webviews.len();
-                self.create_controls(
-                    &size,
-                    window,
-                    webview_len,
-                    self.proxy.clone(),
-                    NanoId(view.title.clone()),
-                )
-            };
+    //     let window_id = self.create_new_widget(event_loop, widget_options);
 
-            self.webviews.insert(view.id.clone(), webview);
-            self.controls.insert(view.id.clone(), controls);
+    //     // Create and add the webview and controls
+    //     let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
 
-            // Fix positions of all webviews to ensure proper layout
-            self.fix_webview_positions();
-        }
-    }
+    //     let element_view = self.create_element_view(&size, window, &mut view, num_views, num_views);
+    //     self.element_views.insert(
+    //         view.id.clone(),
+    //         ElementView {
+    //             webview: element_view,
+    //             nano_id: view.id.clone(),
+    //             visible: false,
+    //         },
+    //     );
+    //     let controls = {
+    //         let webview_len = self.webviews.len();
+    //         self.create_controls(
+    //             &size,
+    //             window,
+    //             webview_len,
+    //             self.proxy.clone(),
+    //             NanoId(view.title.clone()),
+    //         )
+    //     };
+
+    //     self.webviews.insert(view.id.clone(), webview);
+    //     self.controls.insert(view.id.clone(), controls);
+
+    //     // Fix positions of all webviews to ensure proper layout
+    //     self.fix_webview_positions();
+    //     // }
+    // }
 
     fn create_webview(
         &self,
         size: &LogicalSize<u32>,
         window: &Window,
         view: &mut MonitoredView,
-        index: usize,
-        num_views: usize,
+        // index: usize,
+        // num_views: usize,
     ) -> WebView {
         let proxy = self.proxy.clone();
 
-        let starting_height = window.inner_size().height / num_views as u32;
+        let starting_height = window.inner_size().height;
         let starting_width = size.width;
         let width = if view.hidden { 0 } else { starting_width };
         let height = if view.hidden { 0 } else { starting_height };
@@ -446,7 +461,7 @@ impl App {
 
         let mut webviewbuilder = WebViewBuilder::new()
             .with_bounds(Rect {
-                position: LogicalPosition::new(0, starting_height * index as u32).into(),
+                position: LogicalPosition::new(0, starting_height).into(),
                 size: LogicalSize::new(width, height).into(),
             })
             .with_visible(true)
@@ -479,27 +494,29 @@ impl App {
     }
 
     fn remove_webview(&mut self, id: NanoId) {
-        self.webviews.remove(&id);
-        self.controls.remove(&id);
+        todo!("Remove not implemented");
+        // self.webviews.remove(&id);
+        // self.controls.remove(&id);
+
         self.monitored_views
             .lock()
             .expect("Something failed")
             .remove(&id);
 
         // Update window height
-        if let Some(window) = self.window.as_ref() {
-            let new_height = self.calculate_window_height();
-            window.request_inner_size(LogicalSize::new(WINDOW_WIDTH, new_height));
-        }
+        // if let Some(window) = self.window.as_ref() {
+        //     let new_height = self.calculate_window_height();
+        //     window.request_inner_size(LogicalSize::new(WINDOW_WIDTH, new_height));
+        // }
 
-        self.fix_webview_positions();
+        // self.fix_webview_positions();
     }
 
-    fn fix_webview_positions(&mut self) {
-        let window = self.window.as_ref().expect("Something failed");
-        let size = window.inner_size().to_logical::<u32>(window.scale_factor());
-        self.resize_webviews(&size);
-    }
+    // fn fix_webview_positions(&mut self) {
+    //     let window = self.window.as_ref().expect("Something failed");
+    //     let size = window.inner_size().to_logical::<u32>(window.scale_factor());
+    //     self.resize_webviews(&size);
+    // }
 
     fn create_controls(
         &self,
@@ -631,55 +648,55 @@ impl App {
         control_panel
     }
 
-    fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
-        let window = self.window.as_ref().expect("Something failed");
-        let num_views = self.webviews.len();
-        if num_views == 0 {
-            return;
-        }
+    // fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
+    //     let window = self.window.as_ref().expect("Something failed");
+    //     let num_views = self.webviews.len();
+    //     if num_views == 0 {
+    //         return;
+    //     }
 
-        let webview_height = size.height / num_views as u32;
+    //     let webview_height = size.height / num_views as u32;
 
-        // Pre-calculate common values
-        let width = size.width;
+    //     // Pre-calculate common values
+    //     let width = size.width;
 
-        // Update all webviews in a single pass
-        for (i, (id, webview)) in self.webviews.iter_mut().enumerate() {
-            let y_position = webview_height * i as u32;
+    //     // Update all webviews in a single pass
+    //     for (i, (id, webview)) in self.webviews.iter_mut().enumerate() {
+    //         let y_position = webview_height * i as u32;
 
-            // Only resize if the webview is visible
-            if let Ok(bounds) = webview.bounds() {
-                let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
-                if current_size.width > 0 {
-                    // Only resize visible webviews
-                    webview.set_bounds(Rect {
-                        position: LogicalPosition::new(0, y_position).into(),
-                        size: LogicalSize::new(width, webview_height).into(),
-                    });
-                }
-            }
+    //         // Only resize if the webview is visible
+    //         if let Ok(bounds) = webview.bounds() {
+    //             let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
+    //             if current_size.width > 0 {
+    //                 // Only resize visible webviews
+    //                 webview.set_bounds(Rect {
+    //                     position: LogicalPosition::new(0, y_position).into(),
+    //                     size: LogicalSize::new(width, webview_height).into(),
+    //                 });
+    //             }
+    //         }
 
-            // Update control position
-            if let Some(control) = self.controls.get_mut(&id) {
-                control.set_bounds(Rect {
-                    position: LogicalPosition::new(0, y_position).into(),
-                    size: LogicalSize::new(width, CONTROL_PANEL_HEIGHT).into(),
-                });
-            }
-        }
+    //         // Update control position
+    //         if let Some(control) = self.controls.get_mut(&id) {
+    //             control.set_bounds(Rect {
+    //                 position: LogicalPosition::new(0, y_position).into(),
+    //                 size: LogicalSize::new(width, CONTROL_PANEL_HEIGHT).into(),
+    //             });
+    //         }
+    //     }
 
-        if let Some(new_view_form) = self.new_view_form.as_ref() {
-            if let Some(new_form_window) = self.new_view_form_window.as_ref() {
-                let new_form_size = new_form_window
-                    .inner_size()
-                    .to_logical::<u32>(window.scale_factor());
-                new_view_form.set_bounds(Rect {
-                    position: LogicalPosition::new(0, 0).into(),
-                    size: LogicalSize::new(new_form_size.width, new_form_size.height).into(),
-                });
-            }
-        }
-    }
+    //     if let Some(new_view_form) = self.new_view_form.as_ref() {
+    //         if let Some(new_form_window) = self.new_view_form_window.as_ref() {
+    //             let new_form_size = new_form_window
+    //                 .inner_size()
+    //                 .to_logical::<u32>(window.scale_factor());
+    //             new_view_form.set_bounds(Rect {
+    //                 position: LogicalPosition::new(0, 0).into(),
+    //                 size: LogicalSize::new(new_form_size.width, new_form_size.height).into(),
+    //             });
+    //         }
+    //     }
+    // }
 
     fn move_webview(&mut self, id: NanoId, direction: Direction) {
         // let new_index = match direction {
@@ -713,62 +730,37 @@ impl App {
         // } // Lock is dropped here
 
         // Update positions of all webviews and controls
-        self.fix_webview_positions();
+        // self.fix_webview_positions();
     }
 
     fn minimize_webview(&mut self, id: NanoId) {
-        info!("Minimizing webview at index {}", id);
-        let window = self.window.as_ref().expect("Something failed");
-        if let Some(webview) = self.webviews.get_mut(&id) {
-            if let Ok(bounds) = webview.bounds() {
-                // let original_size = self.monitored_views.lock().expect("Something failed")[&id]
-                //     .original_size
-                //     .clone();
-                let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
-                info!("Current size: {:?}", current_size);
-                if current_size.width > 0 {
-                    webview.set_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: LogicalSize::new(0, 0).into(),
-                    });
-                } else {
-                    webview.set_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: LogicalSize::new(
-                            window.inner_size().width,
-                            window.inner_size().height,
-                        )
-                        .into(),
-                    });
-                }
-            }
-        }
-        {
-            let mut views = self.monitored_views.lock().expect("Something failed");
-            views.entry(id).and_modify(|view| view.hidden = true);
-        }
-    }
-
-    fn update_element_view(&mut self, result: ScrapedValue) {
-        if self.element_views.is_empty() {
-            info!("No element views to update");
-            return;
-        }
-
-        let element_view = self
-            .element_views
-            .values()
-            .next()
-            .expect("Something failed");
-        element_view
-            .webview
-            .evaluate_script(
-                String::from("document.getElementById('value').textContent = '$title: $value';")
-                    .replace("$title", &element_view.nano_id.0)
-                    .replace("$value", &result.value)
-                    .as_str(),
-            )
-            .expect("Something failed");
+        todo!("Minimize not implemented");
+        // info!("Minimizing webview at index {}", id);
+        // let window = self.window.as_ref().expect("Something failed");
+        // if let Some(webview) = self.webviews.get_mut(&id) {
+        // if let Ok(bounds) = webview.bounds() {
+        //     // let original_size = self.monitored_views.lock().expect("Something failed")[&id]
+        //     //     .original_size
+        //     //     .clone();
+        //     let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
+        //     info!("Current size: {:?}", current_size);
+        //     if current_size.width > 0 {
+        //         webview.set_bounds(Rect {
+        //             position: LogicalPosition::new(0, 0).into(),
+        //             size: LogicalSize::new(0, 0).into(),
+        //         });
+        //     } else {
+        //         webview.set_bounds(Rect {
+        //             position: LogicalPosition::new(0, 0).into(),
+        //             size: LogicalSize::new(window.inner_size().width, window.inner_size().height)
+        //                 .into(),
+        //         });
+        //     }
+        // }
+        // {
+        //     let mut views = self.monitored_views.lock().expect("Something failed");
+        //     views.entry(id).and_modify(|view| view.hidden = true);
+        // }
     }
 
     fn create_element_view(
@@ -913,34 +905,136 @@ JSON.stringify({
         }
     }
 
-    fn create_new_widget(&mut self, event_loop: &ActiveEventLoop) {
+    fn create_widget(&mut self, event_loop: &ActiveEventLoop, widget_options: WidgetOptions) {
+        // let window_id = self.webview_to_window[&id];
+        // if let Some(window) = self.all_windows.get_mut(&window_id) {
+        // let mut view = MonitoredView {
+        //     id: NanoId(view.title.clone()),
+        //     url: if view.url.starts_with("https://") {
+        //         view.url
+        //     } else {
+        //         format!("https://{}", view.url)
+        //     },
+        //     title: view.title,
+        //     // index: self.monitored_views.len(),
+        //     refresh_count: 0,
+        //     last_refresh: jiff::Timestamp::now(),
+        //     refresh_interval: std::time::Duration::from_secs(view.refresh_interval as u64),
+        //     last_scrape: jiff::Timestamp::now(),
+        //     scrape_interval: std::time::Duration::from_secs(1),
+        //     element_selector: None,
+        //     hidden: false,
+        //     scraped_history: vec![],
+        // };
+
+        // // Add to monitored views first so positions are calculated correctly
+        // let mut num_views = 0;
+        // {
+        //     let mut views = self.monitored_views.lock().expect("Something failed");
+        //     views.insert(view.id.clone(), view.clone());
+        //     num_views = views.len();
+        // }
+
+        // let widget_options = WidgetOptions {
+        //     title: view.title,
+        //     url: view.url,
+        //     width: WINDOW_WIDTH,
+        //     height: WINDOW_HEIGHT,
+        // };
+
+        // let window_id = self.create_new_widget(event_loop, widget_options);
+
+        // // Create and add the webview and controls
+        // let webview = self.create_webview(&size, window, &mut view, num_views, num_views);
+
+        // let element_view = self.create_element_view(&size, window, &mut view, num_views, num_views);
+        // self.element_views.insert(
+        //     view.id.clone(),
+        //     ElementView {
+        //         webview: element_view,
+        //         nano_id: view.id.clone(),
+        //         visible: false,
+        //     },
+        // );
+        // let controls = {
+        //     let webview_len = self.webviews.len();
+        //     self.create_controls(
+        //         &size,
+        //         window,
+        //         webview_len,
+        //         self.proxy.clone(),
+        //         NanoId(view.title.clone()),
+        //     )
+        // };
+
+        let cloned_widget_options = widget_options.clone();
         let new_window = event_loop
-            .create_window(Window::default_attributes())
+            .create_window(
+                Window::default_attributes()
+                    .with_active(true)
+                    .with_decorations(true)
+                    .with_title(widget_options.title)
+                    .with_has_shadow(false)
+                    .with_title_hidden(false)
+                    .with_titlebar_hidden(false)
+                    .with_resizable(true),
+            )
             .unwrap();
-        let new_webview = WebViewBuilder::new()
-            // .with_bounds(Rect {
-            //     position: LogicalPosition::new(0, 0).into(),
-            //     size: size.clone().into(),
-            // })
-            .with_url("https://www.google.com")
-            .build_as_child(&new_window)
-            .unwrap();
+        // let new_webview = WebViewBuilder::new()
+        //     // .with_bounds(Rect {
+        //     //     position: LogicalPosition::new(0, 0).into(),
+        //     //     size: size.clone().into(),
+        //     // })
+        //     .with_url("https://www.google.com")
+        //     .build_as_child(&new_window)
+        //     .unwrap();
+
+        let view = MonitoredView {
+            id: NanoId(nanoid_gen(8)),
+            url: cloned_widget_options.url,
+            title: cloned_widget_options.title,
+            refresh_count: 0,
+            last_refresh: jiff::Timestamp::now(),
+            refresh_interval: std::time::Duration::from_secs(
+                cloned_widget_options.refresh_interval as u64,
+            ),
+            last_scrape: jiff::Timestamp::now(),
+            scrape_interval: std::time::Duration::from_secs(
+                cloned_widget_options.scrape_interval as u64,
+            ),
+            element_selector: None,
+            scraped_history: vec![],
+            hidden: false,
+        };
+        let size = new_window
+            .inner_size()
+            .to_logical::<u32>(new_window.scale_factor());
+
+        let webview = self.create_webview(&size, &new_window, &mut view);
 
         let widget_id = NanoId(nanoid_gen(8));
         let widget_view = WidgetView {
-            webview: new_webview,
+            app_webview: new_webview,
             window: new_window,
             nano_id: widget_id.clone(),
             visible: true,
+            options: cloned_widget_options,
         };
         self.widgets.insert(widget_id, widget_view);
     }
+}
 
-    // fn widget_attributes() -> WindowAttributes {
-    //     Window::default_attributes()
-    //         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
-    //         .with_title("new view")
-    // }
+// fn widget_attributes() -> WindowAttributes {
+//     Window::default_attributes()
+//         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
+//         .with_title("new view")
+// }
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+struct WidgetOptions {
+    title: String,
+    url: String,
+    width: u32,
+    height: u32,
 }
 
 struct AppWebView {
@@ -1097,6 +1191,12 @@ impl ApplicationHandler<UserEvent> for App {
                 // self.window.as_ref().expect("Something failed").request_redraw();
             }
             WindowEvent::Resized(size) => {
+                self.widgets.iter_mut().for_each(|(_, widget)| {
+                    widget.webview.set_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: size.clone().into(),
+                    });
+                });
                 // Debounce resize events to improve performance
                 let now = Instant::now();
                 if let Some(last_resize) = self.last_resize {
@@ -1134,7 +1234,16 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::AddWebView(view) => {
                 info!("Adding new webview: {:?}", view);
-                self.add_webview(view);
+                // self.add_webview(view);
+                self.create_widget(
+                    event_loop,
+                    WidgetOptions {
+                        title: view.title,
+                        url: view.url,
+                        width: WINDOW_WIDTH,
+                        height: WINDOW_WIDTH,
+                    },
+                );
             }
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id);
@@ -1177,7 +1286,7 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::CreateNewWidget => {
                 info!("Creating new widget");
-                self.create_new_widget(event_loop);
+                self.create_widget(event_loop, WidgetOptions::default());
             }
         }
     }
