@@ -82,43 +82,114 @@ const DataView = ({ filter }: { filter: string }) => {
   );
 };
 
+interface NewViewConfig {
+  // id: string;
+  url: string;
+  selector: string;
+  refreshInterval?: number;
+  // position?: {
+  //   x: number;
+  //   y: number;
+  // };
+}
+
+// Add validation methods
+interface NewViewConfigValidation {
+  isValid(config: NewViewConfig): boolean;
+  getErrors(config: NewViewConfig): string[];
+}
+
+function isValidUrl(url: string) {
+  try {
+    new URL(url);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+// Implementation
+const viewConfigValidation: NewViewConfigValidation = {
+  isValid(config: NewViewConfig): boolean {
+    return !this.getErrors(config).length;
+  },
+
+  getErrors(config: NewViewConfig): string[] {
+    const errors: string[] = [];
+
+    // if (!config.id.trim()) {
+    //   errors.push("ID is required");
+    // }
+
+    if (!config.url.trim()) {
+      errors.push("URL is required");
+    } else if (!isValidUrl(config.url)) {
+      errors.push("Invalid URL format");
+    }
+
+    if (!config.selector.trim()) {
+      errors.push("Selector is required");
+    }
+
+    if (config.refreshInterval && config.refreshInterval < 1000) {
+      errors.push("Refresh interval must be at least 1000ms");
+    }
+
+    return errors;
+  },
+};
+
+// Usage in form
+const NewViewForm: React.FC = () => {
+  const [config, setConfig] = useState<NewViewConfig>({
+    // id: "",
+    url: "",
+    selector: "",
+    refreshInterval: 10,
+  });
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validationErrors = viewConfigValidation.getErrors(config);
+    if (validationErrors.length) {
+      setErrors(validationErrors);
+      return;
+    }
+    window.ipc.postMessage("createView", config);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {errors.map((error) => (
+        <div key={error} className="error">
+          {error}
+        </div>
+      ))}
+      <input
+        required
+        placeholder="URL"
+        value={config.url}
+        onChange={(e) => setConfig({ ...config, url: e.target.value })}
+      />
+      <input
+        required
+        placeholder="Selector"
+        value={config.selector}
+        onChange={(e) => setConfig({ ...config, selector: e.target.value })}
+      />
+      <button type="submit">Create View</button>
+    </form>
+  );
+};
+
 // Example usage
 const App = () => {
-  const [views, setViews] = useState<ReactNode[]>([]);
-  const [filter, setFilter] = useState<string>("");
-  const [values, setValues] = useState<Record[]>([]);
+  // const [views, setViews] = useState<ReactNode[]>([]);
+  // const [filter, setFilter] = useState<string>("");
+  // const [values, setValues] = useState<Record[]>([]);
   return (
     <>
-      <input type="text" onChange={(e) => setFilter(e.target.value)} />
-      <button
-        onClick={() => {
-          fetch("http://127.0.0.1:3000/latest", {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          })
-            .then((res) => res.json())
-            .then((data) => setValues(data));
-        }}
-      >
-        Get Values
-      </button>
-      <h3>Values</h3>
-      <div>{JSON.stringify(values)}</div>
-      <MessageProvider>
-        <input type="text" onChange={(e) => setFilter(e.target.value)} />
-        <button
-          onClick={() => setViews([...views, <DataView filter={filter} />])}
-        >
-          Add DataView
-        </button>
-        <div>
-          {views.map((view, index) => (
-            <div key={index}>{view}</div>
-          ))}
-        </div>
-      </MessageProvider>
+      <NewViewForm />
     </>
   );
 };
