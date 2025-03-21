@@ -1,5 +1,6 @@
 use axum::{extract::State, routing::get, Json, Router};
 use element_extractor::Extractor;
+use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
 use log::{debug, error, info, warn};
@@ -10,7 +11,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tokio::{runtime::Runtime, time::sleep};
 use tower_http::cors::CorsLayer;
@@ -19,7 +20,7 @@ use winit::{
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopBuilder, EventLoopProxy},
     platform::macos::WindowAttributesExtMacOS,
-    window::{Window, WindowId},
+    window::{Window, WindowId, WindowLevel},
 };
 use wry::{
     dpi::{LogicalPosition, LogicalSize},
@@ -34,15 +35,60 @@ pub const WEBVIEW_WIDTH: u32 = 50;
 pub const CONTROL_PANEL_HEIGHT: u32 = 40;
 pub const CONTROL_PANEL_WIDTH: u32 = 50;
 pub const WINDOW_WIDTH: u32 = 240;
+pub const WINDOW_HEIGHT: u32 = 100;
 pub const RESIZE_DEBOUNCE_TIME: u128 = 300;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum WidgetType {
     Display,
-    Source,
+    Source(SourceConfiguration),
     Tracker,
     Controls,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct SourceConfiguration {
+    url: String,
+    element_selectors: Vec<String>,
+    refresh_interval: Seconds,
+}
+
+impl Default for SourceConfiguration {
+    fn default() -> Self {
+        Self {
+            url: "".to_string(),
+            element_selectors: vec![],
+            refresh_interval: 0,
+        }
+    }
+}
+
+impl FromSql for SourceConfiguration {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str().unwrap();
+        Ok(SourceConfiguration {
+            url: value.to_string(),
+            element_selectors: vec![],
+            refresh_interval: value.to_string().parse().unwrap(),
+        })
+    }
+}
+impl FromSql for WidgetType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str().unwrap();
+        match value {
+            "Display" => Ok(WidgetType::Display),
+            "Source" => {
+                let source_configuration = SourceConfiguration::default();
+                Ok(WidgetType::Source(source_configuration))
+            }
+            "Tracker" => Ok(WidgetType::Tracker),
+            "Controls" => Ok(WidgetType::Controls),
+            _ => Err(rusqlite::types::FromSqlError::InvalidType),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -60,6 +106,15 @@ pub struct MonitoredView {
     scraped_history: Vec<ScrapedValue>,
     // original_size: ViewSize,
     hidden: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct WidgetConfiguration {
+    id: NanoId,
+    // url: String,
+    title: String,
+    refresh_interval: Seconds,
+    widget_type: WidgetType,
 }
 
 use nanoid::nanoid_gen;
@@ -180,6 +235,18 @@ impl Database {
                 (),
             )
             .unwrap();
+
+        connection
+            .execute(
+                "CREATE TABLE widgets (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                refresh_interval INTEGER NOT NULL,
+                widget_type TEXT NOT NULL
+            )",
+                (),
+            )
+            .unwrap();
         Self { connection }
     }
 
@@ -197,6 +264,23 @@ impl Database {
             .filter_map(|element| element.ok())
             .collect();
         Ok(elements)
+    }
+
+    fn get_configuration(&self) -> Result<Vec<WidgetConfiguration>, rusqlite::Error> {
+        let mut stmt = self.connection.prepare("SELECT * FROM widgets")?;
+        let configuration = stmt
+            .query_map([], |row| {
+                Ok(WidgetConfiguration {
+                    id: row.get(0)?,
+                    // url: row.get(1)?,
+                    title: row.get(1)?,
+                    refresh_interval: row.get(2)?,
+                    widget_type: row.get(3)?,
+                })
+            })?
+            .filter_map(|configuration| configuration.ok())
+            .collect();
+        Ok(configuration)
     }
 
     fn get_sites(&self) -> Result<Vec<MonitoredSite>, rusqlite::Error> {
@@ -271,7 +355,7 @@ struct App {
     // new_view_form_window: Option<Window>,
     // react_ui_window: Option<Window>,
     // react_webview: Option<AppWebView>,
-    monitored_views: Arc<Mutex<HashMap<NanoId, MonitoredView>>>,
+    // monitored_views: Arc<Mutex<HashMap<NanoId, MonitoredView>>>,
     // webviews: HashMap<NanoId, wry::WebView>,
     // element_views: HashMap<NanoId, ElementView>,
     // controls: HashMap<NanoId, wry::WebView>,
@@ -340,23 +424,23 @@ pub struct AddWebView {
 type Seconds = i32;
 
 impl App {
-    fn calculate_window_height(&self) -> u32 {
-        let view_count = self.monitored_views.lock().expect("Something failed").len();
-        if view_count == 0 {
-            return WINDOW_WIDTH; // Default height for empty window
-        }
-        WINDOW_WIDTH // Let the window be resizable instead of calculating fixed height
-    }
+    // fn calculate_window_height(&self) -> u32 {
+    //     let view_count = self.monitored_views.lock().expect("Something failed").len();
+    //     if view_count == 0 {
+    //         return WINDOW_WIDTH; // Default height for empty window
+    //     }
+    //     WINDOW_WIDTH // Let the window be resizable instead of calculating fixed height
+    // }
 
     // TODO: possibly split out the refresh timer and the extraction logic - maybe a page auto reloads already, and we just need to grab the newest value
     fn refresh_webview(&mut self, id: NanoId) {
         info!("Refreshing webview for {}", id);
-        let view_details: MonitoredView;
-        {
-            let mut views = self.monitored_views.lock().expect("Something failed");
-            // info!("TEMP: index: {}, Views: {:#?}", id, views);
-            view_details = views.get(&id).expect("Something failed").clone();
-        }
+        // let view_details: MonitoredView;
+        // {
+        //     let mut views = self.monitored_views.lock().expect("Something failed");
+        //     // info!("TEMP: index: {}, Views: {:#?}", id, views);
+        //     view_details = views.get(&id).expect("Something failed").clone();
+        // }
 
         let window_id = self.webview_to_window[&id];
         if let Some(webview) = self.all_windows.get_mut(&window_id) {
@@ -498,10 +582,10 @@ impl App {
         // self.webviews.remove(&id);
         // self.controls.remove(&id);
 
-        self.monitored_views
-            .lock()
-            .expect("Something failed")
-            .remove(&id);
+        // self.monitored_views
+        //     .lock()
+        //     .expect("Something failed")
+        //     .remove(&id);
 
         // Update window height
         // if let Some(window) = self.window.as_ref() {
@@ -791,7 +875,7 @@ impl App {
         element_view
     }
 
-    fn scrape_webview(&self, id: NanoId) {
+    fn scrape_webview(&self, id: NanoId, source_config: SourceConfiguration) {
         info!("Scraping webview: {:?}", id);
         let window_id = self.webview_to_window[&id];
         if self.all_windows.get(&window_id).is_none() {
@@ -802,16 +886,27 @@ impl App {
         let widget_view = self.all_windows.get(&window_id).expect("Something failed");
         // TODO: check if widget type is something you can scrape against?
 
-        let view_details: MonitoredView;
-        {
-            let views = self.monitored_views.lock().expect("Something failed");
-            view_details = views.get(&id).expect("Something failed").clone();
-        }
+        // let view_details: MonitoredView;
+        // {
+        //     let views = self.monitored_views.lock().expect("Something failed");
+        //     view_details = views.get(&id).expect("Something failed").clone();
+        // }
+        let window_id = self.webview_to_window[&id];
+        let window = self.all_windows.get(&window_id).expect("Something failed");
+        // match window.options.widget_type {
+        //     WidgetType::Display => {
+        //         info!("Display widget, not scraping");
+        //     }
+        //     _ => {
+        //         info!("Scraping widget");
+        //     }
+        // }
+        // if view_details.element_selector.is_none() {
+        //     info!("No element to scrape for {}", id);
+        //     return;
+        // }
 
-        if view_details.element_selector.is_none() {
-            info!("No element to scrape for {}", id);
-            return;
-        }
+        // let webview = widget_view.app_webview.webview;
 
         info!("TEMP: attempting to extract a value now...");
         let script_content = String::from(
@@ -851,12 +946,13 @@ JSON.stringify({
         let script_content = script_content
             .replace(
                 "$selector",
-                &view_details
-                    .element_selector
+                &source_config
+                    .element_selectors
+                    .get(0)
                     .as_ref()
                     .expect("Something failed"),
             )
-            .replace("$id", &view_details.id.0);
+            .replace("$id", &id.0);
         // let result = webview.evaluate_script(&script_content);
 
         // let script_content = include_str!("../assets/find_element.js")
@@ -887,19 +983,6 @@ JSON.stringify({
                 data: result.value.clone(),
             },
         );
-
-        let mut views = self.monitored_views.lock().expect("Something failed");
-        let view = views.get_mut(&result.id).expect("Something failed");
-        view.scraped_history.push(result.clone());
-        // self.react_webview
-        //     .as_ref()
-        //     .expect("Something failed")
-        //     .send_message(&Message {
-        //         window_id: result.id.0.clone(),
-        //         data_key: view.title.clone(),
-        //         message: json!({ "key": result.value }).to_string(),
-        //         timestamp: jiff::Timestamp::now().to_string(),
-        //     });
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
@@ -1004,7 +1087,7 @@ impl AppWebView {
 enum UserEvent {
     CreateNewWidget,
     Refresh(NanoId),
-    Scrape(NanoId),
+    Scrape(NanoId, SourceConfiguration),
     AddWebView(AddWebView),
     RemoveWebView(NanoId),
     // ShowNewViewForm,
@@ -1023,9 +1106,18 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
-        let window_height = self.calculate_window_height();
+
+        let mut db = self.db.lock().expect("Something failed");
+        let sites = db.get_sites().expect("Something failed");
+
+        let configuration = db.get_configuration().expect("Something failed");
+
+        // todo!("Build the windows based on the configuration in the database");
+        // let window_height = self.calculate_window_height();
+        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let window_attributes = Window::default_attributes()
-            .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
+            .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_inner_size(size)
             .with_transparent(true)
             .with_blur(true)
             .with_movable_by_window_background(true)
@@ -1042,7 +1134,7 @@ impl ApplicationHandler<UserEvent> for App {
             .create_window(
                 window_attributes
                     .clone()
-                    .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
+                    .with_inner_size(size)
                     .with_title("new view"),
             )
             .expect("Something failed");
@@ -1078,7 +1170,7 @@ impl ApplicationHandler<UserEvent> for App {
         let react_webview = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, 0).into(),
-                size: LogicalSize::new(WINDOW_WIDTH, window_height).into(),
+                size: size.into(),
             })
             .with_url("http://localhost:5173")
             // .with_html("<div>Hello from Rust</div>")
@@ -1210,9 +1302,9 @@ impl ApplicationHandler<UserEvent> for App {
             //         }
             //     }
             // }
-            UserEvent::Scrape(id) => {
+            UserEvent::Scrape(id, source_config) => {
                 info!("Scraping webview at index {}", id);
-                self.scrape_webview(id);
+                self.scrape_webview(id, source_config);
             }
             UserEvent::CreateNewWidget => {
                 info!("Creating new widget");
@@ -1234,89 +1326,78 @@ fn main() {
         .build()
         .expect("Something failed");
     let event_loop_proxy = event_loop.create_proxy();
-    let monitored_views = Arc::new(Mutex::new(vec![
-        MonitoredView {
+    // let monitored_views = Arc::new(Mutex::new(vec![
+    //     MonitoredView {
+    //         url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+    //         title: "SPY".to_string(),
+    //         // index: 2,
+    //         refresh_count: 0,
+    //         last_refresh: jiff::Timestamp::now(),
+    //         refresh_interval: std::time::Duration::from_secs(240),
+    //         element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+    //         scraped_history: vec![],
+    //         // original_size: ViewSize {
+    //         //     width: 0,
+    //         //     height: 0,
+    //         // },
+    //         hidden: true,
+    //         last_scrape: jiff::Timestamp::now(),
+    //         scrape_interval: std::time::Duration::from_secs(1),
+    //         id: NanoId("SPY".to_string()),
+    //     },
+    //     MonitoredView {
+    //         url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
+    //         title: "NVDA".to_string(),
+    //         // index: 1,
+    //         refresh_count: 0,
+    //         last_refresh: jiff::Timestamp::now(),
+    //         refresh_interval: std::time::Duration::from_secs(240),
+    //         element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
+    //         scraped_history: vec![],
+    //         // original_size: ViewSize {
+    //         //     width: 0,
+    //         //     height: 0,4
+    //         // },
+    //         hidden: true,
+    //         last_scrape: jiff::Timestamp::now(),
+    //         scrape_interval: std::time::Duration::from_secs(1),
+    //         id: NanoId("NVDA".to_string()),
+    //     },
+    //     MonitoredView::from(
+    //         "Twitch Viewers".to_string(),
+    //         "https://www.twitch.tv/atrioc".to_string(),
+    //         std::time::Duration::from_secs(240),
+    //         std::time::Duration::from_secs(10),
+    //         Some(String::from(r#"#live-channel-stream-information > div > div > div.Layout-sc-1xcs6mc-0.kYbRHX > div.Layout-sc-1xcs6mc-0.evfzyg > div.Layout-sc-1xcs6mc-0.iStNQt > div.Layout-sc-1xcs6mc-0.hJHxso > div > div > div.Layout-sc-1xcs6mc-0.bKPhAm > div:nth-child(1) > div > p.CoreText-sc-1txzju1-0.fiDbWi > span"#)),
+    //     )
+    //     ]
+    //     .iter()
+    //     .map(|view| (view.id.clone(), view.clone()))
+    //     .collect::<HashMap<NanoId, MonitoredView>>()
+    // ));
+
+    let config = vec![WidgetConfiguration {
+        id: NanoId(nanoid_gen(8)),
+        title: "SPY".to_string(),
+        refresh_interval: 240,
+        widget_type: WidgetType::Source(SourceConfiguration {
             url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-            title: "SPY".to_string(),
-            // index: 2,
-            refresh_count: 0,
-            last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(240),
-            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-            scraped_history: vec![],
-            // original_size: ViewSize {
-            //     width: 0,
-            //     height: 0,
-            // },
-            hidden: true,
-            last_scrape: jiff::Timestamp::now(),
-            scrape_interval: std::time::Duration::from_secs(1),
-            id: NanoId("SPY".to_string()),
-        },
-        MonitoredView {
+            element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
+            refresh_interval: 240,
+        }),
+
+    },
+    WidgetConfiguration {
+        id: NanoId(nanoid_gen(8)),
+        title: "NVDA".to_string(),
+        refresh_interval: 240,
+        widget_type: WidgetType::Source(SourceConfiguration {
             url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
-            title: "NVDA".to_string(),
-            // index: 1,
-            refresh_count: 0,
-            last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(240),
-            element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-            scraped_history: vec![],
-            // original_size: ViewSize {
-            //     width: 0,
-            //     height: 0,4
-            // },
-            hidden: true,
-            last_scrape: jiff::Timestamp::now(),
-            scrape_interval: std::time::Duration::from_secs(1),
-            id: NanoId("NVDA".to_string()),
-        },
-        MonitoredView::from(
-            "Twitch Viewers".to_string(),
-            "https://www.twitch.tv/atrioc".to_string(),
-            std::time::Duration::from_secs(240),
-            std::time::Duration::from_secs(10),
-            Some(String::from(r#"#live-channel-stream-information > div > div > div.Layout-sc-1xcs6mc-0.kYbRHX > div.Layout-sc-1xcs6mc-0.evfzyg > div.Layout-sc-1xcs6mc-0.iStNQt > div.Layout-sc-1xcs6mc-0.hJHxso > div > div > div.Layout-sc-1xcs6mc-0.bKPhAm > div:nth-child(1) > div > p.CoreText-sc-1txzju1-0.fiDbWi > span"#)),
-        )
-        ]
-        .iter()
-        .map(|view| (view.id.clone(), view.clone()))
-        .collect::<HashMap<NanoId, MonitoredView>>()
-    ));
-
-    let monitored_views_clone = monitored_views.clone();
+            element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
+            refresh_interval: 240,
+        }),
+    }];
     let proxy_clone = event_loop_proxy.clone();
-    std::thread::spawn(move || {
-        let mut min_refresh_interval = std::time::Duration::from_secs(4);
-        loop {
-            std::thread::sleep(min_refresh_interval);
-            {
-                let now = jiff::Timestamp::now();
-                let mut views = monitored_views_clone.lock().expect("Something failed");
-                for (id, view) in views.iter_mut() {
-                    info!("Refreshing view {}", view.title);
-                    if view.last_refresh + view.refresh_interval < now {
-                        view.refresh_count += 1;
-                        view.last_refresh = now;
-                        proxy_clone
-                            .send_event(UserEvent::Refresh(view.id.clone()))
-                            .expect("Something failed");
-                    }
-                    if view.refresh_interval < min_refresh_interval {
-                        min_refresh_interval = view.refresh_interval;
-                    }
-
-                    if view.last_scrape + view.scrape_interval < now {
-                        view.last_scrape = now;
-                        proxy_clone
-                            .send_event(UserEvent::Scrape(view.id.clone()))
-                            .expect("Something failed");
-                    }
-                }
-            }
-        }
-    });
-
     let db = Arc::new(Mutex::new(Database::new()));
     let mut app = App {
         all_windows: HashMap::new(),
@@ -1326,7 +1407,7 @@ fn main() {
         // new_view_form_window: None,
         // react_ui_window: None,
         // react_webview: None,
-        monitored_views: monitored_views,
+        // monitored_views: monitored_views,
         // webviews: HashMap::new(),
         // controls: HashMap::new(),
         // new_view_form: None,
@@ -1335,6 +1416,45 @@ fn main() {
         last_resize: None,
         // widgets: HashMap::new(),
     };
+
+    let db_clone = db.clone();
+    std::thread::spawn(move || {
+        let mut min_refresh_interval = std::time::Duration::from_secs(4);
+        // let mut last_refresh = HashMap::new();
+        loop {
+            std::thread::sleep(min_refresh_interval);
+            {
+                let mut widget_configs = vec![];
+                {
+                    let mut db = db_clone.lock().expect("Something failed");
+                    let views = db.get_configuration().expect("Something failed");
+                    widget_configs.extend(views);
+                }
+                for config in widget_configs.iter_mut() {
+                    // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
+                    match &config.widget_type {
+                        WidgetType::Source(source_config) => {
+                            proxy_clone
+                                .send_event(UserEvent::Scrape(
+                                    config.id.clone(),
+                                    source_config.clone(),
+                                ))
+                                .expect("Something failed");
+                        }
+                        _ => {
+                            info!("Widget type not handled: {:?}", config.widget_type);
+                        }
+                    };
+                    // proxy_clone
+                    //     .send_event(UserEvent::Scrape(config.id.clone()))
+                    //     .expect("Something failed");
+                    // proxy_clone
+                    //     .send_event(UserEvent::Refresh(config.id.clone()))
+                    //     .expect("Something failed");
+                }
+            }
+        }
+    });
 
     thread::spawn(move || {
         let rt = Runtime::new().unwrap();
