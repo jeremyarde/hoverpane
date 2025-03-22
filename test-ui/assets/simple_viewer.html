@@ -5,12 +5,14 @@
     <button onclick="fetchData()">Fetch Data</button>
     <script>
       function fetchData() {
-        fetch("http://127.0.0.1:3000/values")
-          .then((response) => response.json())
-          .then((data) => {
-            const viewer = document.getElementById("viewer");
-            viewer.innerHTML = JSON.stringify(data);
-          });
+        setInterval(() => {
+          fetch("http://127.0.0.1:3000/latest")
+            .then((response) => response.json())
+            .then((data) => {
+              const viewer = document.getElementById("viewer");
+              viewer.innerHTML = JSON.stringify(data);
+            });
+        }, 2000);
       }
       fetchData();
     </script>

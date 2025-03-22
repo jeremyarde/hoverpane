@@ -26,7 +26,7 @@ use winit::{
 use wry::{
     dpi::{LogicalPosition, LogicalSize},
     http::Response,
-    Rect, WebView, WebViewBuilder,
+    PageLoadEvent, Rect, WebView, WebViewBuilder,
 };
 
 use rusqlite::{
@@ -46,6 +46,7 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 100;
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum WidgetType {
     Display,
     Source(SourceConfiguration),
@@ -60,6 +61,7 @@ struct FileConfiguration {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
 struct SourceConfiguration {
     url: String,
     element_selectors: Vec<String>,
@@ -646,11 +648,6 @@ impl App {
                     .send_event(UserEvent::Refresh(id))
                     .expect("Something failed");
             }
-            // ControlMessage::Add(view) => {
-            //     proxy
-            //         .send_event(UserEvent::AddWebView(view))
-            //         .expect("Something failed");
-            // }
             ControlMessage::Remove(id) => {
                 proxy
                     .send_event(UserEvent::RemoveWebView(id))
@@ -711,56 +708,6 @@ impl App {
 
         control_panel
     }
-
-    // fn resize_webviews(&mut self, size: &LogicalSize<u32>) {
-    //     let window = self.window.as_ref().expect("Something failed");
-    //     let num_views = self.webviews.len();
-    //     if num_views == 0 {
-    //         return;
-    //     }
-
-    //     let webview_height = size.height / num_views as u32;
-
-    //     // Pre-calculate common values
-    //     let width = size.width;
-
-    //     // Update all webviews in a single pass
-    //     for (i, (id, webview)) in self.webviews.iter_mut().enumerate() {
-    //         let y_position = webview_height * i as u32;
-
-    //         // Only resize if the webview is visible
-    //         if let Ok(bounds) = webview.bounds() {
-    //             let current_size = bounds.size.to_logical::<u32>(window.scale_factor());
-    //             if current_size.width > 0 {
-    //                 // Only resize visible webviews
-    //                 webview.set_bounds(Rect {
-    //                     position: LogicalPosition::new(0, y_position).into(),
-    //                     size: LogicalSize::new(width, webview_height).into(),
-    //                 });
-    //             }
-    //         }
-
-    //         // Update control position
-    //         if let Some(control) = self.controls.get_mut(&id) {
-    //             control.set_bounds(Rect {
-    //                 position: LogicalPosition::new(0, y_position).into(),
-    //                 size: LogicalSize::new(width, CONTROL_PANEL_HEIGHT).into(),
-    //             });
-    //         }
-    //     }
-
-    //     if let Some(new_view_form) = self.new_view_form.as_ref() {
-    //         if let Some(new_form_window) = self.new_view_form_window.as_ref() {
-    //             let new_form_size = new_form_window
-    //                 .inner_size()
-    //                 .to_logical::<u32>(window.scale_factor());
-    //             new_view_form.set_bounds(Rect {
-    //                 position: LogicalPosition::new(0, 0).into(),
-    //                 size: LogicalSize::new(new_form_size.width, new_form_size.height).into(),
-    //             });
-    //         }
-    //     }
-    // }
 
     fn move_webview(&mut self, id: NanoId, direction: Direction) {
         todo!("Actualy implement this");
@@ -907,48 +854,6 @@ JSON.stringify({
                     .with_resizable(true),
             )
             .unwrap();
-        // let new_webview = WebViewBuilder::new()
-        //     // .with_bounds(Rect {
-        //     //     position: LogicalPosition::new(0, 0).into(),
-        //     //     size: size.clone().into(),
-        //     // })
-        //     .with_url("https://www.google.com")
-        //     .build_as_child(&new_window)
-        //     .unwrap();
-
-        // let mut view = MonitoredView {
-        //     id: NanoId(nanoid_gen(8)),
-        //     // url: widget_options.url.clone(),
-        //     title: widget_options.title,
-        //     refresh_count: 0,
-        //     last_refresh: jiff::Timestamp::now(),
-        //     refresh_interval: std::time::Duration::from_secs(10),
-        //     last_scrape: jiff::Timestamp::now(),
-        //     scrape_interval: std::time::Duration::from_secs(10),
-        //     element_selector: None,
-        //     scraped_history: vec![],
-        //     hidden: false,
-        // };
-        // let size = new_window
-        //     .inner_size()
-        //     .to_logical::<u32>(new_window.scale_factor());
-
-        // // let webview = self.create_webview(&size, &new_window, &mut view);
-
-        // let widget_id = NanoId(nanoid_gen(8));
-        // let window_id = new_window.id();
-        // let widget_view = WidgetView {
-        //     app_webview: AppWebView { webview },
-        //     window: new_window,
-        //     nano_id: widget_id.clone(),
-        //     visible: true,
-        //     options: cloned_widget_options,
-        // };
-        // self.window_id_to_webview_id
-        //     .insert(window_id, widget_id.clone());
-        // self.widget_id_to_window_id
-        //     .insert(widget_id.clone(), window_id);
-        // self.all_windows.insert(window_id, widget_view);
     }
 }
 
@@ -1458,7 +1363,13 @@ fn main() {
                     let views = db.get_configuration().expect("Something failed");
                     widget_configs.extend(views);
                 }
-                info!("Scraping widget configs: {:?}", widget_configs);
+                info!(
+                    "Scraping widget configs: {:?}",
+                    widget_configs
+                        .iter()
+                        .map(|c| c.id.0.clone())
+                        .collect::<Vec<_>>()
+                );
                 for config in widget_configs.iter_mut() {
                     // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
                     match &config.widget_type {
