@@ -910,39 +910,39 @@ JSON.stringify({
         //     .build_as_child(&new_window)
         //     .unwrap();
 
-        let mut view = MonitoredView {
-            id: NanoId(nanoid_gen(8)),
-            url: widget_options.url.clone(),
-            title: widget_options.title,
-            refresh_count: 0,
-            last_refresh: jiff::Timestamp::now(),
-            refresh_interval: std::time::Duration::from_secs(10),
-            last_scrape: jiff::Timestamp::now(),
-            scrape_interval: std::time::Duration::from_secs(10),
-            element_selector: None,
-            scraped_history: vec![],
-            hidden: false,
-        };
-        let size = new_window
-            .inner_size()
-            .to_logical::<u32>(new_window.scale_factor());
+        // let mut view = MonitoredView {
+        //     id: NanoId(nanoid_gen(8)),
+        //     // url: widget_options.url.clone(),
+        //     title: widget_options.title,
+        //     refresh_count: 0,
+        //     last_refresh: jiff::Timestamp::now(),
+        //     refresh_interval: std::time::Duration::from_secs(10),
+        //     last_scrape: jiff::Timestamp::now(),
+        //     scrape_interval: std::time::Duration::from_secs(10),
+        //     element_selector: None,
+        //     scraped_history: vec![],
+        //     hidden: false,
+        // };
+        // let size = new_window
+        //     .inner_size()
+        //     .to_logical::<u32>(new_window.scale_factor());
 
-        let webview = self.create_webview(&size, &new_window, &mut view);
+        // // let webview = self.create_webview(&size, &new_window, &mut view);
 
-        let widget_id = NanoId(nanoid_gen(8));
-        let window_id = new_window.id();
-        let widget_view = WidgetView {
-            app_webview: AppWebView { webview },
-            window: new_window,
-            nano_id: widget_id.clone(),
-            visible: true,
-            options: cloned_widget_options,
-        };
-        self.window_id_to_webview_id
-            .insert(window_id, widget_id.clone());
-        self.widget_id_to_window_id
-            .insert(widget_id.clone(), window_id);
-        self.all_windows.insert(window_id, widget_view);
+        // let widget_id = NanoId(nanoid_gen(8));
+        // let window_id = new_window.id();
+        // let widget_view = WidgetView {
+        //     app_webview: AppWebView { webview },
+        //     window: new_window,
+        //     nano_id: widget_id.clone(),
+        //     visible: true,
+        //     options: cloned_widget_options,
+        // };
+        // self.window_id_to_webview_id
+        //     .insert(window_id, widget_id.clone());
+        // self.widget_id_to_window_id
+        //     .insert(widget_id.clone(), window_id);
+        // self.all_windows.insert(window_id, widget_view);
     }
 }
 
@@ -954,7 +954,7 @@ JSON.stringify({
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetOptions {
     title: String,
-    url: String,
+    // url: String,
     widget_type: WidgetType,
 }
 
@@ -1145,16 +1145,15 @@ impl ApplicationHandler<UserEvent> for App {
             .with_resizable(true);
 
         for widget in widgets {
-            match widget.widget_type {
-                WidgetType::File(file_config) => {
-                    // controls window
-                    let main_window = event_loop
-                        .create_window(window_attributes.clone().with_title(&widget.title.clone()))
-                        .expect("Something failed");
-                    let scale_factor = main_window.scale_factor();
-                    let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
-                    let proxy_clone = Arc::clone(&self.proxy);
+            let main_window = event_loop
+                .create_window(window_attributes.clone().with_title(&widget.title.clone()))
+                .expect("Something failed");
+            let scale_factor = main_window.scale_factor();
+            let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
+            let proxy_clone = Arc::clone(&self.proxy);
 
+            let webview = match &widget.widget_type {
+                WidgetType::File(file_config) => {
                     let webview = WebViewBuilder::new()
                         .with_bounds(Rect {
                             position: LogicalPosition::new(0, 0).into(),
@@ -1171,26 +1170,49 @@ impl ApplicationHandler<UserEvent> for App {
                         })
                         .build_as_child(&main_window)
                         .expect("Something failed");
-                    self.widget_id_to_window_id
-                        .insert(widget.id.clone(), main_window.id());
-                    self.window_id_to_webview_id
-                        .insert(main_window.id(), widget.id.clone());
-                    self.all_windows.insert(
-                        main_window.id(),
-                        WidgetView {
-                            app_webview: AppWebView { webview: webview },
-                            window: main_window,
-                            nano_id: widget.id.clone(),
-                            visible: true,
-                            options: WidgetOptions {
-                                title: "".to_string(),
-                                url: "".to_string(),
-                                widget_type: WidgetType::Display,
-                            },
-                        },
-                    );
+                    Some(webview)
                 }
-                _ => {}
+                WidgetType::Source(source_config) => {
+                    let webview = WebViewBuilder::new()
+                        .with_bounds(Rect {
+                            position: LogicalPosition::new(0, 0).into(),
+                            size: size.into(),
+                        })
+                        .with_initialization_script(
+                            include_str!("../assets/init_script.js")
+                                .replace("$widget_id", &widget.id.0)
+                                .as_str(),
+                        )
+                        .with_url(source_config.url.clone())
+                        // .with_html(file_config.html_file.as_str())
+                        .with_ipc_handler(move |message| {
+                            App::ipc_handler(message.body(), proxy_clone.clone());
+                        })
+                        .build_as_child(&main_window)
+                        .expect("Something failed");
+                    Some(webview)
+                }
+                _ => None,
+            };
+
+            if let Some(webview) = webview {
+                self.widget_id_to_window_id
+                    .insert(widget.id.clone(), main_window.id());
+                self.window_id_to_webview_id
+                    .insert(main_window.id(), widget.id.clone());
+                self.all_windows.insert(
+                    main_window.id(),
+                    WidgetView {
+                        app_webview: AppWebView { webview: webview },
+                        window: main_window,
+                        nano_id: widget.id.clone(),
+                        visible: true,
+                        options: WidgetOptions {
+                            title: widget.title.clone(),
+                            widget_type: widget.widget_type.clone(),
+                        },
+                    },
+                );
             }
         }
 
