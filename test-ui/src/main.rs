@@ -17,8 +17,9 @@ use tokio::{runtime::Runtime, time::sleep};
 use tower_http::cors::CorsLayer;
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{Modifiers, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop, EventLoopBuilder, EventLoopProxy},
+    keyboard::{KeyCode, ModifiersKeyState, PhysicalKey},
     platform::macos::WindowAttributesExtMacOS,
     window::{Window, WindowId, WindowLevel},
 };
@@ -28,7 +29,11 @@ use wry::{
     Rect, WebView, WebViewBuilder,
 };
 
-use rusqlite::{self, types::FromSql};
+use rusqlite::{
+    self,
+    types::{FromSql, ToSqlOutput},
+    ToSql,
+};
 
 pub const WEBVIEW_HEIGHT: u32 = 200;
 pub const WEBVIEW_WIDTH: u32 = 50;
@@ -40,15 +45,21 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 100;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum WidgetType {
     Display,
     Source(SourceConfiguration),
     Tracker,
     Controls,
+    File(FileConfiguration),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct FileConfiguration {
+    html_file: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct SourceConfiguration {
     url: String,
     element_selectors: Vec<String>,
@@ -73,21 +84,6 @@ impl FromSql for SourceConfiguration {
             element_selectors: vec![],
             refresh_interval: value.to_string().parse().unwrap(),
         })
-    }
-}
-impl FromSql for WidgetType {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let value = value.as_str().unwrap();
-        match value {
-            "Display" => Ok(WidgetType::Display),
-            "Source" => {
-                let source_configuration = SourceConfiguration::default();
-                Ok(WidgetType::Source(source_configuration))
-            }
-            "Tracker" => Ok(WidgetType::Tracker),
-            "Controls" => Ok(WidgetType::Controls),
-            _ => Err(rusqlite::types::FromSqlError::InvalidType),
-        }
     }
 }
 
@@ -115,6 +111,20 @@ struct WidgetConfiguration {
     title: String,
     refresh_interval: Seconds,
     widget_type: WidgetType,
+}
+
+impl ToSql for WidgetType {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+        let json = serde_json::to_string(self).unwrap(); // Convert to JSON
+        Ok(ToSqlOutput::from(json))
+    }
+}
+
+impl FromSql for WidgetType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str().unwrap();
+        Ok(serde_json::from_str(value).unwrap())
+    }
 }
 
 use nanoid::nanoid_gen;
@@ -270,6 +280,7 @@ impl Database {
         let mut stmt = self.connection.prepare("SELECT * FROM widgets")?;
         let configuration = stmt
             .query_map([], |row| {
+                // info!("querying row: {:?}", row);
                 Ok(WidgetConfiguration {
                     id: row.get(0)?,
                     // url: row.get(1)?,
@@ -278,9 +289,33 @@ impl Database {
                     widget_type: row.get(3)?,
                 })
             })?
-            .filter_map(|configuration| configuration.ok())
+            .filter_map(|configuration| {
+                if let Err(e) = &configuration {
+                    info!("Error mapping row: {:?}", e);
+                }
+                configuration.ok()
+            })
             .collect();
         Ok(configuration)
+    }
+
+    fn insert_widget_configuration(
+        &mut self,
+        configs: Vec<WidgetConfiguration>,
+    ) -> Result<(), rusqlite::Error> {
+        let mut stmt = self.connection.prepare(
+            "INSERT INTO widgets (id, title, refresh_interval, widget_type) VALUES (?1, ?2, ?3, ?4)",
+        )?;
+        for config in configs {
+            info!("Inserting widget configuration: {:?}", config);
+            stmt.execute([
+                config.id.0.as_str(),
+                config.title.as_str(),
+                config.refresh_interval.to_string().as_str(),
+                serde_json::to_string(&config.widget_type).unwrap().as_str(),
+            ])?;
+        }
+        Ok(())
     }
 
     fn get_sites(&self) -> Result<Vec<MonitoredSite>, rusqlite::Error> {
@@ -351,6 +386,7 @@ WHERE rn = 1"#,
 }
 
 struct App {
+    current_modifiers: Modifiers,
     // window: Option<Window>,
     // new_view_form_window: Option<Window>,
     // react_ui_window: Option<Window>,
@@ -368,6 +404,7 @@ struct App {
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
     main_window_id: NanoId,
+    clipboard: arboard::Clipboard,
 }
 
 struct WidgetView {
@@ -385,18 +422,19 @@ struct ElementView {
     visible: bool,
 }
 
+// These are messages that can be received and handled from the web page
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ControlMessage {
-    CreateWidget(bool),
+    CreateWidget(WidgetOptions),
     Refresh(NanoId),
-    Add(AddWebView),
     Remove(NanoId),
     UpdateRefreshInterval(Seconds),
     Move(NanoId, Direction),
     ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
+    SelectedText { widget_id: NanoId, text: String },
     // Extract(String, String),
 }
 
@@ -555,20 +593,7 @@ impl App {
             .with_clipboard(true)
             .with_background_throttling(wry::BackgroundThrottlingPolicy::Throttle)
             .with_ipc_handler(move |message| {
-                info!("Received message from webview: {:?}", message);
-                match serde_json::from_str::<ScrapedValue>(&message.body()) {
-                    Ok(scrape_result) => {
-                        info!("Scrape result: {:?}", scrape_result);
-                        proxy
-                            .lock()
-                            .expect("Something failed")
-                            .send_event(UserEvent::ExtractResult(scrape_result))
-                            .expect("Something failed");
-                    }
-                    Err(e) => {
-                        warn!("Failed to parse message: {:?}", e);
-                    }
-                }
+                App::ipc_handler(message.body(), proxy.clone());
             });
 
         webviewbuilder = webviewbuilder.with_url(&view.url);
@@ -604,85 +629,62 @@ impl App {
     //     self.resize_webviews(&size);
     // }
 
-    fn create_controls(
-        &self,
-        size: &LogicalSize<u32>,
-        window: &Window,
-        i: usize,
-        proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
-        webview_id: NanoId,
-    ) -> WebView {
-        let script_contents = include_str!("../assets/controls.html").replace("$id", &webview_id.0);
-        debug!("Controls script contents: {}", script_contents);
+    fn ipc_handler(message: &str, event_proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>) {
+        info!("[ipc_handler] Received message: {:?}", message);
+        let message: ControlMessage = serde_json::from_str(message).unwrap();
+        let proxy = event_proxy.lock().expect("Something failed");
+        match message {
+            ControlMessage::CreateWidget(create_widget) => {
+                info!("Create widget: {:?}", create_widget);
+                proxy
+                    .send_event(UserEvent::CreateWidget(create_widget))
+                    .expect("Something failed");
+            }
 
-        let control_panel = WebViewBuilder::new()
-            .with_bounds(Rect {
-                position: LogicalPosition::new(0, WEBVIEW_HEIGHT * i as u32).into(),
-                size: LogicalSize::new(size.width, CONTROL_PANEL_HEIGHT).into(),
-            })
-            .with_html(script_contents)
-            .with_ipc_handler(move |message| {
-                info!("Received message: {:?}", message);
-
-                let proxy = proxy.lock().expect("Something failed");
-                let message: ControlMessage =
-                    serde_json::from_str(&message.body()).expect("Something failed");
-                match message {
-                    ControlMessage::CreateWidget(create_widget) => {
-                        info!("Create widget: {}", create_widget);
-                        if create_widget {
-                            info!("Sending CreateNewWidget event");
-                            proxy
-                                .send_event(UserEvent::CreateNewWidget)
-                                .expect("Something failed");
-                        }
-                    }
-                    ControlMessage::Refresh(id) => {
-                        proxy
-                            .send_event(UserEvent::Refresh(id))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::Add(view) => {
-                        proxy
-                            .send_event(UserEvent::AddWebView(view))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::Remove(id) => {
-                        proxy
-                            .send_event(UserEvent::RemoveWebView(id))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::UpdateRefreshInterval(_) => todo!(),
-                    ControlMessage::Move(id, direction) => {
-                        proxy
-                            .send_event(UserEvent::MoveWebView(id, direction))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::ExtractResult(result) => {
-                        info!("Extracted result: {:?}", result);
-                        proxy
-                            .send_event(UserEvent::ExtractResult(result))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::Minimize(id) => {
-                        proxy
-                            .send_event(UserEvent::Minimize(id))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::ToggleElementView(nano_id) => {
-                        info!("Toggling element view for {}", nano_id);
-                        proxy
-                            .send_event(UserEvent::ToggleElementView(nano_id))
-                            .expect("Something failed");
-                    }
-                }
-            })
-            .with_transparent(true)
-            .with_background_color((0, 0, 0, 0))
-            .build_as_child(window)
-            .expect("Something failed");
-
-        control_panel
+            ControlMessage::Refresh(id) => {
+                proxy
+                    .send_event(UserEvent::Refresh(id))
+                    .expect("Something failed");
+            }
+            // ControlMessage::Add(view) => {
+            //     proxy
+            //         .send_event(UserEvent::AddWebView(view))
+            //         .expect("Something failed");
+            // }
+            ControlMessage::Remove(id) => {
+                proxy
+                    .send_event(UserEvent::RemoveWebView(id))
+                    .expect("Something failed");
+            }
+            ControlMessage::UpdateRefreshInterval(_) => todo!(),
+            ControlMessage::Move(id, direction) => {
+                proxy
+                    .send_event(UserEvent::MoveWebView(id, direction))
+                    .expect("Something failed");
+            }
+            ControlMessage::ExtractResult(result) => {
+                info!("Extracted result: {:?}", result);
+                proxy
+                    .send_event(UserEvent::ExtractResult(result))
+                    .expect("Something failed");
+            }
+            ControlMessage::Minimize(id) => {
+                proxy
+                    .send_event(UserEvent::Minimize(id))
+                    .expect("Something failed");
+            }
+            ControlMessage::ToggleElementView(nano_id) => {
+                info!("Toggling element view for {}", nano_id);
+                proxy
+                    .send_event(UserEvent::ToggleElementView(nano_id))
+                    .expect("Something failed");
+            }
+            ControlMessage::SelectedText { widget_id, text } => {
+                proxy
+                    .send_event(UserEvent::SelectedText { widget_id, text })
+                    .expect("Something failed");
+            }
+        }
     }
 
     fn create_new_view_form(
@@ -699,32 +701,7 @@ impl App {
             })
             .with_html(include_str!("../assets/new_view.html"))
             .with_ipc_handler(move |message| {
-                info!("Received message: {:?}", message);
-
-                let proxy = proxy.lock().expect("Something failed");
-                let message: ControlMessage =
-                    serde_json::from_str(&message.body()).expect("Something failed");
-                match message {
-                    // ControlMessage::Refresh(index) => {
-                    //     proxy.send_event(UserEvent::Refresh(index)).expect("Something failed");
-                    // }
-                    ControlMessage::Add(view) => {
-                        proxy
-                            .send_event(UserEvent::AddWebView(view))
-                            .expect("Something failed");
-                    }
-                    ControlMessage::CreateWidget(create_widget) => {
-                        if create_widget {
-                            info!("Sending CreateNewWidget event");
-                            proxy
-                                .send_event(UserEvent::CreateNewWidget)
-                                .expect("Something failed");
-                        }
-                    }
-                    _ => {
-                        error!("Unknown message from controls: {:?}", message);
-                    }
-                }
+                App::ipc_handler(message.body(), proxy.clone());
             })
             .with_transparent(true)
             .with_clipboard(true)
@@ -823,15 +800,18 @@ impl App {
 
     fn scrape_webview(&self, id: NanoId, source_config: SourceConfiguration) {
         info!("Scraping webview: {:?}", id);
-        let window_id = self.widget_id_to_window_id[&id];
-        if self.all_windows.get(&window_id).is_none() {
+        info!("Widget id to window id: {:?}", self.widget_id_to_window_id);
+        info!("window to webview id: {:?}", self.window_id_to_webview_id);
+
+        let Some(window_id) = self.widget_id_to_window_id.get(&id) else {
             info!("Webview not found");
             return;
-        }
+        };
 
-        let widget_view = self.all_windows.get(&window_id).expect("Something failed");
-        let window_id = self.widget_id_to_window_id[&id];
-        let window = self.all_windows.get(&window_id).expect("Something failed");
+        let Some(widget_view) = self.all_windows.get(&window_id) else {
+            info!("Webview not found");
+            return;
+        };
 
         info!("TEMP: attempting to extract a value now...");
         let script_content = String::from(
@@ -878,23 +858,11 @@ JSON.stringify({
                     .expect("Something failed"),
             )
             .replace("$id", &id.0);
-        // let result = webview.evaluate_script(&script_content);
 
-        // let script_content = include_str!("../assets/find_element.js")
-        //     .replace(
-        //         "$selector",
-        //         &view_details.element_selector.as_ref().expect("Something failed"),
-        //     )
-        //     .replace("$id", &view_details.id.0);
         let result = widget_view
             .app_webview
             .webview
             .evaluate_script(&script_content);
-
-        // if let Some(react_webview) = self.react_webview.as_ref() {
-        //     info!("Sending message to react...");
-        //     react_webview.send_message("Hello from Rust");
-        // }
 
         info!("Scrape completed");
     }
@@ -983,12 +951,11 @@ JSON.stringify({
 //         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
 //         .with_title("new view")
 // }
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetOptions {
     title: String,
     url: String,
-    width: u32,
-    height: u32,
+    widget_type: WidgetType,
 }
 
 struct AppWebView {
@@ -1014,16 +981,16 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
-    CreateNewWidget,
+    CreateWidget(WidgetOptions),
     Refresh(NanoId),
     Scrape(NanoId, SourceConfiguration),
-    AddWebView(AddWebView),
     RemoveWebView(NanoId),
     // ShowNewViewForm,
     MoveWebView(NanoId, Direction),
     ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
+    SelectedText { widget_id: NanoId, text: String },
     // Extract(String, String),
     // ExtractResult(String),
 }
@@ -1033,12 +1000,135 @@ impl ApplicationHandler<UserEvent> for App {
         info!("Application suspended");
     }
 
+    // fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+    //     info!("Application resumed");
+    //     let mut widgets = vec![];
+    //     {
+    //         let mut db = self.db.lock().expect("Something failed");
+    //         widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
+    //     }
+
+    //     // let sites = db.get_sites().expect("Something failed");
+
+    //     // todo!("Build the windows based on the configuration in the database");
+    //     // let window_height = self.calculate_window_height();
+    //     let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+    //     let window_attributes = Window::default_attributes()
+    //         // .with_window_level(WindowLevel::AlwaysOnTop)
+    //         .with_inner_size(size)
+    //         .with_transparent(true)
+    //         .with_blur(true)
+    //         .with_movable_by_window_background(true)
+    //         .with_fullsize_content_view(false)
+    //         .with_title_hidden(false)
+    //         .with_titlebar_buttons_hidden(false)
+    //         .with_titlebar_hidden(false)
+    //         .with_title("Watcher")
+    //         .with_has_shadow(false)
+    //         .with_resizable(true);
+
+    //     // controls window
+    //     let main_window = event_loop
+    //         .create_window(window_attributes.clone().with_title("Watcher"))
+    //         .expect("Something failed");
+
+    //     let scale_factor = main_window.scale_factor();
+    //     // let scale_factor = 0.5;
+    //     let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
+    //     let new_view_form =
+    //         App::create_new_view_form(&form_size, &main_window, 0, self.proxy.clone());
+    //     // self.new_view_form = Some(new_view_form);
+    //     let proxy_clone = Arc::clone(&self.proxy);
+    //     let reactui_window = event_loop
+    //         .create_window(
+    //             window_attributes
+    //                 .with_title("reactui")
+    //                 .with_movable_by_window_background(true),
+    //         )
+    //         .expect("Something failed");
+    //     let react_webview = WebViewBuilder::new()
+    //         .with_bounds(Rect {
+    //             position: LogicalPosition::new(0, 0).into(),
+    //             size: size.into(),
+    //         })
+    //         .with_initialization_script(
+    //             include_str!("../assets/init_script.js")
+    //                 .replace("$widget_id", &self.main_window_id.0)
+    //                 .as_str(),
+    //         )
+    //         // .with_url("http://localhost:5173")
+    //         .with_html(include_str!("../../react-ui/dist/index.html"))
+    //         // .with_html("<div>Hello from Rust</div>")
+    //         .with_ipc_handler(move |message| {
+    //             App::ipc_handler(message.body(), proxy_clone.clone());
+    //         })
+    //         .build_as_child(&reactui_window)
+    //         // .build_as_child(&reactui_window)
+    //         .expect("Something failed");
+
+    //     // let main_window_id = NanoId(nanoid_gen(8));
+    //     self.widget_id_to_window_id
+    //         .insert(self.main_window_id.clone(), main_window.id());
+    //     self.window_id_to_webview_id
+    //         .insert(main_window.id(), self.main_window_id.clone());
+    //     self.all_windows.insert(
+    //         main_window.id(),
+    //         WidgetView {
+    //             app_webview: AppWebView {
+    //                 webview: new_view_form,
+    //             },
+    //             window: main_window,
+    //             nano_id: self.main_window_id.clone(),
+    //             visible: true,
+    //             options: WidgetOptions {
+    //                 title: "".to_string(),
+    //                 url: "".to_string(),
+    //                 widget_type: WidgetType::Display,
+    //             },
+    //         },
+    //     );
+    //     // self.main_window_id = Some(main_window_id);
+
+    //     let reactui_id = NanoId(nanoid_gen(8));
+    //     self.widget_id_to_window_id
+    //         .insert(reactui_id.clone(), reactui_window.id());
+    //     self.window_id_to_webview_id
+    //         .insert(reactui_window.id(), reactui_id.clone());
+
+    //     self.all_windows.insert(
+    //         reactui_window.id(),
+    //         WidgetView {
+    //             app_webview: AppWebView {
+    //                 webview: react_webview,
+    //             },
+    //             window: reactui_window,
+    //             nano_id: reactui_id.clone(),
+    //             visible: true,
+    //             options: WidgetOptions {
+    //                 title: "".to_string(),
+    //                 url: "".to_string(),
+    //                 widget_type: WidgetType::Display,
+    //             },
+    //         },
+    //     );
+
+    //     let mut widgets_to_create = vec![];
+    //     {
+    //         let mut db = self.db.lock().expect("Something failed");
+    //         widgets_to_create.extend_from_slice(&db.get_configuration().expect("Something failed"));
+    //     }
+
+    //     info!("Window and webviews created successfully");
+    // }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
-        // let sites = db.get_sites().expect("Something failed");
+        let mut widgets = vec![];
+        {
+            let mut db = self.db.lock().expect("Something failed");
+            widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
+        }
 
-        // todo!("Build the windows based on the configuration in the database");
-        // let window_height = self.calculate_window_height();
         let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let window_attributes = Window::default_attributes()
             // .with_window_level(WindowLevel::AlwaysOnTop)
@@ -1054,81 +1144,54 @@ impl ApplicationHandler<UserEvent> for App {
             .with_has_shadow(false)
             .with_resizable(true);
 
-        // controls window
-        let main_window = event_loop
-            .create_window(window_attributes.clone().with_title("Watcher"))
-            .expect("Something failed");
+        for widget in widgets {
+            match widget.widget_type {
+                WidgetType::File(file_config) => {
+                    // controls window
+                    let main_window = event_loop
+                        .create_window(window_attributes.clone().with_title(&widget.title.clone()))
+                        .expect("Something failed");
+                    let scale_factor = main_window.scale_factor();
+                    let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
+                    let proxy_clone = Arc::clone(&self.proxy);
 
-        let scale_factor = main_window.scale_factor();
-        // let scale_factor = 0.5;
-        let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
-        let new_view_form =
-            App::create_new_view_form(&form_size, &main_window, 0, self.proxy.clone());
-        // self.new_view_form = Some(new_view_form);
-
-        let reactui_window = event_loop
-            .create_window(
-                window_attributes
-                    .with_title("reactui")
-                    .with_movable_by_window_background(true),
-            )
-            .expect("Something failed");
-        let react_webview = WebViewBuilder::new()
-            .with_bounds(Rect {
-                position: LogicalPosition::new(0, 0).into(),
-                size: size.into(),
-            })
-            .with_url("http://localhost:5173")
-            // .with_html("<div>Hello from Rust</div>")
-            .with_ipc_handler(|message| {
-                info!("Received message from react: {:?}", message);
-            })
-            .build_as_child(&reactui_window)
-            // .build_as_child(&reactui_window)
-            .expect("Something failed");
-
-        // let main_window_id = NanoId(nanoid_gen(8));
-        self.widget_id_to_window_id
-            .insert(self.main_window_id.clone(), main_window.id());
-        self.window_id_to_webview_id
-            .insert(main_window.id(), self.main_window_id.clone());
-        self.all_windows.insert(
-            main_window.id(),
-            WidgetView {
-                app_webview: AppWebView {
-                    webview: new_view_form,
-                },
-                window: main_window,
-                nano_id: self.main_window_id.clone(),
-                visible: true,
-                options: WidgetOptions::default(),
-            },
-        );
-        // self.main_window_id = Some(main_window_id);
-
-        let reactui_id = NanoId(nanoid_gen(8));
-        self.widget_id_to_window_id
-            .insert(reactui_id.clone(), reactui_window.id());
-        self.window_id_to_webview_id
-            .insert(reactui_window.id(), reactui_id.clone());
-
-        self.all_windows.insert(
-            reactui_window.id(),
-            WidgetView {
-                app_webview: AppWebView {
-                    webview: react_webview,
-                },
-                window: reactui_window,
-                nano_id: reactui_id.clone(),
-                visible: true,
-                options: WidgetOptions::default(),
-            },
-        );
-
-        let mut widgets_to_create = vec![];
-        {
-            let mut db = self.db.lock().expect("Something failed");
-            widgets_to_create.extend_from_slice(&db.get_configuration().expect("Something failed"));
+                    let webview = WebViewBuilder::new()
+                        .with_bounds(Rect {
+                            position: LogicalPosition::new(0, 0).into(),
+                            size: size.into(),
+                        })
+                        .with_initialization_script(
+                            include_str!("../assets/init_script.js")
+                                .replace("$widget_id", &widget.id.0)
+                                .as_str(),
+                        )
+                        .with_html(file_config.html_file.as_str())
+                        .with_ipc_handler(move |message| {
+                            App::ipc_handler(message.body(), proxy_clone.clone());
+                        })
+                        .build_as_child(&main_window)
+                        .expect("Something failed");
+                    self.widget_id_to_window_id
+                        .insert(widget.id.clone(), main_window.id());
+                    self.window_id_to_webview_id
+                        .insert(main_window.id(), widget.id.clone());
+                    self.all_windows.insert(
+                        main_window.id(),
+                        WidgetView {
+                            app_webview: AppWebView { webview: webview },
+                            window: main_window,
+                            nano_id: widget.id.clone(),
+                            visible: true,
+                            options: WidgetOptions {
+                                title: "".to_string(),
+                                url: "".to_string(),
+                                widget_type: WidgetType::Display,
+                            },
+                        },
+                    );
+                }
+                _ => {}
+            }
         }
 
         info!("Window and webviews created successfully");
@@ -1140,7 +1203,7 @@ impl ApplicationHandler<UserEvent> for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        info!("Window event received: {:?}, {:?}", event, window_id);
+        // info!("Window event received: {:?}, {:?}", event, window_id);
         match event {
             WindowEvent::CloseRequested => {
                 info!("Closing window: {:?}", window_id);
@@ -1193,9 +1256,41 @@ impl ApplicationHandler<UserEvent> for App {
                 event,
                 is_synthetic,
             } => {
+                // let window = self.all_windows[&window_id].window.has_focus();
+                // self.all_windows[&window_id].app_webview.webview.focus();
                 info!("Keyboard input event: {:?}", event);
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::KeyC) => {
+                        if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
+                            self.clipboard.set_text("Copied from Rust!").unwrap();
+                            // println!("Copied text to clipboard");
+                            // let window_id = self.widget_id_to_window_id[&self.main_window_id];
+                            let widget_id = self.window_id_to_webview_id[&window_id].clone();
+                            // let widget = self.all_windows[&window_id].app_webview.webview.evaluate_script("")
+                        }
+                    }
+                    PhysicalKey::Code(KeyCode::KeyV) => {
+                        if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
+                            self.clipboard.set_text("Pasted to Rust!").unwrap();
+                            println!("Pasted text from clipboard");
+                        }
+                    }
+                    _ => {}
+                }
             }
-            _ => {}
+            WindowEvent::ModifiersChanged(modifiers) => {
+                info!("Modifiers changed: {:?}", modifiers);
+                self.current_modifiers = modifiers;
+            }
+            WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => {
+                // info!("Cursor moved: {:?}", position);
+            }
+            _ => {
+                info!("Unhandledevent: {:?}", event);
+            }
         }
     }
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
@@ -1204,30 +1299,10 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Refresh event received for index {}", id);
                 self.refresh_webview(id);
             }
-            UserEvent::AddWebView(view) => {
-                info!("Adding new webview: {:?}", view);
-                // self.add_webview(view);
-                self.create_widget(
-                    event_loop,
-                    WidgetOptions {
-                        title: view.title,
-                        url: view.url,
-                        width: WINDOW_WIDTH,
-                        height: WINDOW_WIDTH,
-                    },
-                );
-            }
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id);
                 self.remove_webview(id);
             }
-            // UserEvent::ShowNewViewForm => {
-            //     info!("Showing new view form");
-            //     self.new_view_form
-            //         .as_ref()
-            //         .expect("New view form not found")
-            //         .set_visible(true);
-            // }
             UserEvent::MoveWebView(id, direction) => {
                 info!("Moving webview at index {} {}", id, direction);
                 self.move_webview(id, direction);
@@ -1256,9 +1331,13 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Scraping webview at index {}", id);
                 self.scrape_webview(id, source_config);
             }
-            UserEvent::CreateNewWidget => {
-                info!("Creating new widget");
-                self.create_widget(event_loop, WidgetOptions::default());
+            UserEvent::CreateWidget(widget_options) => {
+                info!("Creating new widget: {:?}", widget_options);
+                self.create_widget(event_loop, widget_options);
+            }
+            UserEvent::SelectedText { widget_id, text } => {
+                info!("Selected text: {:?}", text);
+                self.clipboard.set_text(text).unwrap();
             }
             _ => {
                 info!("Unknown event: {:?}", event);
@@ -1276,114 +1355,62 @@ fn main() {
         .build()
         .expect("Something failed");
     let event_loop_proxy = event_loop.create_proxy();
-    // let monitored_views = Arc::new(Mutex::new(vec![
-    //     MonitoredView {
-    //         url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-    //         title: "SPY".to_string(),
-    //         // index: 2,
-    //         refresh_count: 0,
-    //         last_refresh: jiff::Timestamp::now(),
-    //         refresh_interval: std::time::Duration::from_secs(240),
-    //         element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-    //         scraped_history: vec![],
-    //         // original_size: ViewSize {
-    //         //     width: 0,
-    //         //     height: 0,
-    //         // },
-    //         hidden: true,
-    //         last_scrape: jiff::Timestamp::now(),
-    //         scrape_interval: std::time::Duration::from_secs(1),
-    //         id: NanoId("SPY".to_string()),
-    //     },
-    //     MonitoredView {
-    //         url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
-    //         title: "NVDA".to_string(),
-    //         // index: 1,
-    //         refresh_count: 0,
-    //         last_refresh: jiff::Timestamp::now(),
-    //         refresh_interval: std::time::Duration::from_secs(240),
-    //         element_selector: Some(r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()),
-    //         scraped_history: vec![],
-    //         // original_size: ViewSize {
-    //         //     width: 0,
-    //         //     height: 0,4
-    //         // },
-    //         hidden: true,
-    //         last_scrape: jiff::Timestamp::now(),
-    //         scrape_interval: std::time::Duration::from_secs(1),
-    //         id: NanoId("NVDA".to_string()),
-    //     },
-    //     MonitoredView::from(
-    //         "Twitch Viewers".to_string(),
-    //         "https://www.twitch.tv/atrioc".to_string(),
-    //         std::time::Duration::from_secs(240),
-    //         std::time::Duration::from_secs(10),
-    //         Some(String::from(r#"#live-channel-stream-information > div > div > div.Layout-sc-1xcs6mc-0.kYbRHX > div.Layout-sc-1xcs6mc-0.evfzyg > div.Layout-sc-1xcs6mc-0.iStNQt > div.Layout-sc-1xcs6mc-0.hJHxso > div > div > div.Layout-sc-1xcs6mc-0.bKPhAm > div:nth-child(1) > div > p.CoreText-sc-1txzju1-0.fiDbWi > span"#)),
-    //     )
-    //     ]
-    //     .iter()
-    //     .map(|view| (view.id.clone(), view.clone()))
-    //     .collect::<HashMap<NanoId, MonitoredView>>()
-    // ));
 
-    let config = vec![
+    let config: Vec<WidgetConfiguration> = vec![
         WidgetConfiguration {
-            id: NanoId(nanoid_gen(8)),
+            id: NanoId("controls".to_string()),
             title: "Controls".to_string(),
             refresh_interval: 0,
+            widget_type: WidgetType::File(FileConfiguration {
+                html_file: include_str!("../../react-ui/dist/index.html").to_string(),
+            }),
+        },
+        WidgetConfiguration {
+            id: NanoId("SPY".to_string()),
+            title: "SPY".to_string(),
+            refresh_interval: 240,
             widget_type: WidgetType::Source(SourceConfiguration {
-                url: "https://www.twitch.tv/atrioc".to_string(),
-                element_selectors: vec![],
+                url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+                element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
                 refresh_interval: 240,
             }),
         },
-
         WidgetConfiguration {
-        id: NanoId(nanoid_gen(8)),
-        title: "SPY".to_string(),
-        refresh_interval: 240,
-        widget_type: WidgetType::Source(SourceConfiguration {
-            url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-            element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
+            id: NanoId("NVDA".to_string()),
+            title: "NVDA".to_string(),
             refresh_interval: 240,
-        }),
+            widget_type: WidgetType::Source(SourceConfiguration {
+                url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
+                element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
+                refresh_interval: 240,
+            }),
+        }
+    ];
 
-    },
-    WidgetConfiguration {
-        id: NanoId(nanoid_gen(8)),
-        title: "NVDA".to_string(),
-        refresh_interval: 240,
-        widget_type: WidgetType::Source(SourceConfiguration {
-            url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
-            element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
-            refresh_interval: 240,
-        }),
-    }];
     let proxy_clone = event_loop_proxy.clone();
     let db = Arc::new(Mutex::new(Database::new()));
+
+    {
+        let mut db = db.lock().unwrap();
+        db.insert_widget_configuration(config);
+    }
+
     let main_window_id = NanoId(nanoid_gen(8));
     let mut app = App {
+        current_modifiers: Modifiers::default(),
         main_window_id: main_window_id,
         all_windows: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
         window_id_to_webview_id: HashMap::new(),
         db: db.clone(),
-        // window: None,
-        // new_view_form_window: None,
-        // react_ui_window: None,
-        // react_webview: None,
-        // monitored_views: monitored_views,
-        // webviews: HashMap::new(),
-        // controls: HashMap::new(),
-        // new_view_form: None,
-        // element_views: HashMap::new(),
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
         last_resize: None,
-        // widgets: HashMap::new(),
+        clipboard: arboard::Clipboard::new().unwrap(),
     };
 
     let db_clone = db.clone();
     std::thread::spawn(move || {
+        info!("Starting scraping thread");
         let mut min_refresh_interval = std::time::Duration::from_secs(4);
         // let mut last_refresh = HashMap::new();
         loop {
@@ -1395,6 +1422,7 @@ fn main() {
                     let views = db.get_configuration().expect("Something failed");
                     widget_configs.extend(views);
                 }
+                info!("Scraping widget configs: {:?}", widget_configs);
                 for config in widget_configs.iter_mut() {
                     // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
                     match &config.widget_type {
@@ -1410,12 +1438,6 @@ fn main() {
                             info!("Widget type not handled: {:?}", config.widget_type);
                         }
                     };
-                    // proxy_clone
-                    //     .send_event(UserEvent::Scrape(config.id.clone()))
-                    //     .expect("Something failed");
-                    // proxy_clone
-                    //     .send_event(UserEvent::Refresh(config.id.clone()))
-                    //     .expect("Something failed");
                 }
             }
         }
@@ -1501,23 +1523,6 @@ mod tests {
         assert_eq!(
             message,
             ControlMessage::Move(NanoId("1".to_string()), Direction::Up)
-        );
-    }
-
-    #[test]
-    fn test_add_webview() {
-        let add_post_data = "{\"add\":{\"url\":\"\",\"refresh_interval\":\"\",\"title\":\"\"}}";
-
-        let message: ControlMessage =
-            serde_json::from_str(add_post_data).expect("Something failed");
-
-        assert_eq!(
-            message,
-            ControlMessage::Add(AddWebView {
-                url: "".to_string(),
-                refresh_interval: 60,
-                title: "".to_string(),
-            })
         );
     }
 }

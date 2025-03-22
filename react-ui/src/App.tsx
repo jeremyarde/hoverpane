@@ -36,50 +36,9 @@ const MessageContext = createContext<{
   addMessage: () => {},
 });
 
-// Provider component to manage messages
-export const MessageProvider = ({ children }: { children: ReactNode }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-
-  const addMessage = (message: Message) => {
-    setMessages((prev) => [...prev, message]);
-  };
-
-  // Set up the Rust message handler
-  useEffect(() => {
-    window.onRustMessage = (message: string) => {
-      addMessage(JSON.parse(message));
-    };
-
-    return () => {
-      window.onRustMessage = () => {};
-    };
-  }, []);
-
-  return (
-    <MessageContext.Provider value={{ messages, addMessage }}>
-      {children}
-    </MessageContext.Provider>
-  );
-};
-
 // Custom hook to use the message context
 export const useMessages = () => {
   return useContext(MessageContext);
-};
-
-const DataView = ({ filter }: { filter: string }) => {
-  const { messages } = useMessages();
-  const filteredMessages = messages.filter((message) => {
-    console.log("filtering messages", message);
-    return JSON.parse(message.message).key.toString().includes(filter);
-  });
-  return (
-    <div>
-      DataView
-      <div>{filter}</div>
-      <div>{JSON.stringify(filteredMessages)}</div>
-    </div>
-  );
 };
 
 interface NewViewConfig {
@@ -104,6 +63,7 @@ function isValidUrl(url: string) {
     new URL(url);
     return true;
   } catch (error) {
+    console.error("Invalid URL format", error);
     return false;
   }
 }
@@ -141,7 +101,6 @@ const viewConfigValidation: NewViewConfigValidation = {
 // Usage in form
 const NewViewForm: React.FC = () => {
   const [config, setConfig] = useState<NewViewConfig>({
-    // id: "",
     url: "",
     selector: "",
     refreshInterval: 10,
@@ -155,7 +114,7 @@ const NewViewForm: React.FC = () => {
       setErrors(validationErrors);
       return;
     }
-    window.ipc.postMessage("createView", config);
+    window.ipc.postMessage(JSON.stringify({ createView: config }));
   };
 
   return (
@@ -182,13 +141,56 @@ const NewViewForm: React.FC = () => {
   );
 };
 
+const handleCopyPaste = (e: KeyboardEvent) => {
+  if (e.metaKey && e.key === "v") {
+    e.preventDefault();
+    // const text = e.clipboardData.getData("text/plain");
+    // document.execCommand("insertText", false, text);
+    console.log("paste");
+    // insert text into the active element at the cursor position
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement) {
+      const selection = window.getSelection();
+      if (selection) {
+        const range = document.createRange();
+        range.selectNodeContents(activeElement);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        // const text = "jeremy was here";
+        // selection.insertNode(document.createTextNode(text));
+      }
+    }
+  }
+  if (e.metaKey && e.key === "c") {
+    e.preventDefault();
+    console.log("copy");
+  }
+};
+
+const handleSelectedText = () => {
+  const selectedText = window.getSelection()?.toString();
+  console.log(selectedText);
+  if (selectedText) {
+    window.ipc.postMessage(
+      JSON.stringify({ selectedText: { widget_id: "1", text: selectedText } })
+    );
+  }
+};
+
 // Example usage
 const App = () => {
-  // const [views, setViews] = useState<ReactNode[]>([]);
-  // const [filter, setFilter] = useState<string>("");
-  // const [values, setValues] = useState<Record[]>([]);
+  // useEffect(() => {
+  //   window.addEventListener("keydown", handleCopyPaste);
+  //   window.addEventListener("selectionchange", handleSelectedText);
+  //   return () => {
+  //     window.removeEventListener("keydown", handleCopyPaste);
+  //     window.removeEventListener("selectionchange", handleSelectedText);
+  //   };
+  // }, []);
   return (
     <>
+      <h1>Hello from React</h1>
       <NewViewForm />
     </>
   );
