@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{runtime::Runtime, time::sleep};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use winit::{
     application::ApplicationHandler,
     event::{Modifiers, WindowEvent},
@@ -821,26 +821,32 @@ const element = document.querySelector("$selector");
 if (!element) {
 window.ipc.postMessage(
   JSON.stringify({
-    error: "Element not found",
-    value: null,
-    id: "$id",
+    extractresult: {
+      error: "Element not found",
+      value: null,
+      id: "$id",
+    }
   })
 );
 }
 
 window.ipc.postMessage(
 JSON.stringify({
-  error: null,
-  value: element.textContent,
-  id: "$id",
+  extractresult: {
+    error: null,
+    value: element.textContent,
+    id: "$id",
+  }
 })
 );
 } catch (e) {
 window.ipc.postMessage(
 JSON.stringify({
+  extractresult: {
   error: JSON.stringify(e.message),
   value: null,
   id: "$id",
+}
 })
 );
 }
@@ -1388,6 +1394,14 @@ fn main() {
             }),
         },
         WidgetConfiguration {
+            id: NanoId("Viewer".to_string()),
+            title: "Viewer".to_string(),
+            refresh_interval: 240,
+            widget_type: WidgetType::File(FileConfiguration {
+                html_file: include_str!("../assets/simple_viewer.html").to_string(),
+            }),
+        },
+        WidgetConfiguration {
             id: NanoId("SPY".to_string()),
             title: "SPY".to_string(),
             refresh_interval: 240,
@@ -1475,7 +1489,11 @@ fn main() {
             let cors_layer = CorsLayer::new()
                 .allow_methods(vec![http::Method::GET, http::Method::POST])
                 .allow_headers(vec![http::HeaderName::from_static("content-type")])
-                .allow_origin(http::HeaderValue::from_static("http://localhost:5173"));
+                // .allow_origin(Origin::list(vec![
+                //     // "http://localhost:5173".parse().unwrap(),
+                //     // "http://127.0.0.1:5173".parse().unwrap(),
+                // ]))
+                .allow_origin(AllowOrigin::any());
             let router = Router::new()
                 .route("/values", get(get_values))
                 .route("/sites", get(get_sites))
