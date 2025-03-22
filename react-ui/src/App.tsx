@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import "./App.css";
 
 interface RustMessage {
@@ -21,6 +20,8 @@ declare global {
     ipc: {
       postMessage: (message: string) => void;
     };
+    WIDGET_ID: string;
+    WINDOW_ID: string;
   }
 }
 
@@ -90,56 +91,82 @@ const widgetConfigValidation: NewWidgetConfigValidation = {
 
 // Usage in form
 const NewWidgetForm: React.FC = () => {
-  const [config, setConfig] = useState<NewWidgetConfig>({
+  const [formData, setFormData] = useState({
     title: "",
-    widget_type: "",
+    "widget-type": "source",
     url: "",
     selector: "",
-    refresh_interval: 1000,
+    "refresh-interval": "1000",
   });
-  const [errors, setErrors] = useState<string[]>([]);
+
+  // Update form data when paste occurs
+  useEffect(() => {
+    window.onRustMessage = (rawMessage: string) => {
+      try {
+        const message = JSON.parse(rawMessage);
+        if (message.paste) {
+          // Update the focused input
+          const activeElement = document.activeElement as HTMLInputElement;
+          if (activeElement && activeElement.name) {
+            setFormData((prev) => ({
+              ...prev,
+              [activeElement.name]: message.paste,
+            }));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse message:", e);
+      }
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // const validationErrors = widgetConfigValidation.getErrors(config);
-    // if (validationErrors.length) {
-    //   setErrors(validationErrors);
-    //   return;
-    // }
+
     const message = {
       createwidget: {
-        title: config.title,
+        id: "fakeid",
+        title: formData.title,
+        refresh_interval: parseInt(formData["refresh-interval"]),
         widget_type: {
           source: {
-            url: config.url,
-            element_selectors: [config.selector],
-            refresh_interval: config.refresh_interval,
+            url: formData.url,
+            element_selectors: [formData.selector],
+            refresh_interval: parseInt(formData["refresh-interval"]),
           },
         },
       },
     };
+
     console.log("Creating a widget: ", message);
     window.ipc.postMessage(JSON.stringify(message));
   };
 
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
   return (
     <form onSubmit={handleSubmit} className="newview-form">
-      {errors.map((error) => (
-        <div key={error} className="error">
-          {error}
-        </div>
-      ))}
       <input
         className="newview-form-input"
         placeholder="Title"
-        value={config.title}
-        onChange={(e) => setConfig({ ...config, title: e.target.value })}
+        name="title"
+        value={formData["title"]}
+        onChange={handleChange}
       />
       <select
         className="newview-form-input"
         required
-        value={config.widget_type}
-        onChange={(e) => setConfig({ ...config, widget_type: e.target.value })}
+        name="widget-type"
+        value={formData["widget-type"]}
+        onChange={handleChange}
       >
         <option value="source">Source</option>
         <option value="display">Display</option>
@@ -149,24 +176,25 @@ const NewWidgetForm: React.FC = () => {
       <input
         className="newview-form-input"
         placeholder="URL"
-        value={config.url}
-        onChange={(e) => setConfig({ ...config, url: e.target.value })}
+        name="url"
+        value={formData["url"]}
+        onChange={handleChange}
       />
       <input
         className="newview-form-input"
         placeholder="Selector"
-        value={config.selector}
-        onChange={(e) => setConfig({ ...config, selector: e.target.value })}
+        name="selector"
+        value={formData["selector"]}
+        onChange={handleChange}
       />
       <input
         className="newview-form-input"
         placeholder="Refresh Interval"
-        value={config.refresh_interval}
-        onChange={(e) =>
-          setConfig({ ...config, refresh_interval: parseInt(e.target.value) })
-        }
+        name="refresh-interval"
+        type="number"
+        value={formData["refresh-interval"]}
+        onChange={handleChange}
       />
-
       <button type="submit">Create View</button>
     </form>
   );
@@ -175,27 +203,24 @@ const NewWidgetForm: React.FC = () => {
 const handleCopyPaste = (e: KeyboardEvent) => {
   if (e.metaKey && e.key === "v") {
     e.preventDefault();
-    // const text = e.clipboardData.getData("text/plain");
-    // document.execCommand("insertText", false, text);
-    console.log("paste");
-    // insert text into the active element at the cursor position
-    const activeElement = document.activeElement as HTMLElement;
-    if (activeElement) {
-      const selection = window.getSelection();
-      if (selection) {
-        const range = document.createRange();
-        range.selectNodeContents(activeElement);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        // const text = "jeremy was here";
-        // selection.insertNode(document.createTextNode(text));
-      }
-    }
+    window.ipc.postMessage(
+      JSON.stringify({
+        pastetext: {
+          widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
+        },
+      })
+    );
   }
   if (e.metaKey && e.key === "c") {
     e.preventDefault();
-    console.log("copy");
+    window.ipc.postMessage(
+      JSON.stringify({
+        copytext: {
+          widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
+          text: window.getSelection()?.toString(),
+        },
+      })
+    );
   }
 };
 
@@ -204,21 +229,80 @@ const handleSelectedText = () => {
   console.log(selectedText);
   if (selectedText) {
     window.ipc.postMessage(
-      JSON.stringify({ selectedText: { widget_id: "1", text: selectedText } })
+      JSON.stringify({
+        selectedtext: {
+          widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
+          text: selectedText,
+        },
+      })
     );
   }
 };
 
 // Example usage
 const App = () => {
-  // useEffect(() => {
-  //   window.addEventListener("keydown", handleCopyPaste);
-  //   window.addEventListener("selectionchange", handleSelectedText);
-  //   return () => {
-  //     window.removeEventListener("keydown", handleCopyPaste);
-  //     window.removeEventListener("selectionchange", handleSelectedText);
-  //   };
-  // }, []);
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    // Set up the Rust message handler
+    window.onRustMessage = (rawMessage: string) => {
+      try {
+        console.log("Received message from Rust:", rawMessage);
+        const message = JSON.parse(rawMessage);
+
+        setMessages((prev) => [...prev, message]);
+
+        // if (message.paste) {
+        //   console.log("Pasting text:", message.text);
+        //   const pasteEvent = new ClipboardEvent("paste", {
+        //     clipboardData: new DataTransfer(),
+        //     bubbles: true,
+        //     cancelable: true,
+        //   });
+        //   // Set clipboard data
+        //   pasteEvent.clipboardData?.setData("text/plain", message.text);
+        //   // Dispatch the event
+        //   document.activeElement?.dispatchEvent(pasteEvent);
+        // }
+
+        if (message.paste) {
+          console.log("Pasting text:", message.paste);
+          const input = document.activeElement as HTMLInputElement;
+          if (input) {
+            input.setAttribute("value", message.paste);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        }
+
+        // Handle different message types
+        // switch (message.data_key) {
+        //   case "widget_update":
+        //     // Handle widget updates
+        //     break;
+        //   case "error":
+        //     console.error("Error from Rust:", message.message);
+        //     break;
+        //   default:
+        //     console.log("Unknown message type:", message);
+        // }
+      } catch (e) {
+        console.error("Failed to parse message from Rust:", e);
+      }
+    };
+
+    return () => {
+      window.onRustMessage = () => {};
+    };
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleCopyPaste);
+    window.addEventListener("selectionchange", handleSelectedText);
+    return () => {
+      window.removeEventListener("keydown", handleCopyPaste);
+      window.removeEventListener("selectionchange", handleSelectedText);
+    };
+  }, []);
   return (
     <>
       <h1>Hello from React</h1>

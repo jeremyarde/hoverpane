@@ -1,4 +1,8 @@
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{
+    extract::{ConnectInfo, State},
+    routing::get,
+    Json, Router,
+};
 use element_extractor::Extractor;
 use env_logger::fmt::Timestamp;
 use http::HeaderValue;
@@ -106,10 +110,9 @@ pub struct MonitoredView {
     hidden: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetConfiguration {
     id: NanoId,
-    // url: String,
     title: String,
     refresh_interval: Seconds,
     widget_type: WidgetType,
@@ -309,7 +312,7 @@ impl Database {
             "INSERT INTO widgets (id, title, refresh_interval, widget_type) VALUES (?1, ?2, ?3, ?4)",
         )?;
         for config in configs {
-            info!("Inserting widget configuration: {:?}", config);
+            info!("Inserting widget configuration: {:?}", config.id);
             stmt.execute([
                 config.id.0.as_str(),
                 config.title.as_str(),
@@ -428,7 +431,7 @@ struct ElementView {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ControlMessage {
-    CreateWidget(WidgetOptions),
+    CreateWidget(WidgetConfiguration),
     Refresh(NanoId),
     Remove(NanoId),
     UpdateRefreshInterval(Seconds),
@@ -437,6 +440,8 @@ pub enum ControlMessage {
     Minimize(NanoId),
     ToggleElementView(NanoId),
     SelectedText { widget_id: NanoId, text: String },
+    CopyText { widget_id: NanoId, text: String },
+    PasteText { widget_id: NanoId },
     // Extract(String, String),
 }
 
@@ -486,7 +491,14 @@ impl App {
 
     fn ipc_handler(message: &str, event_proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>) {
         info!("[ipc_handler] Received message: {:?}", message);
-        let message: ControlMessage = serde_json::from_str(message).unwrap();
+        let message = serde_json::from_str::<ControlMessage>(message);
+
+        if let Err(e) = message {
+            error!("Error parsing message: {:?}", e);
+            return;
+        }
+        let message = message.unwrap();
+
         let proxy = event_proxy.lock().expect("Something failed");
         match message {
             ControlMessage::CreateWidget(create_widget) => {
@@ -532,6 +544,16 @@ impl App {
             ControlMessage::SelectedText { widget_id, text } => {
                 proxy
                     .send_event(UserEvent::SelectedText { widget_id, text })
+                    .expect("Something failed");
+            }
+            ControlMessage::CopyText { widget_id, text } => {
+                proxy
+                    .send_event(UserEvent::CopyText { widget_id, text })
+                    .expect("Something failed");
+            }
+            ControlMessage::PasteText { widget_id } => {
+                proxy
+                    .send_event(UserEvent::PasteText { widget_id })
                     .expect("Something failed");
             }
         }
@@ -693,20 +715,106 @@ JSON.stringify({
         }
     }
 
-    fn create_widget(&mut self, event_loop: &ActiveEventLoop, widget_options: WidgetOptions) {
-        let cloned_widget_options = widget_options.clone();
-        let new_window = event_loop
-            .create_window(
-                Window::default_attributes()
-                    .with_active(true)
-                    .with_decorations(true)
-                    .with_title(widget_options.title.clone())
-                    .with_has_shadow(false)
-                    .with_title_hidden(false)
-                    .with_titlebar_hidden(false)
-                    .with_resizable(true),
-            )
-            .unwrap();
+    fn create_widget(&mut self, event_loop: &ActiveEventLoop, widget: WidgetConfiguration) {
+        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+        let window_attributes = Window::default_attributes()
+            // .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_inner_size(size)
+            .with_transparent(true)
+            .with_blur(true)
+            .with_movable_by_window_background(true)
+            .with_fullsize_content_view(false)
+            .with_title_hidden(false)
+            .with_titlebar_buttons_hidden(false)
+            .with_titlebar_hidden(false)
+            .with_title("Watcher")
+            .with_has_shadow(false)
+            .with_resizable(true);
+
+        let main_window = event_loop
+            .create_window(window_attributes.clone().with_title(&widget.title.clone()))
+            .expect("Something failed");
+        let scale_factor = main_window.scale_factor();
+        let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
+        let proxy_clone = Arc::clone(&self.proxy);
+
+        let webview = match &widget.widget_type {
+            WidgetType::File(file_config) => {
+                let webview = WebViewBuilder::new()
+                    .with_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: size.into(),
+                    })
+                    // .with_initialization_script(
+                    //     include_str!("../assets/init_script.js")
+                    //         .replace("$widget_id", &widget.id.0)
+                    //         .as_str(),
+                    // )
+                    .with_initialization_script(
+                        r#"
+                        window.WINDOW_ID = "$window_id  ";
+                        window.WIDGET_ID = "$widget_id";
+                        "#
+                        .replace("$window_id", &format!("{:?}", main_window.id()))
+                        .replace("$widget_id", &widget.id.0)
+                        .as_str(),
+                    )
+                    .with_html(file_config.html_file.as_str())
+                    .with_ipc_handler(move |message| {
+                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    })
+                    .build_as_child(&main_window)
+                    .expect("Something failed");
+                Some(webview)
+            }
+            WidgetType::Source(source_config) => {
+                let webview = WebViewBuilder::new()
+                    .with_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: size.into(),
+                    })
+                    .with_initialization_script(
+                        // include_str!("../assets/init_script.js")
+                        //     .replace("$widget_id", &widget.id.0)
+                        r#"
+                        window.WINDOW_ID = "$window_id  ";
+                        window.WIDGET_ID = "$widget_id";
+                        "#
+                        .replace("$window_id", &format!("{:?}", main_window.id()))
+                        .replace("$widget_id", &widget.id.0)
+                        .as_str(),
+                    )
+                    .with_url(source_config.url.clone())
+                    // .with_html(file_config.html_file.as_str())
+                    .with_ipc_handler(move |message| {
+                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    })
+                    .build_as_child(&main_window)
+                    .expect("Something failed");
+                Some(webview)
+            }
+            _ => None,
+        };
+
+        if let Some(webview) = webview {
+            self.widget_id_to_window_id
+                .insert(widget.id.clone(), main_window.id());
+            self.window_id_to_webview_id
+                .insert(main_window.id(), widget.id.clone());
+            self.all_windows.insert(
+                main_window.id(),
+                WidgetView {
+                    app_webview: AppWebView { webview: webview },
+                    window: main_window,
+                    nano_id: widget.id.clone(),
+                    visible: true,
+                    options: WidgetOptions {
+                        title: widget.title.clone(),
+                        widget_type: widget.widget_type.clone(),
+                    },
+                },
+            );
+        }
     }
 }
 
@@ -718,7 +826,6 @@ JSON.stringify({
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetOptions {
     title: String,
-    // url: String,
     widget_type: WidgetType,
 }
 
@@ -745,7 +852,7 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
-    CreateWidget(WidgetOptions),
+    CreateWidget(WidgetConfiguration),
     Refresh(NanoId),
     Scrape(NanoId, SourceConfiguration),
     RemoveWebView(NanoId),
@@ -755,6 +862,8 @@ enum UserEvent {
     Minimize(NanoId),
     ToggleElementView(NanoId),
     SelectedText { widget_id: NanoId, text: String },
+    CopyText { widget_id: NanoId, text: String },
+    PasteText { widget_id: NanoId },
     // Extract(String, String),
     // ExtractResult(String),
 }
@@ -772,91 +881,8 @@ impl ApplicationHandler<UserEvent> for App {
             widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
         }
 
-        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
-        let window_attributes = Window::default_attributes()
-            // .with_window_level(WindowLevel::AlwaysOnTop)
-            .with_inner_size(size)
-            .with_transparent(true)
-            .with_blur(true)
-            .with_movable_by_window_background(true)
-            .with_fullsize_content_view(false)
-            .with_title_hidden(false)
-            .with_titlebar_buttons_hidden(false)
-            .with_titlebar_hidden(false)
-            .with_title("Watcher")
-            .with_has_shadow(false)
-            .with_resizable(true);
-
         for widget in widgets {
-            let main_window = event_loop
-                .create_window(window_attributes.clone().with_title(&widget.title.clone()))
-                .expect("Something failed");
-            let scale_factor = main_window.scale_factor();
-            let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
-            let proxy_clone = Arc::clone(&self.proxy);
-
-            let webview = match &widget.widget_type {
-                WidgetType::File(file_config) => {
-                    let webview = WebViewBuilder::new()
-                        .with_bounds(Rect {
-                            position: LogicalPosition::new(0, 0).into(),
-                            size: size.into(),
-                        })
-                        .with_initialization_script(
-                            include_str!("../assets/init_script.js")
-                                .replace("$widget_id", &widget.id.0)
-                                .as_str(),
-                        )
-                        .with_html(file_config.html_file.as_str())
-                        .with_ipc_handler(move |message| {
-                            App::ipc_handler(message.body(), proxy_clone.clone());
-                        })
-                        .build_as_child(&main_window)
-                        .expect("Something failed");
-                    Some(webview)
-                }
-                WidgetType::Source(source_config) => {
-                    let webview = WebViewBuilder::new()
-                        .with_bounds(Rect {
-                            position: LogicalPosition::new(0, 0).into(),
-                            size: size.into(),
-                        })
-                        .with_initialization_script(
-                            include_str!("../assets/init_script.js")
-                                .replace("$widget_id", &widget.id.0)
-                                .as_str(),
-                        )
-                        .with_url(source_config.url.clone())
-                        // .with_html(file_config.html_file.as_str())
-                        .with_ipc_handler(move |message| {
-                            App::ipc_handler(message.body(), proxy_clone.clone());
-                        })
-                        .build_as_child(&main_window)
-                        .expect("Something failed");
-                    Some(webview)
-                }
-                _ => None,
-            };
-
-            if let Some(webview) = webview {
-                self.widget_id_to_window_id
-                    .insert(widget.id.clone(), main_window.id());
-                self.window_id_to_webview_id
-                    .insert(main_window.id(), widget.id.clone());
-                self.all_windows.insert(
-                    main_window.id(),
-                    WidgetView {
-                        app_webview: AppWebView { webview: webview },
-                        window: main_window,
-                        nano_id: widget.id.clone(),
-                        visible: true,
-                        options: WidgetOptions {
-                            title: widget.title.clone(),
-                            widget_type: widget.widget_type.clone(),
-                        },
-                    },
-                );
-            }
+            self.create_widget(event_loop, widget);
         }
 
         info!("Window and webviews created successfully");
@@ -927,6 +953,7 @@ impl ApplicationHandler<UserEvent> for App {
                 match event.physical_key {
                     PhysicalKey::Code(KeyCode::KeyC) => {
                         if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
+                            info!("Copying text to clipboard");
                             self.clipboard.set_text("Copied from Rust!").unwrap();
                             // println!("Copied text to clipboard");
                             // let window_id = self.widget_id_to_window_id[&self.main_window_id];
@@ -936,8 +963,15 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                     PhysicalKey::Code(KeyCode::KeyV) => {
                         if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
+                            info!("Pasting text from clipboard");
                             self.clipboard.set_text("Pasted to Rust!").unwrap();
                             println!("Pasted text from clipboard");
+                            let window = &self.all_windows[&window_id];
+                            window
+                                .app_webview
+                                .webview
+                                .evaluate_script(r#"console.log('sending paste event :)')"#)
+                                .unwrap();
                         }
                     }
                     _ => {}
@@ -1003,6 +1037,27 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::SelectedText { widget_id, text } => {
                 info!("Selected text: {:?}", text);
                 self.clipboard.set_text(text).unwrap();
+            }
+            UserEvent::CopyText { widget_id, text } => {
+                info!("Copying text: {:?}", text);
+                self.clipboard.set_text(text).unwrap();
+            }
+            UserEvent::PasteText { widget_id } => {
+                // need to get text from clipboard and send back into app
+                // info!("Pasting text: {:?}", text);
+                // self.clipboard.set_text("").unwrap();
+                let window_id = self.widget_id_to_window_id[&widget_id];
+                self.all_windows
+                    .get_mut(&window_id)
+                    .expect("Something failed")
+                    .app_webview
+                    .webview
+                    .evaluate_script(
+                        r#"window.onRustMessage(JSON.stringify({paste: '$1'}))"#
+                            .replace("$1", &self.clipboard.get_text().unwrap())
+                            .as_str(),
+                    )
+                    .unwrap();
             }
             _ => {
                 info!("Unknown event: {:?}", event);
@@ -1114,7 +1169,7 @@ fn main() {
                                 .expect("Something failed");
                         }
                         _ => {
-                            info!("Widget type not handled: {:?}", config.widget_type);
+                            info!("Widget type not handled...");
                         }
                     };
                 }
