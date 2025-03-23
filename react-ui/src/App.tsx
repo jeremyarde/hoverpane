@@ -201,27 +201,27 @@ const NewWidgetForm: React.FC = () => {
 };
 
 const handleCopyPaste = (e: KeyboardEvent) => {
-  if (e.metaKey && e.key === "v") {
-    e.preventDefault();
-    window.ipc.postMessage(
-      JSON.stringify({
-        pastetext: {
-          widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
-        },
-      })
-    );
-  }
-  if (e.metaKey && e.key === "c") {
-    e.preventDefault();
-    window.ipc.postMessage(
-      JSON.stringify({
-        copytext: {
-          widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
-          text: window.getSelection()?.toString(),
-        },
-      })
-    );
-  }
+  // if (e.metaKey && e.key === "v") {
+  //   e.preventDefault();
+  //   window.ipc.postMessage(
+  //     JSON.stringify({
+  //       pastetext: {
+  //         widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
+  //       },
+  //     })
+  //   );
+  // }
+  // if (e.metaKey && e.key === "c") {
+  //   e.preventDefault();
+  //   window.ipc.postMessage(
+  //     JSON.stringify({
+  //       copytext: {
+  //         widget_id: window.WIDGET_ID ? window.WIDGET_ID : "not-set",
+  //         text: window.getSelection()?.toString(),
+  //       },
+  //     })
+  //   );
+  // }
 };
 
 const handleSelectedText = () => {

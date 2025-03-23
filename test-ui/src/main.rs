@@ -1,6 +1,6 @@
 use axum::{
     extract::{ConnectInfo, State},
-    routing::get,
+    routing::{get, get_service},
     Json, Router,
 };
 use element_extractor::Extractor;
@@ -8,6 +8,10 @@ use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
 use log::{debug, error, info, warn};
+use muda::{
+    accelerator::{Accelerator, Modifiers},
+    Menu, MenuItem, PredefinedMenuItem, Submenu,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -18,15 +22,19 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{runtime::Runtime, time::sleep};
-use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    services::ServeFile,
+};
 use winit::{
     application::ApplicationHandler,
-    event::{Modifiers, WindowEvent},
+    event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopBuilder, EventLoopProxy},
     keyboard::{KeyCode, ModifiersKeyState, PhysicalKey},
-    platform::macos::WindowAttributesExtMacOS,
+    platform::macos::{WindowAttributesExtMacOS, WindowExtMacOS},
     window::{Window, WindowId, WindowLevel},
 };
+
 use wry::{
     dpi::{LogicalPosition, LogicalSize},
     http::Response,
@@ -57,6 +65,12 @@ pub enum WidgetType {
     Tracker,
     Controls,
     File(FileConfiguration),
+    Url(UrlConfiguration),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct UrlConfiguration {
+    url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -391,6 +405,7 @@ WHERE rn = 1"#,
 }
 
 struct App {
+    menu: Menu,
     current_modifiers: Modifiers,
     // window: Option<Window>,
     // new_view_form_window: Option<Window>,
@@ -652,11 +667,13 @@ window.ipc.postMessage(
 );
 }
 
+const scrape_value = element.getAttribute("aria-label") || element.textContent.trim();
+
 window.ipc.postMessage(
 JSON.stringify({
   extractresult: {
     error: null,
-    value: element.textContent,
+    value: scrape_value,
     id: "$id",
   }
 })
@@ -793,7 +810,24 @@ JSON.stringify({
                     .expect("Something failed");
                 Some(webview)
             }
-            _ => None,
+            WidgetType::Url(url_config) => {
+                let webview = WebViewBuilder::new()
+                    // .with_bounds(Rect {
+                    //     position: LogicalPosition::new(0, 0).into(),
+                    //     size: size.into(),
+                    // })
+                    .with_url(url_config.url.clone())
+                    .with_ipc_handler(move |message| {
+                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    })
+                    .build_as_child(&main_window)
+                    .expect("Something failed");
+                Some(webview)
+            }
+            _ => {
+                info!("Unknown widget type, not creating webview");
+                None
+            }
         };
 
         if let Some(webview) = webview {
@@ -815,6 +849,11 @@ JSON.stringify({
                 },
             );
         }
+
+        self.db
+            .lock()
+            .unwrap()
+            .insert_widget_configuration(vec![widget]);
     }
 }
 
@@ -852,6 +891,7 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
+    MenuEvent(muda::MenuEvent),
     CreateWidget(WidgetConfiguration),
     Refresh(NanoId),
     Scrape(NanoId, SourceConfiguration),
@@ -950,36 +990,36 @@ impl ApplicationHandler<UserEvent> for App {
                 // let window = self.all_windows[&window_id].window.has_focus();
                 // self.all_windows[&window_id].app_webview.webview.focus();
                 info!("Keyboard input event: {:?}", event);
-                match event.physical_key {
-                    PhysicalKey::Code(KeyCode::KeyC) => {
-                        if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
-                            info!("Copying text to clipboard");
-                            self.clipboard.set_text("Copied from Rust!").unwrap();
-                            // println!("Copied text to clipboard");
-                            // let window_id = self.widget_id_to_window_id[&self.main_window_id];
-                            let widget_id = self.window_id_to_webview_id[&window_id].clone();
-                            // let widget = self.all_windows[&window_id].app_webview.webview.evaluate_script("")
-                        }
-                    }
-                    PhysicalKey::Code(KeyCode::KeyV) => {
-                        if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
-                            info!("Pasting text from clipboard");
-                            self.clipboard.set_text("Pasted to Rust!").unwrap();
-                            println!("Pasted text from clipboard");
-                            let window = &self.all_windows[&window_id];
-                            window
-                                .app_webview
-                                .webview
-                                .evaluate_script(r#"console.log('sending paste event :)')"#)
-                                .unwrap();
-                        }
-                    }
-                    _ => {}
-                }
+                // match event.physical_key {
+                //     PhysicalKey::Code(KeyCode::KeyC) => {
+                //         if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
+                //             info!("Copying text to clipboard");
+                //             self.clipboard.set_text("Copied from Rust!").unwrap();
+                //             // println!("Copied text to clipboard");
+                //             // let window_id = self.widget_id_to_window_id[&self.main_window_id];
+                //             let widget_id = self.window_id_to_webview_id[&window_id].clone();
+                //             // let widget = self.all_windows[&window_id].app_webview.webview.evaluate_script("")
+                //         }
+                //     }
+                //     PhysicalKey::Code(KeyCode::KeyV) => {
+                //         if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
+                //             info!("Pasting text from clipboard");
+                //             self.clipboard.set_text("Pasted to Rust!").unwrap();
+                //             println!("Pasted text from clipboard");
+                //             let window = &self.all_windows[&window_id];
+                //             window
+                //                 .app_webview
+                //                 .webview
+                //                 .evaluate_script(r#"console.log('sending paste event :)')"#)
+                //                 .unwrap();
+                //         }
+                //     }
+                //     _ => {}
+                // }
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 info!("Modifiers changed: {:?}", modifiers);
-                self.current_modifiers = modifiers;
+                // self.current_modifiers = modifiers;
             }
             WindowEvent::CursorMoved {
                 device_id,
@@ -1071,6 +1111,15 @@ fn main() {
     env_logger::init();
     info!("Starting application...");
 
+    #[cfg(target_os = "macos")]
+    {
+        // ✅ Initialize Cocoa App before creating the window
+        winit::platform::macos::EventLoopBuilderExtMacOS::with_activation_policy(
+            &mut EventLoop::builder(),
+            winit::platform::macos::ActivationPolicy::Regular,
+        );
+    }
+
     let event_loop = EventLoop::<UserEvent>::with_user_event()
         .build()
         .expect("Something failed");
@@ -1112,10 +1161,22 @@ fn main() {
                 element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
                 refresh_interval: 240,
             }),
-        }
+        },
+        WidgetConfiguration {
+            id: NanoId("test".to_string()),
+            title: "test".to_string(),
+            refresh_interval: 240,
+            widget_type: WidgetType::Url(UrlConfiguration {
+                url: "http://localhost:3000/test".to_string(),
+            }),
+        },
     ];
 
     let proxy_clone = event_loop_proxy.clone();
+    let proxy_clone_muda = event_loop_proxy.clone();
+    muda::MenuEvent::set_event_handler(Some(move |event| {
+        proxy_clone_muda.send_event(UserEvent::MenuEvent(event));
+    }));
     let db = Arc::new(Mutex::new(Database::new()));
 
     {
@@ -1124,6 +1185,7 @@ fn main() {
     }
 
     let main_window_id = NanoId(nanoid_gen(8));
+    let menu = setup_menu();
     let mut app = App {
         current_modifiers: Modifiers::default(),
         main_window_id: main_window_id,
@@ -1134,6 +1196,7 @@ fn main() {
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
         last_resize: None,
         clipboard: arboard::Clipboard::new().unwrap(),
+        menu,
     };
 
     let db_clone = db.clone();
@@ -1197,6 +1260,10 @@ fn main() {
                 .route("/sites", get(get_sites))
                 .route("/elements", get(get_elements))
                 .route("/latest", get(get_latest_values))
+                .route(
+                    "/test",
+                    get_service(ServeFile::new("../react-ui/dist/index.html")),
+                )
                 // .route("/values", post(update_value))
                 .layer(cors_layer)
                 .with_state(state);
@@ -1210,6 +1277,77 @@ fn main() {
 
     event_loop.run_app(&mut app).expect("Something failed");
 }
+
+fn setup_menu() -> Menu {
+    let menu = Menu::new();
+
+    // Add application menu (required for macOS)
+    #[cfg(target_os = "macos")]
+    {
+        let app_menu = Submenu::new("App", true);
+        let _ = app_menu.append_items(&[
+            &PredefinedMenuItem::about(Some("My App"), None),
+            &PredefinedMenuItem::separator(),
+            &PredefinedMenuItem::quit(None),
+        ]);
+        let _ = menu.append(&app_menu);
+
+        // Add Edit menu with standard items
+        let edit_menu = Submenu::new("Edit", true);
+        let _ = edit_menu.append_items(&[
+            &PredefinedMenuItem::cut(None),
+            &PredefinedMenuItem::copy(None),
+            &PredefinedMenuItem::paste(None),
+        ]);
+        let _ = menu.append(&edit_menu);
+    }
+
+    // Your custom menu items
+    let custom_menu = Submenu::with_items(
+        "Custom",
+        true,
+        &[
+            &MenuItem::new(
+                "Menu item #1",
+                true,
+                Some(Accelerator::new(
+                    Some(muda::accelerator::Modifiers::ALT),
+                    muda::accelerator::Code::KeyD,
+                )),
+            ),
+            &PredefinedMenuItem::separator(),
+            &MenuItem::new("Menu item #2", false, None),
+            &MenuItem::new("Menu item #3", true, None),
+        ],
+    )
+    .unwrap();
+
+    let _ = menu.append(&custom_menu);
+
+    // Initialize the menu for the appropriate platform
+    #[cfg(target_os = "macos")]
+    menu.init_for_nsapp();
+
+    #[cfg(target_os = "windows")]
+    unsafe {
+        menu.init_for_hwnd(window.hwnd() as isize)
+    };
+
+    #[cfg(target_os = "linux")]
+    menu.init_for_gtk_window(&gtk_window, Some(&vertical_gtk_box));
+
+    menu
+}
+
+// async fn get_widget(
+//     State(state): State<ApiState>,
+//     Path(id): Path<String>,
+// ) -> Json<WidgetConfiguration> {
+//     // let state = state.db.lock().unwrap();
+//     // let widget: WidgetConfiguration = state.get_widget(id).unwrap();
+//     // Json(widget)
+//     ServeFile::new(path)
+// }
 
 async fn get_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
     let state = state.db.lock().unwrap();
