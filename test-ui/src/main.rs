@@ -1179,6 +1179,14 @@ fn main() {
                 url: "http://localhost:3000/test".to_string(),
             }),
         },
+        WidgetConfiguration {
+            id: NanoId("from vite server".to_string()),
+            title: "from vite server".to_string(),
+            refresh_interval: 240,
+            widget_type: WidgetType::Url(UrlConfiguration {
+                url: "http://localhost:5173".to_string(),
+            }),
+        },
     ];
 
     let proxy_clone = event_loop_proxy.clone();
