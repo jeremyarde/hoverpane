@@ -31,7 +31,7 @@ use winit::{
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopBuilder, EventLoopProxy},
     keyboard::{KeyCode, ModifiersKeyState, PhysicalKey},
-    platform::macos::{WindowAttributesExtMacOS, WindowExtMacOS},
+    platform::macos::{EventLoopBuilderExtMacOS, WindowAttributesExtMacOS, WindowExtMacOS},
     window::{Window, WindowId, WindowLevel},
 };
 
@@ -1113,17 +1113,26 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     {
+        info!("Initializing Macos App...");
         // ✅ Initialize Cocoa App before creating the window
         winit::platform::macos::EventLoopBuilderExtMacOS::with_activation_policy(
             &mut EventLoop::builder(),
             winit::platform::macos::ActivationPolicy::Regular,
         );
+
+        winit::platform::macos::EventLoopBuilderExtMacOS::with_default_menu(
+            &mut EventLoop::builder(),
+            false,
+        );
     }
 
     let event_loop = EventLoop::<UserEvent>::with_user_event()
+        .with_default_menu(false)
         .build()
         .expect("Something failed");
     let event_loop_proxy = event_loop.create_proxy();
+    let menu = setup_menu();
+    // menu.init_for_nsapp();
 
     let config: Vec<WidgetConfiguration> = vec![
         WidgetConfiguration {
@@ -1175,6 +1184,7 @@ fn main() {
     let proxy_clone = event_loop_proxy.clone();
     let proxy_clone_muda = event_loop_proxy.clone();
     muda::MenuEvent::set_event_handler(Some(move |event| {
+        info!("Menu event: {:?}", event);
         proxy_clone_muda.send_event(UserEvent::MenuEvent(event));
     }));
     let db = Arc::new(Mutex::new(Database::new()));
@@ -1185,7 +1195,6 @@ fn main() {
     }
 
     let main_window_id = NanoId(nanoid_gen(8));
-    let menu = setup_menu();
     let mut app = App {
         current_modifiers: Modifiers::default(),
         main_window_id: main_window_id,
@@ -1316,7 +1325,14 @@ fn setup_menu() -> Menu {
                 )),
             ),
             &PredefinedMenuItem::separator(),
-            &MenuItem::new("Menu item #2", false, None),
+            &MenuItem::new(
+                "Menu item #2",
+                false,
+                Some(Accelerator::new(
+                    Some(muda::accelerator::Modifiers::SHIFT),
+                    muda::accelerator::Code::KeyR,
+                )),
+            ),
             &MenuItem::new("Menu item #3", true, None),
         ],
     )
