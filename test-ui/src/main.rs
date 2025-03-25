@@ -31,7 +31,9 @@ use winit::{
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopBuilder, EventLoopProxy},
     keyboard::{KeyCode, ModifiersKeyState, PhysicalKey},
-    platform::macos::{EventLoopBuilderExtMacOS, WindowAttributesExtMacOS, WindowExtMacOS},
+    platform::macos::{
+        ActiveEventLoopExtMacOS, EventLoopBuilderExtMacOS, WindowAttributesExtMacOS, WindowExtMacOS,
+    },
     window::{Window, WindowId, WindowLevel},
 };
 
@@ -107,22 +109,21 @@ impl FromSql for SourceConfiguration {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MonitoredView {
-    id: NanoId,
-    url: String,
-    title: String,
-    // index: usize,
-    refresh_count: usize,
-    last_refresh: jiff::Timestamp,
-    refresh_interval: std::time::Duration,
-    last_scrape: jiff::Timestamp,
-    scrape_interval: std::time::Duration,
-    element_selector: Option<String>,
-    scraped_history: Vec<ScrapedValue>,
-    // original_size: ViewSize,
-    hidden: bool,
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// pub struct MonitoredView {
+//     id: NanoId,
+//     url: String,
+//     title: String,
+//     // index: usize,
+//     refresh_count: usize,
+//     last_refresh: jiff::Timestamp,
+//     refresh_interval: std::time::Duration,
+//     last_scrape: jiff::Timestamp,
+//     scrape_interval: std::time::Duration,
+//     element_selector: Option<String>,
+//     scraped_history: Vec<ScrapedValue>,
+//     hidden: bool,
+// }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetConfiguration {
@@ -147,30 +148,6 @@ impl FromSql for WidgetType {
 }
 
 use nanoid::nanoid_gen;
-
-impl MonitoredView {
-    pub fn from(
-        title: String,
-        url: String,
-        refresh_interval: std::time::Duration,
-        scrape_interval: std::time::Duration,
-        element_selector: Option<String>,
-    ) -> Self {
-        Self {
-            id: NanoId(nanoid_gen(8)),
-            url,
-            title,
-            refresh_count: 0,
-            last_refresh: jiff::Timestamp::now(),
-            refresh_interval,
-            last_scrape: jiff::Timestamp::now(),
-            scrape_interval,
-            element_selector,
-            scraped_history: vec![],
-            hidden: false,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
@@ -407,15 +384,6 @@ WHERE rn = 1"#,
 struct App {
     menu: Menu,
     current_modifiers: Modifiers,
-    // window: Option<Window>,
-    // new_view_form_window: Option<Window>,
-    // react_ui_window: Option<Window>,
-    // react_webview: Option<AppWebView>,
-    // monitored_views: Arc<Mutex<HashMap<NanoId, MonitoredView>>>,
-    // webviews: HashMap<NanoId, wry::WebView>,
-    // element_views: HashMap<NanoId, ElementView>,
-    // controls: HashMap<NanoId, wry::WebView>,
-    // new_view_form: Option<wry::WebView>,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
     last_resize: Option<Instant>,
     db: Arc<Mutex<Database>>,
@@ -454,9 +422,9 @@ pub enum ControlMessage {
     ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
-    SelectedText { widget_id: NanoId, text: String },
-    CopyText { widget_id: NanoId, text: String },
-    PasteText { widget_id: NanoId },
+    // SelectedText { widget_id: NanoId, text: String },
+    // CopyText { widget_id: NanoId, text: String },
+    // PasteText { widget_id: NanoId },
     // Extract(String, String),
 }
 
@@ -556,21 +524,6 @@ impl App {
                     .send_event(UserEvent::ToggleElementView(nano_id))
                     .expect("Something failed");
             }
-            ControlMessage::SelectedText { widget_id, text } => {
-                proxy
-                    .send_event(UserEvent::SelectedText { widget_id, text })
-                    .expect("Something failed");
-            }
-            ControlMessage::CopyText { widget_id, text } => {
-                proxy
-                    .send_event(UserEvent::CopyText { widget_id, text })
-                    .expect("Something failed");
-            }
-            ControlMessage::PasteText { widget_id } => {
-                proxy
-                    .send_event(UserEvent::PasteText { widget_id })
-                    .expect("Something failed");
-            }
         }
     }
 
@@ -611,19 +564,19 @@ impl App {
         &self,
         size: &LogicalSize<u32>,
         window: &Window,
-        view: &mut MonitoredView,
+        // view: &mut MonitoredView,
         index: usize,
         num_views: usize,
     ) -> WebView {
         let starting_height = window.inner_size().height / num_views as u32;
 
-        let width = if view.hidden { 0 } else { 200 };
-        let height = if view.hidden { 0 } else { 100 };
+        // let width = if view.hidden { 0 } else { 200 };
+        // let height = if view.hidden { 0 } else { 100 };
 
         let element_view = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: LogicalPosition::new(0, starting_height * index as u32 + 50).into(),
-                size: LogicalSize::new(width, height).into(),
+                size: size.clone().into(),
             })
             .with_html(include_str!("../assets/element_view.html"))
             // .with_url("https://www.google.com")
@@ -732,16 +685,22 @@ JSON.stringify({
         }
     }
 
-    fn create_widget(&mut self, event_loop: &ActiveEventLoop, widget: WidgetConfiguration) {
-        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+    fn create_widget(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        widget: WidgetConfiguration,
+        size: LogicalSize<u32>,
+    ) {
+        // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+        // event_loop.set_allows_automatic_window_tabbing(enabled);
         let window_attributes = Window::default_attributes()
             // .with_window_level(WindowLevel::AlwaysOnTop)
             .with_inner_size(size)
             .with_transparent(true)
             .with_blur(true)
             .with_movable_by_window_background(true)
-            .with_fullsize_content_view(false)
-            .with_title_hidden(false)
+            .with_fullsize_content_view(true)
+            .with_title_hidden(true)
             .with_titlebar_buttons_hidden(false)
             .with_titlebar_hidden(false)
             .with_title("Watcher")
@@ -901,9 +860,9 @@ enum UserEvent {
     ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
-    SelectedText { widget_id: NanoId, text: String },
-    CopyText { widget_id: NanoId, text: String },
-    PasteText { widget_id: NanoId },
+    // SelectedText { widget_id: NanoId, text: String },
+    // CopyText { widget_id: NanoId, text: String },
+    // PasteText { widget_id: NanoId },
     // Extract(String, String),
     // ExtractResult(String),
 }
@@ -920,9 +879,8 @@ impl ApplicationHandler<UserEvent> for App {
             let mut db = self.db.lock().expect("Something failed");
             widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
         }
-
         for widget in widgets {
-            self.create_widget(event_loop, widget);
+            self.create_widget(event_loop, widget, size);
         }
 
         info!("Window and webviews created successfully");
@@ -1074,31 +1032,31 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Creating new widget: {:?}", widget_options);
                 self.create_widget(event_loop, widget_options);
             }
-            UserEvent::SelectedText { widget_id, text } => {
-                info!("Selected text: {:?}", text);
-                self.clipboard.set_text(text).unwrap();
-            }
-            UserEvent::CopyText { widget_id, text } => {
-                info!("Copying text: {:?}", text);
-                self.clipboard.set_text(text).unwrap();
-            }
-            UserEvent::PasteText { widget_id } => {
-                // need to get text from clipboard and send back into app
-                // info!("Pasting text: {:?}", text);
-                // self.clipboard.set_text("").unwrap();
-                let window_id = self.widget_id_to_window_id[&widget_id];
-                self.all_windows
-                    .get_mut(&window_id)
-                    .expect("Something failed")
-                    .app_webview
-                    .webview
-                    .evaluate_script(
-                        r#"window.onRustMessage(JSON.stringify({paste: '$1'}))"#
-                            .replace("$1", &self.clipboard.get_text().unwrap())
-                            .as_str(),
-                    )
-                    .unwrap();
-            }
+            // UserEvent::SelectedText { widget_id, text } => {
+            //     info!("Selected text: {:?}", text);
+            //     self.clipboard.set_text(text).unwrap();
+            // }
+            // UserEvent::CopyText { widget_id, text } => {
+            //     info!("Copying text: {:?}", text);
+            //     self.clipboard.set_text(text).unwrap();
+            // }
+            // UserEvent::PasteText { widget_id } => {
+            //     // need to get text from clipboard and send back into app
+            //     // info!("Pasting text: {:?}", text);
+            //     // self.clipboard.set_text("").unwrap();
+            //     let window_id = self.widget_id_to_window_id[&widget_id];
+            //     self.all_windows
+            //         .get_mut(&window_id)
+            //         .expect("Something failed")
+            //         .app_webview
+            //         .webview
+            //         .evaluate_script(
+            //             r#"window.onRustMessage(JSON.stringify({paste: '$1'}))"#
+            //                 .replace("$1", &self.clipboard.get_text().unwrap())
+            //                 .as_str(),
+            //         )
+            //         .unwrap();
+            // }
             _ => {
                 info!("Unknown event: {:?}", event);
                 todo!("User event not handled: {:?}", event);
@@ -1114,7 +1072,6 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         info!("Initializing Macos App...");
-        // ✅ Initialize Cocoa App before creating the window
         winit::platform::macos::EventLoopBuilderExtMacOS::with_activation_policy(
             &mut EventLoop::builder(),
             winit::platform::macos::ActivationPolicy::Regular,
@@ -1315,38 +1272,12 @@ fn setup_menu() -> Menu {
             &PredefinedMenuItem::cut(None),
             &PredefinedMenuItem::copy(None),
             &PredefinedMenuItem::paste(None),
+            &PredefinedMenuItem::select_all(None),
         ]);
         let _ = menu.append(&edit_menu);
     }
 
-    // Your custom menu items
-    let custom_menu = Submenu::with_items(
-        "Custom",
-        true,
-        &[
-            &MenuItem::new(
-                "Menu item #1",
-                true,
-                Some(Accelerator::new(
-                    Some(muda::accelerator::Modifiers::ALT),
-                    muda::accelerator::Code::KeyD,
-                )),
-            ),
-            &PredefinedMenuItem::separator(),
-            &MenuItem::new(
-                "Menu item #2",
-                false,
-                Some(Accelerator::new(
-                    Some(muda::accelerator::Modifiers::SHIFT),
-                    muda::accelerator::Code::KeyR,
-                )),
-            ),
-            &MenuItem::new("Menu item #3", true, None),
-        ],
-    )
-    .unwrap();
-
-    let _ = menu.append(&custom_menu);
+    // let _ = menu.append(&custom_menu);
 
     // Initialize the menu for the appropriate platform
     #[cfg(target_os = "macos")]
