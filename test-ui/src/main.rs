@@ -49,12 +49,12 @@ use rusqlite::{
     ToSql,
 };
 
-pub const WEBVIEW_HEIGHT: u32 = 200;
-pub const WEBVIEW_WIDTH: u32 = 50;
-pub const CONTROL_PANEL_HEIGHT: u32 = 40;
-pub const CONTROL_PANEL_WIDTH: u32 = 50;
-pub const WINDOW_WIDTH: u32 = 240;
-pub const WINDOW_HEIGHT: u32 = 100;
+// pub const WEBVIEW_HEIGHT: u32 = 200;
+// pub const WEBVIEW_WIDTH: u32 = 50;
+// pub const CONTROL_PANEL_HEIGHT: u32 = 40;
+// pub const CONTROL_PANEL_WIDTH: u32 = 50;
+pub const WINDOW_WIDTH: u32 = 320;
+pub const WINDOW_HEIGHT: u32 = 240;
 pub const RESIZE_DEBOUNCE_TIME: u128 = 100;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
@@ -382,6 +382,7 @@ WHERE rn = 1"#,
 }
 
 struct App {
+    current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
     proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
@@ -391,7 +392,6 @@ struct App {
     all_windows: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
-    main_window_id: NanoId,
     clipboard: arboard::Clipboard,
 }
 
@@ -527,65 +527,12 @@ impl App {
         }
     }
 
-    fn create_new_view_form(
-        size: &LogicalSize<u32>,
-        window: &Window,
-        i: usize,
-        proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
-    ) -> WebView {
-        // put new view form at top of the window
-        let control_panel = WebViewBuilder::new()
-            .with_bounds(Rect {
-                position: LogicalPosition::new(0, 0).into(),
-                size: LogicalSize::new(size.width, size.height).into(),
-            })
-            .with_html(include_str!("../assets/new_view.html"))
-            .with_ipc_handler(move |message| {
-                App::ipc_handler(message.body(), proxy.clone());
-            })
-            .with_transparent(true)
-            .with_clipboard(true)
-            .with_background_color((0, 0, 0, 0))
-            .build_as_child(window)
-            .expect("Something failed");
-
-        control_panel
-    }
-
     fn move_webview(&mut self, id: NanoId, direction: Direction) {
         todo!("Actualy implement this");
     }
 
     fn minimize_webview(&mut self, id: NanoId) {
         todo!("Minimize not implemented");
-    }
-
-    fn create_element_view(
-        &self,
-        size: &LogicalSize<u32>,
-        window: &Window,
-        // view: &mut MonitoredView,
-        index: usize,
-        num_views: usize,
-    ) -> WebView {
-        let starting_height = window.inner_size().height / num_views as u32;
-
-        // let width = if view.hidden { 0 } else { 200 };
-        // let height = if view.hidden { 0 } else { 100 };
-
-        let element_view = WebViewBuilder::new()
-            .with_bounds(Rect {
-                position: LogicalPosition::new(0, starting_height * index as u32 + 50).into(),
-                size: size.clone().into(),
-            })
-            .with_html(include_str!("../assets/element_view.html"))
-            // .with_url("https://www.google.com")
-            .with_transparent(false)
-            // .with_background_color((0, 200, 90, 100))
-            .with_visible(true) // Make sure it's visible
-            .build_as_child(window)
-            .expect("Something failed");
-        element_view
     }
 
     fn scrape_webview(&self, id: NanoId, source_config: SourceConfiguration) {
@@ -688,14 +635,15 @@ JSON.stringify({
     fn create_widget(
         &mut self,
         event_loop: &ActiveEventLoop,
-        widget: WidgetConfiguration,
+        widget_config: WidgetConfiguration,
         size: LogicalSize<u32>,
     ) {
         // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         // event_loop.set_allows_automatic_window_tabbing(enabled);
         let window_attributes = Window::default_attributes()
             // .with_window_level(WindowLevel::AlwaysOnTop)
-            .with_inner_size(size)
+            // .with_inner_size(size)
+            .with_inner_size(self.current_size)
             .with_transparent(true)
             .with_blur(true)
             .with_movable_by_window_background(true)
@@ -707,19 +655,24 @@ JSON.stringify({
             .with_has_shadow(false)
             .with_resizable(true);
 
-        let main_window = event_loop
-            .create_window(window_attributes.clone().with_title(&widget.title.clone()))
+        let new_window = event_loop
+            .create_window(
+                window_attributes
+                    .clone()
+                    .with_title(&widget_config.title.clone()),
+            )
             .expect("Something failed");
-        let scale_factor = main_window.scale_factor();
-        let form_size = main_window.inner_size().to_logical::<u32>(scale_factor);
+        let scale_factor = new_window.scale_factor();
+        let form_size = new_window.inner_size().to_logical::<u32>(scale_factor);
+        self.current_size = form_size;
         let proxy_clone = Arc::clone(&self.proxy);
 
-        let webview = match &widget.widget_type {
+        let webview = match &widget_config.widget_type {
             WidgetType::File(file_config) => {
                 let webview = WebViewBuilder::new()
                     .with_bounds(Rect {
                         position: LogicalPosition::new(0, 0).into(),
-                        size: size.into(),
+                        size: form_size.into(),
                     })
                     // .with_initialization_script(
                     //     include_str!("../assets/init_script.js")
@@ -731,15 +684,15 @@ JSON.stringify({
                         window.WINDOW_ID = "$window_id  ";
                         window.WIDGET_ID = "$widget_id";
                         "#
-                        .replace("$window_id", &format!("{:?}", main_window.id()))
-                        .replace("$widget_id", &widget.id.0)
+                        .replace("$window_id", &format!("{:?}", new_window.id()))
+                        .replace("$widget_id", &widget_config.id.0)
                         .as_str(),
                     )
                     .with_html(file_config.html_file.as_str())
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
-                    .build_as_child(&main_window)
+                    .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
             }
@@ -756,8 +709,8 @@ JSON.stringify({
                         window.WINDOW_ID = "$window_id  ";
                         window.WIDGET_ID = "$widget_id";
                         "#
-                        .replace("$window_id", &format!("{:?}", main_window.id()))
-                        .replace("$widget_id", &widget.id.0)
+                        .replace("$window_id", &format!("{:?}", new_window.id()))
+                        .replace("$widget_id", &widget_config.id.0)
                         .as_str(),
                     )
                     .with_url(source_config.url.clone())
@@ -765,21 +718,17 @@ JSON.stringify({
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
-                    .build_as_child(&main_window)
+                    .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
             }
             WidgetType::Url(url_config) => {
                 let webview = WebViewBuilder::new()
-                    // .with_bounds(Rect {
-                    //     position: LogicalPosition::new(0, 0).into(),
-                    //     size: size.into(),
-                    // })
                     .with_url(url_config.url.clone())
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
-                    .build_as_child(&main_window)
+                    .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
             }
@@ -791,19 +740,19 @@ JSON.stringify({
 
         if let Some(webview) = webview {
             self.widget_id_to_window_id
-                .insert(widget.id.clone(), main_window.id());
+                .insert(widget_config.id.clone(), new_window.id());
             self.window_id_to_webview_id
-                .insert(main_window.id(), widget.id.clone());
+                .insert(new_window.id(), widget_config.id.clone());
             self.all_windows.insert(
-                main_window.id(),
+                new_window.id(),
                 WidgetView {
                     app_webview: AppWebView { webview: webview },
-                    window: main_window,
-                    nano_id: widget.id.clone(),
+                    window: new_window,
+                    nano_id: widget_config.id.clone(),
                     visible: true,
                     options: WidgetOptions {
-                        title: widget.title.clone(),
-                        widget_type: widget.widget_type.clone(),
+                        title: widget_config.title.clone(),
+                        widget_type: widget_config.widget_type.clone(),
                     },
                 },
             );
@@ -812,15 +761,10 @@ JSON.stringify({
         self.db
             .lock()
             .unwrap()
-            .insert_widget_configuration(vec![widget]);
+            .insert_widget_configuration(vec![widget_config]);
     }
 }
 
-// fn widget_attributes() -> WindowAttributes {
-//     Window::default_attributes()
-//         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, window_height))
-//         .with_title("new view")
-// }
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetOptions {
     title: String,
@@ -874,15 +818,23 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
+        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let mut widgets = vec![];
         {
             let mut db = self.db.lock().expect("Something failed");
             widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
         }
-        for widget in widgets {
-            self.create_widget(event_loop, widget, size);
+        for widget_config in widgets {
+            self.create_widget(event_loop, widget_config, size);
         }
-
+        info!(
+            "Widgets: {:?}",
+            &self
+                .all_windows
+                .iter()
+                .map(|(id, widget)| (id, widget.options.title.clone()))
+                .collect::<Vec<(&WindowId, String)>>()
+        );
         info!("Window and webviews created successfully");
     }
 
@@ -896,12 +848,6 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             WindowEvent::CloseRequested => {
                 info!("Closing window: {:?}", window_id);
-                // let window = self.all_windows.get(&window_id).unwrap();
-                // self.all_windows.remove(&window_id);
-                if window_id == self.widget_id_to_window_id[&self.main_window_id] {
-                    event_loop.exit();
-                }
-
                 let webview_id = self.window_id_to_webview_id.remove(&window_id).unwrap();
                 self.widget_id_to_window_id.remove(&webview_id);
                 self.all_windows.remove(&window_id);
@@ -931,12 +877,6 @@ impl ApplicationHandler<UserEvent> for App {
                     position: LogicalPosition::new(0, 0).into(),
                     size: size.clone().into(),
                 });
-                // self.all_windows.iter_mut().for_each(|(_, widget)| {
-                //     widget.app_webview.webview.set_bounds(Rect {
-                //         position: LogicalPosition::new(0, 0).into(),
-                //         size: size.clone().into(),
-                //     });
-                // });
                 // Debounce resize events to improve performance
                 self.last_resize = Some(now);
             }
@@ -945,39 +885,10 @@ impl ApplicationHandler<UserEvent> for App {
                 event,
                 is_synthetic,
             } => {
-                // let window = self.all_windows[&window_id].window.has_focus();
-                // self.all_windows[&window_id].app_webview.webview.focus();
                 info!("Keyboard input event: {:?}", event);
-                // match event.physical_key {
-                //     PhysicalKey::Code(KeyCode::KeyC) => {
-                //         if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
-                //             info!("Copying text to clipboard");
-                //             self.clipboard.set_text("Copied from Rust!").unwrap();
-                //             // println!("Copied text to clipboard");
-                //             // let window_id = self.widget_id_to_window_id[&self.main_window_id];
-                //             let widget_id = self.window_id_to_webview_id[&window_id].clone();
-                //             // let widget = self.all_windows[&window_id].app_webview.webview.evaluate_script("")
-                //         }
-                //     }
-                //     PhysicalKey::Code(KeyCode::KeyV) => {
-                //         if self.current_modifiers.lsuper_state() == ModifiersKeyState::Pressed {
-                //             info!("Pasting text from clipboard");
-                //             self.clipboard.set_text("Pasted to Rust!").unwrap();
-                //             println!("Pasted text from clipboard");
-                //             let window = &self.all_windows[&window_id];
-                //             window
-                //                 .app_webview
-                //                 .webview
-                //                 .evaluate_script(r#"console.log('sending paste event :)')"#)
-                //                 .unwrap();
-                //         }
-                //     }
-                //     _ => {}
-                // }
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 info!("Modifiers changed: {:?}", modifiers);
-                // self.current_modifiers = modifiers;
             }
             WindowEvent::CursorMoved {
                 device_id,
@@ -991,6 +902,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        let size = self.current_size.clone();
         match event {
             UserEvent::Refresh(id) => {
                 info!("Refresh event received for index {}", id);
@@ -1030,33 +942,8 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
-                self.create_widget(event_loop, widget_options);
+                self.create_widget(event_loop, widget_options, size);
             }
-            // UserEvent::SelectedText { widget_id, text } => {
-            //     info!("Selected text: {:?}", text);
-            //     self.clipboard.set_text(text).unwrap();
-            // }
-            // UserEvent::CopyText { widget_id, text } => {
-            //     info!("Copying text: {:?}", text);
-            //     self.clipboard.set_text(text).unwrap();
-            // }
-            // UserEvent::PasteText { widget_id } => {
-            //     // need to get text from clipboard and send back into app
-            //     // info!("Pasting text: {:?}", text);
-            //     // self.clipboard.set_text("").unwrap();
-            //     let window_id = self.widget_id_to_window_id[&widget_id];
-            //     self.all_windows
-            //         .get_mut(&window_id)
-            //         .expect("Something failed")
-            //         .app_webview
-            //         .webview
-            //         .evaluate_script(
-            //             r#"window.onRustMessage(JSON.stringify({paste: '$1'}))"#
-            //                 .replace("$1", &self.clipboard.get_text().unwrap())
-            //                 .as_str(),
-            //         )
-            //         .unwrap();
-            // }
             _ => {
                 info!("Unknown event: {:?}", event);
                 todo!("User event not handled: {:?}", event);
@@ -1159,10 +1046,9 @@ fn main() {
         db.insert_widget_configuration(config);
     }
 
-    let main_window_id = NanoId(nanoid_gen(8));
     let mut app = App {
+        current_size: LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT),
         current_modifiers: Modifiers::default(),
-        main_window_id: main_window_id,
         all_windows: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
         window_id_to_webview_id: HashMap::new(),
