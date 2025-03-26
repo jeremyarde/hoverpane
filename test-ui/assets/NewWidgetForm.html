@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>New Widget Form</title>
+    <script src="https://unpkg.com/alpinejs" defer></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50 p-4">
+    <div
+      x-data="{
+    widgetType: 'source',
+    activeTab: 'layout',
+    showSizeAdvanced: false,
+    showPositionAdvanced: false,
+    isSubmitting: false,
+    errors: {},
+    form: {
+      title: '',
+      widget_type: 'source',
+      level: 'normal',
+      url: '',
+      selector: '',
+      refresh_interval: 240,
+      html: '',
+      size: [400, 300],
+      position: [0, 0],
+      background_color: [255, 255, 255, 1],
+      resizeable: true,
+      movable: true
+    },
+    widgetTypes: [
+      { type: 'url', icon: '🔗', label: 'URL' },
+      { type: 'file', icon: '📄', label: 'File' },
+      { type: 'source', icon: '📊', label: 'Source' }
+    ],
+    validate() {
+      this.errors = {};
+      if (this.widgetType === 'source') {
+        if (!this.form.url) this.errors.url = 'URL is required';
+        if (!this.form.selector) this.errors.selector = 'Selector is required';
+        if (!this.form.refresh_interval) this.errors.refresh_interval = 'Refresh interval is required';
+      }
+      if (this.widgetType === 'url' && !this.form.url) {
+        this.errors.url = 'URL is required';
+      }
+      if (this.widgetType === 'file' && !this.form.html) {
+        this.errors.html = 'File is required';
+      }
+      return Object.keys(this.errors).length === 0;
+    },
+    rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(x => {
+        const hex = Math.round(x).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+      }).join('');
+    },
+    hexToRgb(hex) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? [
+        parseInt(result[1], 16),
+        parseInt(result[2], 16),
+        parseInt(result[3], 16)
+      ] : [0, 0, 0];
+    },
+    async handleSubmit() {
+      if (!this.validate()) return;
+      
+      this.isSubmitting = true;
+      try {
+        console.log('Form submitted:', this.form);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error('Submission error:', error);
+      } finally {
+        this.isSubmitting = false;
+      }
+    }
+  }"
+      @click.away="showSizeAdvanced = false; showPositionAdvanced = false"
+      class="max-w-md mx-auto bg-white rounded-xl"
+    >
+      <form @submit.prevent="handleSubmit" class="space-y-4">
+        <!-- Widget Type Selection -->
+        <div class="grid grid-cols-3 gap-1 p-1 bg-gray-50 rounded-xl">
+          <template x-for="type in widgetTypes" :key="type.type">
+            <button
+              type="button"
+              @click="widgetType = type.type; form.widget_type = type.type"
+              :class="`p-3 rounded-lg text-center transition-all ${widgetType === type.type ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`"
+            >
+              <div class="text-2xl mb-1" x-text="type.icon"></div>
+              <div class="text-xs font-medium" x-text="type.label"></div>
+            </button>
+          </template>
+        </div>
+
+        <!-- Title Field -->
+        <div class="px-4">
+          <input
+            type="text"
+            x-model="form.title"
+            class="w-full h-10 px-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-gray-400"
+            placeholder="Widget Title"
+          />
+        </div>
+
+        <!-- Source Widget Fields -->
+        <template x-if="widgetType === 'source'">
+          <div class="space-y-2 px-4">
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">🔗</div>
+              <input
+                type="url"
+                x-model="form.url"
+                required
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="URL (required)"
+                :class="{'ring-1 ring-red-500': errors.url}"
+              />
+            </div>
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">🎯</div>
+              <input
+                type="text"
+                x-model="form.selector"
+                required
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="CSS Selector (required)"
+                :class="{'ring-1 ring-red-500': errors.selector}"
+              />
+            </div>
+          </div>
+        </template>
+
+        <!-- File Widget Fields -->
+        <template x-if="widgetType === 'file'">
+          <div class="px-4">
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">📄</div>
+              <input
+                type="file"
+                accept=".html,.htm"
+                @change="form.html = $event.target.files[0]?.name || ''"
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                :class="{'ring-1 ring-red-500': errors.html}"
+              />
+            </div>
+          </div>
+        </template>
+
+        <!-- URL Widget Fields -->
+        <template x-if="widgetType === 'url'">
+          <div class="px-4">
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">🔗</div>
+              <input
+                type="url"
+                x-model="form.url"
+                required
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="URL (required)"
+                :class="{'ring-1 ring-red-500': errors.url}"
+              />
+            </div>
+          </div>
+        </template>
+
+        <!-- Tabs -->
+        <div class="px-4 flex space-x-2 border-b border-gray-100">
+          <button
+            type="button"
+            @click="activeTab = 'layout'"
+            :class="`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === 'layout' ? 'text-blue-500 border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-700'}`"
+          >
+            Layout
+          </button>
+          <button
+            type="button"
+            @click="activeTab = 'behavior'"
+            :class="`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === 'behavior' ? 'text-blue-500 border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-700'}`"
+          >
+            Behavior
+          </button>
+          <button
+            type="button"
+            @click="activeTab = 'appearance'"
+            :class="`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === 'appearance' ? 'text-blue-500 border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-700'}`"
+          >
+            Appearance
+          </button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="px-4 pb-4">
+          <!-- Layout Tab -->
+          <div x-show="activeTab === 'layout'" class="space-y-3">
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">📐</div>
+              <button
+                type="button"
+                @click="showSizeAdvanced = !showSizeAdvanced; showPositionAdvanced = false"
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-left"
+              >
+                <span x-text="`${form.size[0]}×${form.size[1]}`"></span>
+              </button>
+              <div
+                x-show="showSizeAdvanced"
+                @click.away="showSizeAdvanced = false"
+                class="absolute top-full left-0 mt-1 p-2 bg-white rounded-lg shadow-sm border border-gray-100 z-20 flex gap-1"
+              >
+                <input
+                  type="number"
+                  min="0"
+                  x-model.number="form.size[0]"
+                  class="w-16 h-8 px-2 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="W"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  x-model.number="form.size[1]"
+                  class="w-16 h-8 px-2 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="H"
+                />
+              </div>
+            </div>
+
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">📍</div>
+              <button
+                type="button"
+                @click="showPositionAdvanced = !showPositionAdvanced; showSizeAdvanced = false"
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-left"
+              >
+                <span
+                  x-text="`${form.position[0]}, ${form.position[1]}`"
+                ></span>
+              </button>
+              <div
+                x-show="showPositionAdvanced"
+                @click.away="showPositionAdvanced = false"
+                class="absolute top-full left-0 mt-1 p-2 bg-white rounded-lg shadow-sm border border-gray-100 z-20 flex gap-1"
+              >
+                <input
+                  type="number"
+                  min="0"
+                  x-model.number="form.position[0]"
+                  class="w-16 h-8 px-2 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="X"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  x-model.number="form.position[1]"
+                  class="w-16 h-8 px-2 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="Y"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Behavior Tab -->
+          <div x-show="activeTab === 'behavior'" class="space-y-3">
+            <template x-if="['source', 'url'].includes(widgetType)">
+              <div class="relative">
+                <div class="absolute left-2 top-2 text-gray-400">⏱️</div>
+                <input
+                  type="number"
+                  min="0"
+                  x-model.number="form.refresh_interval"
+                  :required="widgetType === 'source'"
+                  class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  :class="{'ring-1 ring-red-500': errors.refresh_interval}"
+                  placeholder="Refresh interval (seconds)"
+                />
+              </div>
+            </template>
+
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">📊</div>
+              <select
+                x-model="form.level"
+                class="w-full h-9 pl-8 pr-8 text-sm bg-gray-50 rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="normal">Normal</option>
+                <option value="alwaysontop">Always on Top</option>
+                <option value="alwaysonbottom">Always on Bottom</option>
+              </select>
+              <div
+                class="absolute right-2 top-2 pointer-events-none text-gray-400"
+              >
+                ▼
+              </div>
+            </div>
+
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  x-model="form.resizeable"
+                  class="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+                <span class="text-sm text-gray-600">Resizeable</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  x-model="form.movable"
+                  class="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+                <span class="text-sm text-gray-600">Movable</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Appearance Tab -->
+          <div x-show="activeTab === 'appearance'" class="space-y-3">
+            <div class="relative">
+              <div class="absolute left-2 top-2 text-gray-400">🎨</div>
+              <button
+                type="button"
+                @click="$refs.colorPicker.click()"
+                class="w-full h-9 pl-8 pr-3 text-sm bg-gray-50 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-left flex items-center gap-2"
+              >
+                <div
+                  class="w-4 h-4 rounded border border-gray-200"
+                  :style="`background-color: rgba(${form.background_color.join(', ')})`"
+                ></div>
+                <span
+                  class="truncate"
+                  x-text="`rgba(${form.background_color.map((v, i) => i === 3 ? v.toFixed(2) : Math.round(v)).join(', ')})`"
+                ></span>
+              </button>
+              <input
+                type="color"
+                x-ref="colorPicker"
+                class="hidden"
+                :value="rgbToHex(...form.background_color.slice(0, 3))"
+                @input="const [r,g,b] = hexToRgb($event.target.value); form.background_color = [r,g,b,form.background_color[3]]"
+              />
+              <div class="absolute right-2 top-2.5">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  x-model.number="form.background_color[3]"
+                  class="w-12 h-4 appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-0.5 [&::-webkit-slider-runnable-track]:rounded [&::-webkit-slider-runnable-track]:bg-gray-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:mt-[-3px]"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="px-4">
+          <button
+            type="submit"
+            :disabled="isSubmitting"
+            class="w-full h-9 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-1"
+          >
+            <template x-if="isSubmitting">
+              <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                  fill="none"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+            </template>
+            <span
+              x-text="isSubmitting ? 'Creating...' : 'Create Widget'"
+            ></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </body>
+</html>

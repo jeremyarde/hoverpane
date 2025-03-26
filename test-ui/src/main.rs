@@ -62,14 +62,15 @@ pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separat
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum WidgetType {
-    Source(SourceConfiguration),
     File(FileConfiguration),
+    Source(SourceConfiguration),
     Url(UrlConfiguration),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct UrlConfiguration {
     url: String,
+    refresh_interval: Seconds,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -294,7 +295,6 @@ impl Database {
                 "CREATE TABLE widgets (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
-                refresh_interval INTEGER NOT NULL,
                 widget_type TEXT NOT NULL,
                 level TEXT NOT NULL
             )",
@@ -348,7 +348,7 @@ impl Database {
         configs: Vec<WidgetConfiguration>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = self.connection.prepare(
-            "INSERT INTO widgets (id, title, refresh_interval, widget_type, level) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO widgets (id, title, widget_type, level) VALUES (?1, ?2, ?3, ?4)",
         )?;
         for config in configs {
             info!("Inserting widget configuration: {:?}", config.id);
@@ -1042,43 +1042,51 @@ fn main() {
                 html: include_str!("../../react-ui/dist/index.html").to_string(),
             }))
             .with_level(Level::Normal   ),
+        // WidgetConfiguration::new()
+        //     .with_id(NanoId("Viewer".to_string()))
+        //     .with_title("Viewer".to_string())
+        //     .with_widget_type(WidgetType::File(FileConfiguration {
+        //         html: include_str!("../assets/simple_viewer.html").to_string(),
+        //     }))
+        //     .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_id(NanoId("SPY".to_string()))
+        //     .with_title("SPY".to_string())
+        //     .with_widget_type(WidgetType::Source(SourceConfiguration {
+        //         url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+        //         element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
+        //         refresh_interval: 240,
+        //     }))
+        //     .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_id(NanoId("NVDA".to_string()))
+        //     .with_title("NVDA".to_string())
+        //     .with_widget_type(WidgetType::Source(SourceConfiguration {
+        //         url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
+        //         element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
+        //         refresh_interval: 240,
+        //     }))
+        //     .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_id(NanoId("test".to_string()))
+        //     .with_title("test".to_string())
+        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
+        //         url: "http://localhost:3000/test".to_string(),
+        //         refresh_interval: 1000,
+        //     }))
+        //     .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_id(NanoId("from vite server".to_string()))
+        //     .with_title("from vite server".to_string())
+        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
+        //         url: "http://localhost:5173".to_string(),
+        //         refresh_interval: 1000,
+        //     }))
+            .with_level(Level::AlwaysOnTop),
         WidgetConfiguration::new()
-            .with_id(NanoId("Viewer".to_string()))
-            .with_title("Viewer".to_string())
+            .with_title("New Widget".to_string())
             .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../assets/simple_viewer.html").to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("SPY".to_string()))
-            .with_title("SPY".to_string())
-            .with_widget_type(WidgetType::Source(SourceConfiguration {
-                url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-                element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
-                refresh_interval: 240,
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("NVDA".to_string()))
-            .with_title("NVDA".to_string())
-            .with_widget_type(WidgetType::Source(SourceConfiguration {
-                url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
-                element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
-                refresh_interval: 240,
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("test".to_string()))
-            .with_title("test".to_string())
-            .with_widget_type(WidgetType::Url(UrlConfiguration {
-                url: "http://localhost:3000/test".to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("from vite server".to_string()))
-            .with_title("from vite server".to_string())
-            .with_widget_type(WidgetType::Url(UrlConfiguration {
-                url: "http://localhost:5173".to_string(),
+                html: include_str!("../assets/NewWidgetForm.html").to_string(),
             }))
             .with_level(Level::AlwaysOnTop),
     ];
