@@ -62,10 +62,7 @@ pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separat
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum WidgetType {
-    Display,
     Source(SourceConfiguration),
-    Tracker,
-    Controls,
     File(FileConfiguration),
     Url(UrlConfiguration),
 }
@@ -77,7 +74,7 @@ struct UrlConfiguration {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct FileConfiguration {
-    html_file: String,
+    html: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -109,28 +106,55 @@ impl FromSql for SourceConfiguration {
     }
 }
 
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct MonitoredView {
-//     id: NanoId,
-//     url: String,
-//     title: String,
-//     // index: usize,
-//     refresh_count: usize,
-//     last_refresh: jiff::Timestamp,
-//     refresh_interval: std::time::Duration,
-//     last_scrape: jiff::Timestamp,
-//     scrape_interval: std::time::Duration,
-//     element_selector: Option<String>,
-//     scraped_history: Vec<ScrapedValue>,
-//     hidden: bool,
-// }
-
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct WidgetConfiguration {
     id: NanoId,
     title: String,
-    refresh_interval: Seconds,
     widget_type: WidgetType,
+    level: Level,
+}
+
+trait SqliteDetails {
+    // fn to_sql(&self) -> rusqlite::Result<ToSqlOutput>;
+    // fn from_sql(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self>;
+}
+
+impl WidgetConfiguration {
+    fn new() -> Self {
+        Self {
+            id: NanoId(nanoid_gen(8)),
+            title: "".to_string(),
+            widget_type: WidgetType::Source(SourceConfiguration::default()),
+            level: Level::Normal,
+        }
+    }
+
+    pub fn with_level(mut self, level: Level) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = title;
+        self
+    }
+
+    pub fn with_widget_type(mut self, widget_type: WidgetType) -> Self {
+        self.widget_type = widget_type;
+        self
+    }
+
+    pub fn with_id(mut self, id: NanoId) -> Self {
+        self.id = id;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+enum Level {
+    AlwaysOnTop,
+    Normal,
+    AlwaysOnBottom,
 }
 
 impl ToSql for WidgetType {
@@ -144,6 +168,29 @@ impl FromSql for WidgetType {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let value = value.as_str().unwrap();
         Ok(serde_json::from_str(value).unwrap())
+    }
+}
+
+impl ToSql for Level {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+        let value = match self {
+            Level::AlwaysOnTop => "AlwaysOnTop",
+            Level::Normal => "Normal",
+            Level::AlwaysOnBottom => "AlwaysOnBottom",
+        };
+        Ok(ToSqlOutput::from(value))
+    }
+}
+
+impl FromSql for Level {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str().unwrap();
+        match value {
+            "AlwaysOnTop" => Ok(Level::AlwaysOnTop),
+            "Normal" => Ok(Level::Normal),
+            "AlwaysOnBottom" => Ok(Level::AlwaysOnBottom),
+            _ => Err(rusqlite::types::FromSqlError::InvalidType),
+        }
     }
 }
 
@@ -248,7 +295,8 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 refresh_interval INTEGER NOT NULL,
-                widget_type TEXT NOT NULL
+                widget_type TEXT NOT NULL,
+                level TEXT NOT NULL
             )",
                 (),
             )
@@ -281,8 +329,8 @@ impl Database {
                     id: row.get(0)?,
                     // url: row.get(1)?,
                     title: row.get(1)?,
-                    refresh_interval: row.get(2)?,
-                    widget_type: row.get(3)?,
+                    widget_type: row.get(2)?,
+                    level: row.get(3)?,
                 })
             })?
             .filter_map(|configuration| {
@@ -300,16 +348,21 @@ impl Database {
         configs: Vec<WidgetConfiguration>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = self.connection.prepare(
-            "INSERT INTO widgets (id, title, refresh_interval, widget_type) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO widgets (id, title, refresh_interval, widget_type, level) VALUES (?1, ?2, ?3, ?4, ?5)",
         )?;
         for config in configs {
             info!("Inserting widget configuration: {:?}", config.id);
-            stmt.execute([
+            let res = stmt.execute([
                 config.id.0.as_str(),
                 config.title.as_str(),
-                config.refresh_interval.to_string().as_str(),
                 serde_json::to_string(&config.widget_type).unwrap().as_str(),
+                match config.level {
+                    Level::AlwaysOnTop => "AlwaysOnTop",
+                    Level::Normal => "Normal",
+                    Level::AlwaysOnBottom => "AlwaysOnBottom",
+                },
             ])?;
+            info!("Inserted widget configuration: {:?}", res);
         }
         Ok(())
     }
@@ -659,7 +712,12 @@ JSON.stringify({
             .create_window(
                 window_attributes
                     .clone()
-                    .with_title(&widget_config.title.clone()),
+                    .with_title(&widget_config.title.clone())
+                    .with_window_level(match widget_config.level {
+                        Level::AlwaysOnTop => WindowLevel::AlwaysOnTop,
+                        Level::Normal => WindowLevel::Normal,
+                        Level::AlwaysOnBottom => WindowLevel::AlwaysOnBottom,
+                    }),
             )
             .expect("Something failed");
         let scale_factor = new_window.scale_factor();
@@ -688,7 +746,7 @@ JSON.stringify({
                         .replace("$widget_id", &widget_config.id.0)
                         .as_str(),
                     )
-                    .with_html(file_config.html_file.as_str())
+                    .with_html(file_config.html.as_str())
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
@@ -824,6 +882,8 @@ impl ApplicationHandler<UserEvent> for App {
             let mut db = self.db.lock().expect("Something failed");
             widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
         }
+
+        info!("Found {} widgets", widgets.len());
         for widget_config in widgets {
             self.create_widget(event_loop, widget_config, size);
         }
@@ -851,17 +911,13 @@ impl ApplicationHandler<UserEvent> for App {
                 let webview_id = self.window_id_to_webview_id.remove(&window_id).unwrap();
                 self.widget_id_to_window_id.remove(&webview_id);
                 self.all_windows.remove(&window_id);
+                // self.db
+                //     .lock()
+                //     .unwrap()
+                //     .remove_widget_configuration(webview_id);
             }
-            WindowEvent::RedrawRequested => {
-                // info!("Redraw requested");
-                // window.request_redraw();
-                // self.window.as_ref().expect("Something failed").request_redraw();
-            }
+            WindowEvent::RedrawRequested => {}
             WindowEvent::Resized(size) => {
-                // let window = self
-                //     .all_windows
-                //     .get_mut(&window_id)
-                //     .expect("Something failed");
                 let now = Instant::now();
                 if let Some(last_resize) = self.last_resize {
                     if now.duration_since(last_resize).as_millis() < RESIZE_DEBOUNCE_TIME {
@@ -979,59 +1035,55 @@ fn main() {
     // menu.init_for_nsapp();
 
     let config: Vec<WidgetConfiguration> = vec![
-        WidgetConfiguration {
-            id: NanoId("controls".to_string()),
-            title: "Controls".to_string(),
-            refresh_interval: 0,
-            widget_type: WidgetType::File(FileConfiguration {
-                html_file: include_str!("../../react-ui/dist/index.html").to_string(),
-            }),
-        },
-        WidgetConfiguration {
-            id: NanoId("Viewer".to_string()),
-            title: "Viewer".to_string(),
-            refresh_interval: 240,
-            widget_type: WidgetType::File(FileConfiguration {
-                html_file: include_str!("../assets/simple_viewer.html").to_string(),
-            }),
-        },
-        WidgetConfiguration {
-            id: NanoId("SPY".to_string()),
-            title: "SPY".to_string(),
-            refresh_interval: 240,
-            widget_type: WidgetType::Source(SourceConfiguration {
+        WidgetConfiguration::new()
+            .with_id(NanoId("controls".to_string()))
+            .with_title("Controls".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../../react-ui/dist/index.html").to_string(),
+            }))
+            .with_level(Level::Normal   ),
+        WidgetConfiguration::new()
+            .with_id(NanoId("Viewer".to_string()))
+            .with_title("Viewer".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../assets/simple_viewer.html").to_string(),
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_id(NanoId("SPY".to_string()))
+            .with_title("SPY".to_string())
+            .with_widget_type(WidgetType::Source(SourceConfiguration {
                 url: "https://finance.yahoo.com/quote/SPY/".to_string(),
                 element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
                 refresh_interval: 240,
-            }),
-        },
-        WidgetConfiguration {
-            id: NanoId("NVDA".to_string()),
-            title: "NVDA".to_string(),
-            refresh_interval: 240,
-            widget_type: WidgetType::Source(SourceConfiguration {
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_id(NanoId("NVDA".to_string()))
+            .with_title("NVDA".to_string())
+            .with_widget_type(WidgetType::Source(SourceConfiguration {
                 url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
                 element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
                 refresh_interval: 240,
-            }),
-        },
-        WidgetConfiguration {
-            id: NanoId("test".to_string()),
-            title: "test".to_string(),
-            refresh_interval: 240,
-            widget_type: WidgetType::Url(UrlConfiguration {
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_id(NanoId("test".to_string()))
+            .with_title("test".to_string())
+            .with_widget_type(WidgetType::Url(UrlConfiguration {
                 url: "http://localhost:3000/test".to_string(),
-            }),
-        },
-        WidgetConfiguration {
-            id: NanoId("from vite server".to_string()),
-            title: "from vite server".to_string(),
-            refresh_interval: 240,
-            widget_type: WidgetType::Url(UrlConfiguration {
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_id(NanoId("from vite server".to_string()))
+            .with_title("from vite server".to_string())
+            .with_widget_type(WidgetType::Url(UrlConfiguration {
                 url: "http://localhost:5173".to_string(),
-            }),
-        },
+            }))
+            .with_level(Level::AlwaysOnTop),
     ];
+
+    info!("Debug Config: {:?}", config.len());
 
     let proxy_clone = event_loop_proxy.clone();
     let proxy_clone_muda = event_loop_proxy.clone();
@@ -1040,10 +1092,12 @@ fn main() {
         proxy_clone_muda.send_event(UserEvent::MenuEvent(event));
     }));
     let db = Arc::new(Mutex::new(Database::new()));
-
     {
         let mut db = db.lock().unwrap();
-        db.insert_widget_configuration(config);
+        match db.insert_widget_configuration(config) {
+            Ok(_) => info!("Inserted widget configurations"),
+            Err(e) => error!("Error inserting widget configurations: {:?}", e),
+        }
     }
 
     let mut app = App {
@@ -1059,46 +1113,47 @@ fn main() {
         menu,
     };
 
-    let db_clone = db.clone();
-    std::thread::spawn(move || {
-        info!("Starting scraping thread");
-        let mut min_refresh_interval = std::time::Duration::from_secs(4);
-        // let mut last_refresh = HashMap::new();
-        loop {
-            std::thread::sleep(min_refresh_interval);
-            {
-                let mut widget_configs = vec![];
-                {
-                    let mut db = db_clone.lock().expect("Something failed");
-                    let views = db.get_configuration().expect("Something failed");
-                    widget_configs.extend(views);
-                }
-                info!(
-                    "Scraping widget configs: {:?}",
-                    widget_configs
-                        .iter()
-                        .map(|c| c.id.0.clone())
-                        .collect::<Vec<_>>()
-                );
-                for config in widget_configs.iter_mut() {
-                    // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
-                    match &config.widget_type {
-                        WidgetType::Source(source_config) => {
-                            proxy_clone
-                                .send_event(UserEvent::Scrape(
-                                    config.id.clone(),
-                                    source_config.clone(),
-                                ))
-                                .expect("Something failed");
-                        }
-                        _ => {
-                            info!("Widget type not handled...");
-                        }
-                    };
-                }
-            }
-        }
-    });
+    // scraping thread
+    // let db_clone = db.clone();
+    // std::thread::spawn(move || {
+    //     info!("Starting scraping thread");
+    //     let mut min_refresh_interval = std::time::Duration::from_secs(4);
+    //     // let mut last_refresh = HashMap::new();
+    //     loop {
+    //         std::thread::sleep(min_refresh_interval);
+    //         {
+    //             let mut widget_configs = vec![];
+    //             {
+    //                 let mut db = db_clone.lock().expect("Something failed");
+    //                 let views = db.get_configuration().expect("Something failed");
+    //                 widget_configs.extend(views);
+    //             }
+    //             info!(
+    //                 "Scraping widget configs: {:?}",
+    //                 widget_configs
+    //                     .iter()
+    //                     .map(|c| c.id.0.clone())
+    //                     .collect::<Vec<_>>()
+    //             );
+    //             for config in widget_configs.iter_mut() {
+    //                 // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
+    //                 match &config.widget_type {
+    //                     WidgetType::Source(source_config) => {
+    //                         proxy_clone
+    //                             .send_event(UserEvent::Scrape(
+    //                                 config.id.clone(),
+    //                                 source_config.clone(),
+    //                             ))
+    //                             .expect("Something failed");
+    //                     }
+    //                     _ => {
+    //                         info!("Widget type not handled...");
+    //                     }
+    //                 };
+    //             }
+    //         }
+    //     }
+    // });
 
     thread::spawn(move || {
         let rt = Runtime::new().unwrap();
