@@ -3,7 +3,6 @@ use axum::{
     routing::{get, get_service},
     Json, Router,
 };
-use element_extractor::Extractor;
 use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
@@ -445,7 +444,7 @@ struct App {
     all_windows: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
-    clipboard: arboard::Clipboard,
+    // clipboard: arboard::Clipboard,
 }
 
 struct WidgetView {
@@ -895,6 +894,7 @@ impl ApplicationHandler<UserEvent> for App {
                 .map(|(id, widget)| (id, widget.options.title.clone()))
                 .collect::<Vec<(&WindowId, String)>>()
         );
+
         info!("Window and webviews created successfully");
     }
 
@@ -1041,7 +1041,7 @@ fn main() {
             .with_widget_type(WidgetType::File(FileConfiguration {
                 html: include_str!("../../react-ui/dist/index.html").to_string(),
             }))
-            .with_level(Level::Normal   ),
+            .with_level(Level::Normal),
         // WidgetConfiguration::new()
         //     .with_id(NanoId("Viewer".to_string()))
         //     .with_title("Viewer".to_string())
@@ -1075,20 +1075,20 @@ fn main() {
         //         refresh_interval: 1000,
         //     }))
         //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_id(NanoId("from vite server".to_string()))
-        //     .with_title("from vite server".to_string())
-        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
-        //         url: "http://localhost:5173".to_string(),
-        //         refresh_interval: 1000,
-        //     }))
-            .with_level(Level::AlwaysOnTop),
         WidgetConfiguration::new()
-            .with_title("New Widget".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../assets/NewWidgetForm.html").to_string(),
+            .with_id(NanoId("from vite server".to_string()))
+            .with_title("from vite server".to_string())
+            .with_widget_type(WidgetType::Url(UrlConfiguration {
+                url: "http://localhost:5173".to_string(),
+                refresh_interval: 1000,
             }))
-            .with_level(Level::AlwaysOnTop),
+            .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_title("New Widget".to_string())
+        //     .with_widget_type(WidgetType::File(FileConfiguration {
+        //         html: include_str!("../assets/NewWidgetForm.html").to_string(),
+        //     }))
+        //     .with_level(Level::AlwaysOnTop),
     ];
 
     info!("Debug Config: {:?}", config.len());
@@ -1117,7 +1117,7 @@ fn main() {
         db: db.clone(),
         proxy: Arc::new(Mutex::new(event_loop_proxy)),
         last_resize: None,
-        clipboard: arboard::Clipboard::new().unwrap(),
+        // clipboard: arboard::Clipboard::new().unwrap(),
         menu,
     };
 
