@@ -37,9 +37,9 @@ use winit::{
 };
 
 use wry::{
-    dpi::{LogicalPosition, LogicalSize},
+    dpi::{LogicalPosition, LogicalSize, Position},
     http::Response,
-    PageLoadEvent, Rect, WebView, WebViewBuilder,
+    PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
 };
 
 use rusqlite::{
@@ -48,13 +48,7 @@ use rusqlite::{
     ToSql,
 };
 
-// pub const WEBVIEW_HEIGHT: u32 = 200;
-// pub const WEBVIEW_WIDTH: u32 = 50;
-// pub const CONTROL_PANEL_HEIGHT: u32 = 40;
-// pub const CONTROL_PANEL_WIDTH: u32 = 50;
-pub const WINDOW_WIDTH: u32 = 320;
-pub const WINDOW_HEIGHT: u32 = 240;
-pub const RESIZE_DEBOUNCE_TIME: u128 = 100;
+pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
@@ -114,6 +108,13 @@ struct WidgetConfiguration {
     level: Level,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct CreateWidgetRequest {
+    url: String,
+    level: Level,
+    refresh_interval: Seconds,
+}
+
 trait SqliteDetails {
     // fn to_sql(&self) -> rusqlite::Result<ToSqlOutput>;
     // fn from_sql(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self>;
@@ -151,6 +152,7 @@ impl WidgetConfiguration {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
 enum Level {
     AlwaysOnTop,
     Normal,
@@ -173,11 +175,7 @@ impl FromSql for WidgetType {
 
 impl ToSql for Level {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-        let value = match self {
-            Level::AlwaysOnTop => "AlwaysOnTop",
-            Level::Normal => "Normal",
-            Level::AlwaysOnBottom => "AlwaysOnBottom",
-        };
+        let value = serde_json::to_string(self).unwrap();
         Ok(ToSqlOutput::from(value))
     }
 }
@@ -466,7 +464,8 @@ struct ElementView {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ControlMessage {
-    CreateWidget(WidgetConfiguration),
+    CreateWidget(CreateWidgetRequest),
+    // CreateWidget(WidgetConfiguration),
     Refresh(NanoId),
     Remove(NanoId),
     UpdateRefreshInterval(Seconds),
@@ -688,13 +687,11 @@ JSON.stringify({
         &mut self,
         event_loop: &ActiveEventLoop,
         widget_config: WidgetConfiguration,
-        size: LogicalSize<u32>,
+        // size: LogicalSize<u32>,
     ) {
         // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         // event_loop.set_allows_automatic_window_tabbing(enabled);
         let window_attributes = Window::default_attributes()
-            // .with_window_level(WindowLevel::AlwaysOnTop)
-            // .with_inner_size(size)
             .with_inner_size(self.current_size)
             .with_transparent(true)
             .with_blur(true)
@@ -720,8 +717,8 @@ JSON.stringify({
             )
             .expect("Something failed");
         let scale_factor = new_window.scale_factor();
-        let form_size = new_window.inner_size().to_logical::<u32>(scale_factor);
-        self.current_size = form_size;
+        // let form_size = new_window.inner_size().to_logical::<u32>(scale_factor);
+        // self.current_size = form_size;
         let proxy_clone = Arc::clone(&self.proxy);
 
         let webview = match &widget_config.widget_type {
@@ -729,7 +726,8 @@ JSON.stringify({
                 let webview = WebViewBuilder::new()
                     .with_bounds(Rect {
                         position: LogicalPosition::new(0, 0).into(),
-                        size: form_size.into(),
+                        size: self.current_size.into(),
+                        // size: LogicalSize::new(600, 240).into(),
                     })
                     // .with_initialization_script(
                     //     include_str!("../assets/init_script.js")
@@ -754,10 +752,16 @@ JSON.stringify({
                 Some(webview)
             }
             WidgetType::Source(source_config) => {
+                let updated_url = if source_config.url.starts_with("http") {
+                    source_config.url.clone()
+                } else {
+                    format!("https://{}", source_config.url)
+                };
+                info!("Creating source widget with url: {}", updated_url);
                 let webview = WebViewBuilder::new()
                     .with_bounds(Rect {
                         position: LogicalPosition::new(0, 0).into(),
-                        size: size.into(),
+                        size: self.current_size.into(),
                     })
                     .with_initialization_script(
                         // include_str!("../assets/init_script.js")
@@ -770,7 +774,7 @@ JSON.stringify({
                         .replace("$widget_id", &widget_config.id.0)
                         .as_str(),
                     )
-                    .with_url(source_config.url.clone())
+                    .with_url(updated_url)
                     // .with_html(file_config.html_file.as_str())
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
@@ -780,8 +784,21 @@ JSON.stringify({
                 Some(webview)
             }
             WidgetType::Url(url_config) => {
+                let updated_url = if url_config.url.starts_with("http") {
+                    url_config.url.clone()
+                } else {
+                    format!("https://{}", url_config.url)
+                };
+                info!("Creating url widget with url: {}", updated_url);
                 let webview = WebViewBuilder::new()
-                    .with_url(url_config.url.clone())
+                    .with_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: self.current_size.into(),
+                    })
+                    .with_traffic_light_inset(wry::dpi::Position::Logical(LogicalPosition::new(
+                        0.0, 0.0,
+                    )))
+                    .with_url(updated_url)
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
@@ -852,7 +869,7 @@ impl AppWebView {
 #[derive(Debug)]
 enum UserEvent {
     MenuEvent(muda::MenuEvent),
-    CreateWidget(WidgetConfiguration),
+    CreateWidget(CreateWidgetRequest),
     Refresh(NanoId),
     Scrape(NanoId, SourceConfiguration),
     RemoveWebView(NanoId),
@@ -875,7 +892,7 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
-        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+        // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let mut widgets = vec![];
         {
             let mut db = self.db.lock().expect("Something failed");
@@ -884,7 +901,7 @@ impl ApplicationHandler<UserEvent> for App {
 
         info!("Found {} widgets", widgets.len());
         for widget_config in widgets {
-            self.create_widget(event_loop, widget_config, size);
+            self.create_widget(event_loop, widget_config);
         }
         info!(
             "Widgets: {:?}",
@@ -998,7 +1015,13 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
-                self.create_widget(event_loop, widget_options, size);
+                let widget_config = WidgetConfiguration::new()
+                    .with_widget_type(WidgetType::Url(UrlConfiguration {
+                        url: widget_options.url,
+                        refresh_interval: widget_options.refresh_interval,
+                    }))
+                    .with_level(widget_options.level);
+                self.create_widget(event_loop, widget_config);
             }
             _ => {
                 info!("Unknown event: {:?}", event);
@@ -1109,7 +1132,7 @@ fn main() {
     }
 
     let mut app = App {
-        current_size: LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT),
+        current_size: LogicalSize::new(320, 240),
         current_modifiers: Modifiers::default(),
         all_windows: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),

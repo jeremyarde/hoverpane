@@ -22,6 +22,15 @@ export default function WidgetForm() {
         : 0,
     };
     console.log("Form submitted:", data);
+    window.ipc.postMessage(
+      JSON.stringify({
+        createwidget: {
+          url: data.url,
+          level: data.level,
+          refresh_interval: data.refresh_interval,
+        },
+      })
+    );
   };
 
   const handleReset = (event: React.FormEvent<HTMLFormElement>) => {
@@ -29,15 +38,15 @@ export default function WidgetForm() {
   };
 
   const inputClass =
-    "w-full px-3 h-10 bg-[#FDFD96] border-[3px] border-black text-xl focus:outline-none appearance-none";
+    "w-full px-2 h-8 bg-[#FDFD96] border-[3px] border-black text-lg focus:outline-none appearance-none";
   const labelClass =
-    "block w-full bg-[#FF90BC] h-10 leading-10 border-x-[3px] border-t-[3px] border-black text-center font-black text-xl uppercase";
+    "block w-full bg-[#FF90BC] h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase";
 
   return (
-    <div className="p-4 max-w-xl mx-auto">
-      <div className="shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-        <div className="bg-[#FF90BC] h-16 flex items-center justify-center border-b-[3px] border-x-[3px] border-t-[3px] border-black">
-          <h2 className="text-3xl font-black text-center uppercase tracking-[0.2em]">
+    <div className="p-2 max-w-md mx-auto">
+      <div className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <div className="bg-[#FF90BC] h-12 flex justify-center border-b-[3px] border-x-[3px] border-t-[3px] border-black">
+          <h2 className="text-2xl font-black text-center uppercase tracking-[0.2em]">
             Create Widget
           </h2>
         </div>
@@ -96,13 +105,13 @@ export default function WidgetForm() {
           <div className="flex justify-end bg-[#FF90BC] border-t-[3px] border-x-[3px] border-b-[3px] border-black">
             <button
               type="reset"
-              className="h-12 px-8 text-xl font-black bg-[#98EECC] border-l-[3px] border-black uppercase hover:bg-[#7DCCAA] active:bg-[#98EECC] transition-colors"
+              className="h-10 px-6 text-lg font-black bg-[#98EECC] border-l-[3px] border-black uppercase hover:bg-[#7DCCAA] active:bg-[#98EECC] transition-colors"
             >
               Reset
             </button>
             <button
               type="submit"
-              className="h-12 px-8 text-xl font-black bg-[#A7D2CB] border-l-[3px] border-black uppercase hover:bg-[#86B1AA] active:bg-[#A7D2CB] transition-colors"
+              className="h-10 px-6 text-lg font-black bg-[#A7D2CB] border-l-[3px] border-black uppercase hover:bg-[#86B1AA] active:bg-[#A7D2CB] transition-colors"
             >
               Create Widget
             </button>
