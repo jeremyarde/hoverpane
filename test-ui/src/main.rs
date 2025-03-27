@@ -1106,12 +1106,6 @@ fn main() {
                 refresh_interval: 1000,
             }))
             .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_title("New Widget".to_string())
-        //     .with_widget_type(WidgetType::File(FileConfiguration {
-        //         html: include_str!("../assets/NewWidgetForm.html").to_string(),
-        //     }))
-        //     .with_level(Level::AlwaysOnTop),
     ];
 
     info!("Debug Config: {:?}", config.len());

@@ -45,12 +45,6 @@ export default function WidgetForm() {
   return (
     <div className="p-2 max-w-md mx-auto">
       <div className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-        <div className="bg-[#FF90BC] h-12 flex justify-center border-b-[3px] border-x-[3px] border-t-[3px] border-black">
-          <h2 className="text-2xl font-black text-center uppercase tracking-[0.2em]">
-            Create Widget
-          </h2>
-        </div>
-
         <form onSubmit={handleSubmit} onReset={handleReset}>
           {/* URL Field */}
           <div>
@@ -102,16 +96,16 @@ export default function WidgetForm() {
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end bg-[#FF90BC] border-t-[3px] border-x-[3px] border-b-[3px] border-black">
+          <div className="flex w-full bg-[#FF90BC]">
             <button
               type="reset"
-              className="h-10 px-6 text-lg font-black bg-[#98EECC] border-l-[3px] border-black uppercase hover:bg-[#7DCCAA] active:bg-[#98EECC] transition-colors"
+              className="h-10 w-1/3 text-lg font-black bg-[#98EECC] border-l-[3px] border-black uppercase hover:bg-[#7DCCAA] active:bg-[#98EECC] transition-colors"
             >
               Reset
             </button>
             <button
               type="submit"
-              className="h-10 px-6 text-lg font-black bg-[#A7D2CB] border-l-[3px] border-black uppercase hover:bg-[#86B1AA] active:bg-[#A7D2CB] transition-colors"
+              className="h-10 w-2/3 text-lg font-black bg-[#A7D2CB] border-l-[3px] border-black uppercase hover:bg-[#86B1AA] active:bg-[#A7D2CB] transition-colors"
             >
               Create Widget
             </button>
