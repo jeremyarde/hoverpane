@@ -9,7 +9,7 @@ use jiff;
 use log::{debug, error, info, warn};
 use muda::{
     accelerator::{Accelerator, Modifiers},
-    Menu, MenuItem, PredefinedMenuItem, Submenu,
+    Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -447,6 +447,7 @@ WHERE rn = 1"#,
 }
 
 struct App {
+    tray_menu_quit_id: String,
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
@@ -938,10 +939,6 @@ impl ApplicationHandler<UserEvent> for App {
                 let webview_id = self.window_id_to_webview_id.remove(&window_id).unwrap();
                 self.widget_id_to_window_id.remove(&webview_id);
                 self.all_windows.remove(&window_id);
-                // self.db
-                //     .lock()
-                //     .unwrap()
-                //     .remove_widget_configuration(webview_id);
             }
             WindowEvent::RedrawRequested => {}
             WindowEvent::Resized(size) => {
@@ -984,9 +981,9 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
     }
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, userevent: UserEvent) {
         let size = self.current_size.clone();
-        match event {
+        match userevent {
             UserEvent::Refresh(id) => {
                 info!("Refresh event received for index {}", id);
                 self.refresh_webview(id);
@@ -1008,17 +1005,6 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Minimizing webview at index {}", id);
                 self.minimize_webview(id);
             }
-            // UserEvent::ToggleElementView(nano_id) => {
-            //     info!("UserEvent: Toggling element view for {}", nano_id);
-            //     if let Some(mut element_view) = self.element_views.get_mut(&nano_id) {
-            //         element_view.visible = !element_view.visible;
-            //         if element_view.visible {
-            //             element_view.webview.set_visible(true);
-            //         } else {
-            //             element_view.webview.set_visible(false);
-            //         }
-            //     }
-            // }
             UserEvent::Scrape(id, source_config) => {
                 info!("Scraping webview at index {}", id);
                 self.scrape_webview(id, source_config);
@@ -1033,9 +1019,24 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_level(widget_options.level);
                 self.create_widget(event_loop, widget_config);
             }
+            UserEvent::TrayIconEvent(trayevent) => match trayevent {
+                _ => {
+                    info!("Unhandled Tray icon event: {:?}", trayevent);
+                }
+            },
+            UserEvent::MenuEvent(menu_event) => {
+                info!("Menu event: {:?}", menu_event);
+                let id = menu_event.id();
+                info!("Menu id: {:?}", id);
+                if id.0 == self.tray_menu_quit_id {
+                    info!("Quitting application");
+                    event_loop.exit();
+                } else {
+                    info!("Unhandled Menu event: {:?}", menu_event);
+                }
+            }
             _ => {
-                info!("Unknown event: {:?}", event);
-                // todo!("User event not handled: {:?}", event);
+                info!("Unknown event: {:?}", userevent);
             }
         }
     }
@@ -1138,10 +1139,17 @@ fn main() {
         .expect("Failed to load icon")
         .into_rgba8();
     let (width, height) = img.dimensions();
-    // let icon = muda::Icon::from_rgba(img.into_raw(), width, height).unwrap();
+
+    let tray_menu = tray_icon::menu::Menu::new();
+    let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
+    tray_menu.append(&quit_item).unwrap();
+
+    let tray_quit_id = quit_item.id().0.clone();
+
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("system-tray - tray icon library!")
         .with_icon(tray_icon::Icon::from_rgba(img.into_raw(), width, height).unwrap())
+        .with_menu(Box::new(tray_menu))
         .build()
         .unwrap();
     let tray_icon_proxy = proxy_clone.clone();
@@ -1160,6 +1168,7 @@ fn main() {
     }
 
     let mut app = App {
+        tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
         // current_size: LogicalSize::new(320, 240),
         current_modifiers: Modifiers::default(),
