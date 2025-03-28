@@ -13,6 +13,7 @@ env_logger = "0.10"
 reqwest = { version = "0.12.13", features = ["blocking"] }
 scraper = "0.23.1"
 dioxus = { version = "0.6.3", features = ["desktop"] }
+image = "0.24"
 
 [profile]
 

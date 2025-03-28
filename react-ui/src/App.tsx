@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 // import { createFormHook, createFormHookContexts } from "@tanstack/react-form";
 import WidgetForm from "./form";
 
-import "./App.css";
+// import "./App.css";
 
 interface RustMessage {
   data_key: string;

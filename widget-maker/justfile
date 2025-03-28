@@ -1,0 +1,15 @@
+release:
+    cargo build --release
+
+run:
+	RUST_LOG=info cargo run
+
+package:
+    mkdir -p widget-maker.app/Contents/MacOS
+    mkdir -p widget-maker.app/Contents/Resources
+    cp target/release/widget-maker widget-maker.app/Contents/MacOS/
+    cp build_assets/Info.plist widget-maker.app/Contents/
+    mkdir dmg
+    cp -R widget-maker.app dmg/
+    hdiutil create -volname "widget-maker" -srcfolder dmg -ov -format UDZO widget-maker.dmg
+    rm -rf dmg

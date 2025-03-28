@@ -38,7 +38,7 @@ export default function WidgetForm() {
   };
 
   const inputClass =
-    "w-full px-2 h-8 bg-[#FDFD96] border-[3px] border-black text-lg focus:outline-none appearance-none";
+    "w-full px-4 h-8 bg-[#FDFD96] border-[3px] border-black text-lg focus:outline-none appearance-none";
   const labelClass =
     "block w-full bg-[#FF90BC] h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase";
 
@@ -96,7 +96,7 @@ export default function WidgetForm() {
           </div>
 
           {/* Form Actions */}
-          <div className="flex w-full bg-[#FF90BC]">
+          <div className="flex w-full bg-[#FF90BC] border-b-[3px] border-black">
             <button
               type="reset"
               className="h-10 w-1/3 text-lg font-black bg-[#98EECC] border-l-[3px] border-black uppercase hover:bg-[#7DCCAA] active:bg-[#98EECC] transition-colors"
@@ -107,7 +107,7 @@ export default function WidgetForm() {
               type="submit"
               className="h-10 w-2/3 text-lg font-black bg-[#A7D2CB] border-l-[3px] border-black uppercase hover:bg-[#86B1AA] active:bg-[#A7D2CB] transition-colors"
             >
-              Create Widget
+              Create
             </button>
           </div>
         </form>

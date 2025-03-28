@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent !important;
+        -webkit-app-region: drag;
+        height: 100%;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        -webkit-app-region: no-drag;
+        background: transparent !important;
+      }
+
+      .hidden-button {
+        width: 50px;
+        height: 100%;
+        opacity: 0.3;
+        transition: all 0.2s ease-in-out;
+        padding: 6px 12px;
+        border: none;
+        outline: none;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(217, 34, 34, 0.8);
+        cursor: pointer;
+        font-size: 16px;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        -webkit-app-region: no-drag;
+      }
+
+      .hidden-button:hover {
+        opacity: 1;
+        background: rgba(217, 34, 34, 0.2) !important;
+        color: rgb(217, 34, 34);
+        /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); */
+      }
+
+      /* Add hover effect to the entire controls bar */
+      .controls:hover .hidden-button {
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button class="hidden-button" onclick="refresh()">⟳</button>
+      <button class="hidden-button" onclick="move('up')">↑</button>
+      <button class="hidden-button" onclick="move('down')">↓</button>
+      <button class="hidden-button" onclick="remove()">X</button>
+      <button class="hidden-button" id="minimize-button" onclick="minimize()">
+        Hide
+      </button>
+      <button
+        class="hidden-button"
+        id="toggle-element-view"
+        onclick="toggleElementView()"
+      >
+        Element
+      </button>
+    </div>
+    <script>
+      let hidden = false;
+
+      function refresh() {
+        window.ipc.postMessage(
+          JSON.stringify({
+            refresh: "$id",
+          })
+        );
+      }
+      function remove() {
+        window.ipc.postMessage(
+          JSON.stringify({
+            remove: "$id",
+          })
+        );
+      }
+      function move(direction) {
+        window.ipc.postMessage(
+          JSON.stringify({
+            move: ["$id", direction],
+          })
+        );
+      }
+      function minimize() {
+        hidden = !hidden;
+        const minimizeButton = document.getElementById("minimize-button");
+        minimizeButton.textContent = hidden ? "Show" : "Hide";
+        window.ipc.postMessage(
+          JSON.stringify({
+            minimize: "$id",
+          })
+        );
+      }
+      function toggleElementView() {
+        window.ipc.postMessage(
+          JSON.stringify({
+            toggleelementview: "$id",
+          })
+        );
+      }
+    </script>
+  </body>
+</html>

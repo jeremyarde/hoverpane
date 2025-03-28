@@ -1,0 +1,29 @@
+[package]
+name = "widget-maker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wry = { version = "0.50.4", features = ["protocol", "transparent", "os-webview"] }
+winit = "0.30.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.10"
+# parking_lot = "0.12"
+# once_cell = "1.19"
+jiff = { version = "0.2.4", features = ["serde"] }
+# element-extractor = { path = "../element-extractor" }
+nanoid = { path = "../../nanoid" }
+rusqlite = { version = "0.34.0", features = ["bundled"] }
+tokio = { version = "1.44.1", features = ["full"] }
+axum = "0.8.1"
+tower-http = { version = "0.6.2", features = ["cors", "fs"] }
+http = "1.3.1"
+# arboard = "3.4.1"
+objc = "0.2.7"
+muda = "0.16.1"
+# eframe = "0.31.1"
+image = "0.24"
+tray-icon = "0.20.0"
+cocoa = "0.26.0"
