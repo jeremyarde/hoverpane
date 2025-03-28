@@ -3,14 +3,26 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>YourApp</string>
+    <string>Widget Maker</string>
     <key>CFBundleDisplayName</key>
-    <string>YourApp</string>
+    <string>Widget Maker</string>
     <key>CFBundleIdentifier</key>
-    <string>com.yourcompany.yourapp</string>
+    <string>com.jarde.widgetmaker</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
     <key>CFBundleExecutable</key>
-    <string>your_app</string>
+    <string>widget-maker</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.icns</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
 </dict>
 </plist>
