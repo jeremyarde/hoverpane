@@ -27,7 +27,7 @@ export default function WidgetForm() {
         createwidget: {
           url: data.url,
           level: data.level,
-          refresh_interval: data.refresh_interval,
+          // refresh_interval: data.refresh_interval,
         },
       })
     );
@@ -81,7 +81,7 @@ export default function WidgetForm() {
 
           {/* Refresh Interval Field */}
           <div>
-            <label htmlFor="refresh_interval" className={labelClass}>
+            {/* <label htmlFor="refresh_interval" className={labelClass}>
               Refresh Interval (ms)
             </label>
             <input
@@ -92,7 +92,7 @@ export default function WidgetForm() {
               min="0"
               placeholder="0"
               className={`${inputClass} border-b-[3px]`}
-            />
+            /> */}
           </div>
 
           {/* Form Actions */}

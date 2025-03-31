@@ -3,6 +3,7 @@ use axum::{
     routing::{get, get_service},
     Json, Router,
 };
+use db::db::Database;
 use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
@@ -55,6 +56,8 @@ use wry::{
     PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
 };
 
+mod db;
+
 use rusqlite::{
     self,
     types::{FromSql, ToSqlOutput},
@@ -71,48 +74,47 @@ pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separat
 #[serde(rename_all = "lowercase")]
 pub enum WidgetType {
     File(FileConfiguration),
-    Source(SourceConfiguration),
+    // Source(SourceConfiguration),
     Url(UrlConfiguration),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Modifier {
+    Scrape { selector: String },
+    Refresh {},
+}
+
+impl ToSql for Modifier {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+        let json = serde_json::to_string(self).unwrap();
+        Ok(ToSqlOutput::from(json))
+    }
+}
+
+impl FromSql for Modifier {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str().unwrap();
+        Ok(serde_json::from_str(value).unwrap())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub struct WidgetModifier {
+    id: String,
+    widget_id: NanoId,
+    modifier_type: Modifier,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct UrlConfiguration {
     url: String,
-    refresh_interval: Seconds,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct FileConfiguration {
     html: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-struct SourceConfiguration {
-    url: String,
-    element_selectors: Vec<String>,
-    refresh_interval: Seconds,
-}
-
-impl Default for SourceConfiguration {
-    fn default() -> Self {
-        Self {
-            url: "".to_string(),
-            element_selectors: vec![],
-            refresh_interval: 0,
-        }
-    }
-}
-
-impl FromSql for SourceConfiguration {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let value = value.as_str().unwrap();
-        Ok(SourceConfiguration {
-            url: value.to_string(),
-            element_selectors: vec![],
-            refresh_interval: value.to_string().parse().unwrap(),
-        })
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -140,7 +142,9 @@ impl WidgetConfiguration {
         Self {
             id: NanoId(nanoid_gen(8)),
             title: "".to_string(),
-            widget_type: WidgetType::Source(SourceConfiguration::default()),
+            widget_type: WidgetType::Url(UrlConfiguration {
+                url: "".to_string(),
+            }),
             level: Level::Normal,
         }
     }
@@ -259,190 +263,6 @@ impl FromSql for NanoId {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let id = value.as_str().unwrap();
         Ok(NanoId(id.to_string()))
-    }
-}
-
-struct Database {
-    // data: HashMap<String, Vec<Record>>, // table -> data????
-    connection: rusqlite::Connection,
-}
-
-impl Database {
-    fn new() -> Self {
-        let connection = rusqlite::Connection::open_in_memory().unwrap();
-        connection
-            .execute(
-                "CREATE TABLE test (
-                id INTEGER PRIMARY KEY,
-                window_id TEXT NOT NULL,
-                data TEXT NOT NULL
-            )",
-                (),
-            )
-            .unwrap();
-        connection
-            .execute(
-                "CREATE TABLE sites (
-                id TEXT PRIMARY KEY,
-                url TEXT NOT NULL,
-                title TEXT NOT NULL
-            )",
-                (),
-            )
-            .unwrap();
-        connection
-            .execute(
-                "CREATE TABLE elements (
-                id TEXT PRIMARY KEY,
-                site_id TEXT NOT NULL,
-                selector TEXT NOT NULL,
-                data_key TEXT NOT NULL
-            )",
-                (),
-            )
-            .unwrap();
-
-        connection
-            .execute(
-                "CREATE TABLE widgets (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                widget_type TEXT NOT NULL,
-                level TEXT NOT NULL
-            )",
-                (),
-            )
-            .unwrap();
-        Self { connection }
-    }
-
-    fn get_elements(&self) -> Result<Vec<MonitoredElement>, rusqlite::Error> {
-        let mut stmt = self.connection.prepare("SELECT * FROM elements")?;
-        let elements = stmt
-            .query_map([], |row| {
-                Ok(MonitoredElement {
-                    id: row.get(0)?,
-                    site_id: row.get(1)?,
-                    selector: row.get(2)?,
-                    data_key: row.get(3)?,
-                })
-            })?
-            .filter_map(|element| element.ok())
-            .collect();
-        Ok(elements)
-    }
-
-    fn get_configuration(&self) -> Result<Vec<WidgetConfiguration>, rusqlite::Error> {
-        let mut stmt = self.connection.prepare("SELECT * FROM widgets")?;
-        let configuration = stmt
-            .query_map([], |row| {
-                // info!("querying row: {:?}", row);
-                Ok(WidgetConfiguration {
-                    id: row.get(0)?,
-                    // url: row.get(1)?,
-                    title: row.get(1)?,
-                    widget_type: row.get(2)?,
-                    level: row.get(3)?,
-                })
-            })?
-            .filter_map(|configuration| {
-                if let Err(e) = &configuration {
-                    info!("Error mapping row: {:?}", e);
-                }
-                configuration.ok()
-            })
-            .collect();
-        Ok(configuration)
-    }
-
-    fn insert_widget_configuration(
-        &mut self,
-        configs: Vec<WidgetConfiguration>,
-    ) -> Result<(), rusqlite::Error> {
-        let mut stmt = self.connection.prepare(
-            "INSERT INTO widgets (id, title, widget_type, level) VALUES (?1, ?2, ?3, ?4)",
-        )?;
-        for config in configs {
-            info!("Inserting widget configuration: {:?}", config.id);
-            let res = stmt.execute([
-                config.id.0.as_str(),
-                config.title.as_str(),
-                serde_json::to_string(&config.widget_type).unwrap().as_str(),
-                match config.level {
-                    Level::AlwaysOnTop => "AlwaysOnTop",
-                    Level::Normal => "Normal",
-                    Level::AlwaysOnBottom => "AlwaysOnBottom",
-                },
-            ])?;
-            info!("Inserted widget configuration: {:?}", res);
-        }
-        Ok(())
-    }
-
-    fn get_sites(&self) -> Result<Vec<MonitoredSite>, rusqlite::Error> {
-        let mut stmt = self.connection.prepare("SELECT * FROM sites")?;
-        let sites = stmt
-            .query_map([], |row| {
-                Ok(MonitoredSite {
-                    id: row.get(0)?,
-                    site_id: row.get(1)?,
-                    url: row.get(2)?,
-                    title: row.get(3)?,
-                    refresh_interval: row.get(4)?,
-                })
-            })?
-            .filter_map(|site| site.ok())
-            .collect();
-        Ok(sites)
-    }
-
-    fn get_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
-        let mut stmt = self.connection.prepare("SELECT * FROM test")?;
-        let records = stmt
-            .query_map([], |row| {
-                info!("querying row: {:?}", row);
-                Ok(Record {
-                    id: row.get(0)?,
-                    window_id: row.get(1)?,
-                    data: row.get(2)?,
-                })
-            })?
-            .filter_map(|record| record.ok())
-            .collect();
-        Ok(records)
-    }
-
-    fn get_latest_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
-        info!("Getting latest data");
-        let mut stmt = self.connection.prepare(
-            r#"SELECT *
-FROM (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY window_id ORDER BY id DESC) AS rn
-    FROM test
-)
-WHERE rn = 1"#,
-        )?;
-        let data = stmt
-            .query_map([], |row| {
-                Ok(Record {
-                    id: row.get(0)?,
-                    window_id: row.get(1)?,
-                    data: row.get(2)?,
-                })
-            })?
-            .filter_map(|record| record.ok())
-            .collect();
-
-        Ok(data)
-    }
-
-    fn insert_data(&mut self, table: &str, insert_data: Record) -> Result<(), rusqlite::Error> {
-        info!("Inserting data into table: {}, {:?}", table, insert_data);
-        let mut stmt = self
-            .connection
-            .prepare("INSERT INTO test (window_id, data) VALUES (?1, ?2)")?;
-        stmt.execute([insert_data.window_id, insert_data.data])?;
-        Ok(())
     }
 }
 
@@ -602,7 +422,7 @@ impl App {
         todo!("Minimize not implemented");
     }
 
-    fn scrape_webview(&self, id: NanoId, source_config: SourceConfiguration) {
+    fn scrape_webview(&self, id: NanoId, element_selector: String) {
         info!("Scraping webview: {:?}", id);
         info!("Widget id to window id: {:?}", self.widget_id_to_window_id);
         info!("window to webview id: {:?}", self.window_id_to_webview_id);
@@ -661,14 +481,7 @@ JSON.stringify({
         );
 
         let script_content = script_content
-            .replace(
-                "$selector",
-                &source_config
-                    .element_selectors
-                    .get(0)
-                    .as_ref()
-                    .expect("Something failed"),
-            )
+            .replace("$selector", &element_selector)
             .replace("$id", &id.0);
 
         let result = widget_view
@@ -761,38 +574,38 @@ JSON.stringify({
                     .expect("Something failed");
                 Some(webview)
             }
-            WidgetType::Source(source_config) => {
-                let updated_url = if source_config.url.starts_with("http") {
-                    source_config.url.clone()
-                } else {
-                    format!("https://{}", source_config.url)
-                };
-                info!("Creating source widget with url: {}", updated_url);
-                let webview = WebViewBuilder::new()
-                    .with_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: self.current_size.into(),
-                    })
-                    .with_initialization_script(
-                        // include_str!("../assets/init_script.js")
-                        //     .replace("$widget_id", &widget.id.0)
-                        r#"
-                        window.WINDOW_ID = "$window_id  ";
-                        window.WIDGET_ID = "$widget_id";
-                        "#
-                        .replace("$window_id", &format!("{:?}", new_window.id()))
-                        .replace("$widget_id", &widget_config.id.0)
-                        .as_str(),
-                    )
-                    .with_url(updated_url)
-                    // .with_html(file_config.html_file.as_str())
-                    .with_ipc_handler(move |message| {
-                        App::ipc_handler(message.body(), proxy_clone.clone());
-                    })
-                    .build_as_child(&new_window)
-                    .expect("Something failed");
-                Some(webview)
-            }
+            // WidgetType::Source(source_config) => {
+            //     let updated_url = if source_config.url.starts_with("http") {
+            //         source_config.url.clone()
+            //     } else {
+            //         format!("https://{}", source_config.url)
+            //     };
+            //     info!("Creating source widget with url: {}", updated_url);
+            //     let webview = WebViewBuilder::new()
+            //         .with_bounds(Rect {
+            //             position: LogicalPosition::new(0, 0).into(),
+            //             size: self.current_size.into(),
+            //         })
+            //         .with_initialization_script(
+            //             // include_str!("../assets/init_script.js")
+            //             //     .replace("$widget_id", &widget.id.0)
+            //             r#"
+            //             window.WINDOW_ID = "$window_id  ";
+            //             window.WIDGET_ID = "$widget_id";
+            //             "#
+            //             .replace("$window_id", &format!("{:?}", new_window.id()))
+            //             .replace("$widget_id", &widget_config.id.0)
+            //             .as_str(),
+            //         )
+            //         .with_url(updated_url)
+            //         // .with_html(file_config.html_file.as_str())
+            //         .with_ipc_handler(move |message| {
+            //             App::ipc_handler(message.body(), proxy_clone.clone());
+            //         })
+            //         .build_as_child(&new_window)
+            //         .expect("Something failed");
+            //     Some(webview)
+            // }
             WidgetType::Url(url_config) => {
                 let updated_url = if url_config.url.starts_with("http") {
                     url_config.url.clone()
@@ -812,6 +625,17 @@ JSON.stringify({
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
+                    .with_initialization_script(
+                        // include_str!("../assets/init_script.js")
+                        //     .replace("$widget_id", &widget.id.0)
+                        r#"
+                        window.WINDOW_ID = "$window_id  ";
+                        window.WIDGET_ID = "$widget_id";
+                        "#
+                        .replace("$window_id", &format!("{:?}", new_window.id()))
+                        .replace("$widget_id", &widget_config.id.0)
+                        .as_str(),
+                    )
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -882,7 +706,7 @@ enum UserEvent {
     TrayIconEvent(tray_icon::TrayIconEvent),
     CreateWidget(CreateWidgetRequest),
     Refresh(NanoId),
-    Scrape(NanoId, SourceConfiguration),
+    Scrape(NanoId, String),
     RemoveWebView(NanoId),
     // ShowNewViewForm,
     MoveWebView(NanoId, Direction),
@@ -1014,7 +838,6 @@ impl ApplicationHandler<UserEvent> for App {
                 let widget_config = WidgetConfiguration::new()
                     .with_widget_type(WidgetType::Url(UrlConfiguration {
                         url: widget_options.url,
-                        refresh_interval: widget_options.refresh_interval,
                     }))
                     .with_level(widget_options.level);
                 self.create_widget(event_loop, widget_config);
@@ -1158,7 +981,7 @@ fn main() {
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
-    let db = Arc::new(Mutex::new(Database::new()));
+    let db = Arc::new(Mutex::new(db::db::Database::new()));
     {
         let mut db = db.lock().unwrap();
         match db.insert_widget_configuration(config) {
@@ -1183,46 +1006,46 @@ fn main() {
     };
 
     // scraping thread
-    // let db_clone = db.clone();
-    // std::thread::spawn(move || {
-    //     info!("Starting scraping thread");
-    //     let mut min_refresh_interval = std::time::Duration::from_secs(4);
-    //     // let mut last_refresh = HashMap::new();
-    //     loop {
-    //         std::thread::sleep(min_refresh_interval);
-    //         {
-    //             let mut widget_configs = vec![];
-    //             {
-    //                 let mut db = db_clone.lock().expect("Something failed");
-    //                 let views = db.get_configuration().expect("Something failed");
-    //                 widget_configs.extend(views);
-    //             }
-    //             info!(
-    //                 "Scraping widget configs: {:?}",
-    //                 widget_configs
-    //                     .iter()
-    //                     .map(|c| c.id.0.clone())
-    //                     .collect::<Vec<_>>()
-    //             );
-    //             for config in widget_configs.iter_mut() {
-    //                 // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
-    //                 match &config.widget_type {
-    //                     WidgetType::Source(source_config) => {
-    //                         proxy_clone
-    //                             .send_event(UserEvent::Scrape(
-    //                                 config.id.clone(),
-    //                                 source_config.clone(),
-    //                             ))
-    //                             .expect("Something failed");
-    //                     }
-    //                     _ => {
-    //                         info!("Widget type not handled...");
-    //                     }
-    //                 };
-    //             }
-    //         }
-    //     }
-    // });
+    let db_clone = db.clone();
+    std::thread::spawn(move || {
+        info!("Starting scraping thread");
+        let mut min_refresh_interval = std::time::Duration::from_secs(4);
+        // let mut last_refresh = HashMap::new();
+        loop {
+            std::thread::sleep(min_refresh_interval);
+            {
+                let mut widget_configs = vec![];
+                {
+                    let mut db = db_clone.lock().expect("Something failed");
+                    let views = db.get_configuration().expect("Something failed");
+                    widget_configs.extend(views);
+                }
+                info!(
+                    "Scraping widget configs: {:?}",
+                    widget_configs
+                        .iter()
+                        .map(|c| c.id.0.clone())
+                        .collect::<Vec<_>>()
+                );
+
+                // instead of going through the configs, we ought to grab different events from the db
+                // events including: scraping, refreshing, minimizing, etc.
+                for config in widget_configs.iter_mut() {
+                    // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
+                    match &config.widget_type {
+                        WidgetType::Url(url_config) => {
+                            proxy_clone
+                                .send_event(UserEvent::Refresh(config.id.clone()))
+                                .expect("Something failed");
+                        }
+                        _ => {
+                            info!("Widget type not handled...");
+                        }
+                    };
+                }
+            }
+        }
+    });
 
     thread::spawn(move || {
         let rt = Runtime::new().unwrap();
@@ -1317,16 +1140,6 @@ fn setup_menu() -> Menu {
     menu
 }
 
-// async fn get_widget(
-//     State(state): State<ApiState>,
-//     Path(id): Path<String>,
-// ) -> Json<WidgetConfiguration> {
-//     // let state = state.db.lock().unwrap();
-//     // let widget: WidgetConfiguration = state.get_widget(id).unwrap();
-//     // Json(widget)
-//     ServeFile::new(path)
-// }
-
 async fn get_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
     let state = state.db.lock().unwrap();
     let values: Vec<Record> = state.get_data().unwrap();
@@ -1353,7 +1166,7 @@ async fn get_elements(State(state): State<ApiState>) -> Json<Vec<MonitoredElemen
 
 #[derive(Clone)]
 struct ApiState {
-    db: Arc<Mutex<Database>>,
+    db: Arc<Mutex<db::db::Database>>,
 }
 
 #[cfg(test)]
