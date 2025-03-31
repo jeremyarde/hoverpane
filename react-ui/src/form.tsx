@@ -11,28 +11,33 @@ const defaultValues: WidgetSchema = {
 };
 
 export default function WidgetForm() {
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const data = {
       url: formData.get("url") as string,
       level: formData.get("level") as WidgetSchema["level"],
       title: formData.get("title") as string,
-      refresh_interval: formData.get("refresh_interval")
-        ? Number(formData.get("refresh_interval"))
-        : 0,
     };
     console.log("Form submitted:", data);
-    window.ipc.postMessage(
-      JSON.stringify({
-        createwidget: {
-          url: data.url,
-          level: data.level,
-          title: data.title ? data.title : "",
-          // refresh_interval: data.refresh_interval,
-        },
-      })
-    );
+
+    const res = await fetch("http://127.0.0.1:3000/widgets", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const widget = await res.json();
+    console.log("Widget created:", widget);
+
+    // window.ipc.postMessage(
+    //   JSON.stringify({
+    //     createwidget: {
+    //       url: data.url,
+    //       level: data.level,
+    //       title: data.title ? data.title : "",
+    //       // refresh_interval: data.refresh_interval,
+    //     },
+    //   })
+    // );
   };
 
   const handleReset = (event: React.FormEvent<HTMLFormElement>) => {

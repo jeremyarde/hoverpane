@@ -308,25 +308,6 @@ struct ElementView {
     visible: bool,
 }
 
-// These are messages that can be received and handled from the web page
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ControlMessage {
-    CreateWidget(CreateWidgetRequest),
-    // CreateWidget(WidgetConfiguration),
-    Refresh(NanoId),
-    Remove(NanoId),
-    UpdateRefreshInterval(Seconds),
-    Move(NanoId, Direction),
-    ExtractResult(ScrapedValue),
-    Minimize(NanoId),
-    ToggleElementView(NanoId),
-    // SelectedText { widget_id: NanoId, text: String },
-    // CopyText { widget_id: NanoId, text: String },
-    // PasteText { widget_id: NanoId },
-    // Extract(String, String),
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
@@ -369,61 +350,6 @@ impl App {
 
     fn remove_webview(&mut self, id: NanoId) {
         todo!("Remove not implemented");
-    }
-
-    fn ipc_handler(message: &str, event_proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>) {
-        info!("[ipc_handler] Received message: {:?}", message);
-        let message = serde_json::from_str::<ControlMessage>(message);
-
-        if let Err(e) = message {
-            error!("Error parsing message: {:?}", e);
-            return;
-        }
-        let message = message.unwrap();
-
-        let proxy = event_proxy.lock().expect("Something failed");
-        match message {
-            ControlMessage::CreateWidget(create_widget) => {
-                info!("Create widget: {:?}", create_widget);
-                proxy
-                    .send_event(UserEvent::CreateWidget(create_widget))
-                    .expect("Something failed");
-            }
-
-            ControlMessage::Refresh(id) => {
-                proxy
-                    .send_event(UserEvent::Refresh(id))
-                    .expect("Something failed");
-            }
-            ControlMessage::Remove(id) => {
-                proxy
-                    .send_event(UserEvent::RemoveWebView(id))
-                    .expect("Something failed");
-            }
-            ControlMessage::UpdateRefreshInterval(_) => todo!(),
-            ControlMessage::Move(id, direction) => {
-                proxy
-                    .send_event(UserEvent::MoveWebView(id, direction))
-                    .expect("Something failed");
-            }
-            ControlMessage::ExtractResult(result) => {
-                info!("Extracted result: {:?}", result);
-                proxy
-                    .send_event(UserEvent::ExtractResult(result))
-                    .expect("Something failed");
-            }
-            ControlMessage::Minimize(id) => {
-                proxy
-                    .send_event(UserEvent::Minimize(id))
-                    .expect("Something failed");
-            }
-            ControlMessage::ToggleElementView(nano_id) => {
-                info!("Toggling element view for {}", nano_id);
-                proxy
-                    .send_event(UserEvent::ToggleElementView(nano_id))
-                    .expect("Something failed");
-            }
-        }
     }
 
     fn move_webview(&mut self, id: NanoId, direction: Direction) {
@@ -579,9 +505,9 @@ JSON.stringify({
                         .as_str(),
                     )
                     .with_html(file_config.html.as_str())
-                    .with_ipc_handler(move |message| {
-                        App::ipc_handler(message.body(), proxy_clone.clone());
-                    })
+                    // .with_ipc_handler(move |message| {
+                    //     App::ipc_handler(message.body(), proxy_clone.clone());
+                    // })
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -634,9 +560,9 @@ JSON.stringify({
                         0.0, 0.0,
                     )))
                     .with_url(updated_url)
-                    .with_ipc_handler(move |message| {
-                        App::ipc_handler(message.body(), proxy_clone.clone());
-                    })
+                    // .with_ipc_handler(move |message| {
+                    //     App::ipc_handler(message.body(), proxy_clone.clone());
+                    // })
                     .with_initialization_script(
                         // include_str!("../assets/init_script.js")
                         //     .replace("$widget_id", &widget.id.0)
@@ -1243,24 +1169,4 @@ async fn add_widget_modifier(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_control_message() {
-        let message = ControlMessage::Refresh(NanoId("0".to_string()));
-        let json = serde_json::to_string(&message).expect("Something failed");
-        assert_eq!(json, r#"{"refresh":0}"#);
-
-        // Test move command
-        let message = ControlMessage::Move(NanoId("1".to_string()), Direction::Up);
-        let json = serde_json::to_string(&message).expect("Something failed");
-        assert_eq!(json, r#"{"move":[1,"up"]}"#);
-
-        // Test deserialization
-        let message: ControlMessage =
-            serde_json::from_str(r#"{"move":[1,"up"]}"#).expect("Something failed");
-        assert_eq!(
-            message,
-            ControlMessage::Move(NanoId("1".to_string()), Direction::Up)
-        );
-    }
 }
