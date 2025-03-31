@@ -231,6 +231,43 @@ WHERE rn = 1"#,
             ])?;
             Ok(())
         }
+
+        pub fn insert_widget_modifier(
+            &mut self,
+            widget_modifier: WidgetModifier,
+        ) -> Result<(), rusqlite::Error> {
+            let mut stmt = self.connection.prepare(
+                "INSERT INTO modifiers (id, widget_id, modifier_type) VALUES (?1, ?2, ?3)",
+            )?;
+            stmt.execute([
+                widget_modifier.id.as_str(),
+                &widget_modifier.widget_id.to_string(),
+                serde_json::to_string(&widget_modifier.modifier_type)
+                    .unwrap()
+                    .as_str(),
+            ])?;
+            Ok(())
+        }
+
+        pub fn get_widget_modifiers(
+            &self,
+            widget_id: &str,
+        ) -> Result<Vec<WidgetModifier>, rusqlite::Error> {
+            let mut stmt = self
+                .connection
+                .prepare("SELECT * FROM modifiers WHERE widget_id = ?1")?;
+            let modifiers = stmt
+                .query_map([widget_id], |row| {
+                    Ok(WidgetModifier {
+                        id: row.get(0)?,
+                        widget_id: row.get(1)?,
+                        modifier_type: row.get(2)?,
+                    })
+                })?
+                .filter_map(|modifier| modifier.ok())
+                .collect();
+            Ok(modifiers)
+        }
     }
 
     #[cfg(test)]

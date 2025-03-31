@@ -1,13 +1,13 @@
 type WidgetSchema = {
   url: string;
-  refresh_interval: number;
   level: "normal" | "alwaysontop" | "alwaysonbottom";
+  title: string;
 };
 
 const defaultValues: WidgetSchema = {
   level: "normal",
   url: "",
-  refresh_interval: 0,
+  title: "",
 };
 
 export default function WidgetForm() {
@@ -17,6 +17,7 @@ export default function WidgetForm() {
     const data = {
       url: formData.get("url") as string,
       level: formData.get("level") as WidgetSchema["level"],
+      title: formData.get("title") as string,
       refresh_interval: formData.get("refresh_interval")
         ? Number(formData.get("refresh_interval"))
         : 0,
@@ -27,6 +28,7 @@ export default function WidgetForm() {
         createwidget: {
           url: data.url,
           level: data.level,
+          title: data.title ? data.title : "",
           // refresh_interval: data.refresh_interval,
         },
       })
@@ -57,6 +59,20 @@ export default function WidgetForm() {
               name="url"
               defaultValue={defaultValues.url}
               placeholder="https://example.com"
+              className={`${inputClass} border-b-[3px]`}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="title" className={labelClass}>
+              Title
+            </label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              defaultValue={defaultValues.title}
+              placeholder="Title"
               className={`${inputClass} border-b-[3px]`}
               required
             />

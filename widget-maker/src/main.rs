@@ -1,6 +1,8 @@
 use axum::{
-    extract::{ConnectInfo, State},
-    routing::{get, get_service},
+    extract::{ConnectInfo, Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{get, get_service, post},
     Json, Router,
 };
 use db::db::Database;
@@ -26,6 +28,7 @@ use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     services::ServeFile,
 };
+use typeshare::typeshare;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -52,7 +55,6 @@ use tray_icon::{TrayIconBuilder, TrayIconEvent};
 
 use wry::{
     dpi::{LogicalPosition, LogicalSize, Position},
-    http::Response,
     PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
 };
 
@@ -71,7 +73,8 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", tag = "type", content = "content")]
+#[typeshare]
 pub enum WidgetType {
     File(FileConfiguration),
     // Source(SourceConfiguration),
@@ -79,7 +82,8 @@ pub enum WidgetType {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", tag = "type", content = "content")]
+#[typeshare]
 pub enum Modifier {
     Scrape { selector: String },
     Refresh {},
@@ -101,6 +105,7 @@ impl FromSql for Modifier {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[typeshare]
 pub struct WidgetModifier {
     id: String,
     widget_id: NanoId,
@@ -108,16 +113,19 @@ pub struct WidgetModifier {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
 struct UrlConfiguration {
     url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
 struct FileConfiguration {
     html: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
 struct WidgetConfiguration {
     id: NanoId,
     title: String,
@@ -126,10 +134,12 @@ struct WidgetConfiguration {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
 struct CreateWidgetRequest {
     url: String,
+    title: String,
     level: Level,
-    refresh_interval: Seconds,
+    // refresh_interval: Seconds,
 }
 
 trait SqliteDetails {
@@ -172,6 +182,7 @@ impl WidgetConfiguration {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[typeshare]
 enum Level {
     AlwaysOnTop,
     Normal,
@@ -227,6 +238,7 @@ pub struct ScrapedValue {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
+#[typeshare]
 pub struct NanoId(String);
 
 impl std::fmt::Display for NanoId {
@@ -1057,21 +1069,17 @@ fn main() {
             let cors_layer = CorsLayer::new()
                 .allow_methods(vec![http::Method::GET, http::Method::POST])
                 .allow_headers(vec![http::HeaderName::from_static("content-type")])
-                // .allow_origin(Origin::list(vec![
-                //     // "http://localhost:5173".parse().unwrap(),
-                //     // "http://127.0.0.1:5173".parse().unwrap(),
-                // ]))
                 .allow_origin(AllowOrigin::any());
             let router = Router::new()
                 .route("/values", get(get_values))
                 .route("/sites", get(get_sites))
                 .route("/elements", get(get_elements))
                 .route("/latest", get(get_latest_values))
+                .route("/widgets", get(get_widgets))
                 .route(
-                    "/test",
-                    get_service(ServeFile::new("../react-ui/dist/index.html")),
+                    "/widgets/{id}/modifiers",
+                    post(add_widget_modifier).get(get_widget_modifiers),
                 )
-                // .route("/values", post(update_value))
                 .layer(cors_layer)
                 .with_state(state);
 
@@ -1164,9 +1172,72 @@ async fn get_elements(State(state): State<ApiState>) -> Json<Vec<MonitoredElemen
     Json(elements)
 }
 
+async fn get_widgets(State(state): State<ApiState>) -> Json<Vec<WidgetConfiguration>> {
+    info!("get widgets called");
+    let state = state.db.lock().unwrap();
+    let widgets = state.get_configuration().unwrap();
+    info!("# widgets: {:?}", widgets.len());
+    Json(widgets)
+}
+
+async fn get_widget_modifiers(
+    State(state): State<ApiState>,
+    Path(widget_id): Path<String>,
+) -> impl IntoResponse {
+    info!("Getting modifiers for widget {}", widget_id);
+
+    let db = state.db.lock().unwrap();
+    match db.get_widget_modifiers(widget_id.as_str()) {
+        Ok(modifiers) => Json(modifiers).into_response(),
+        Err(e) => {
+            error!("Failed to get modifiers: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ApiState {
     db: Arc<Mutex<db::db::Database>>,
+}
+
+// #[derive(Debug, Deserialize)]
+// struct ModifierConfig {
+//     #[serde(rename = "type")]
+//     modifier_type: String,
+//     config: ModifierConfigDetails,
+// }
+
+// #[derive(Debug, Deserialize)]
+// struct ModifierConfigDetails {
+//     selector: Option<String>,
+//     interval: Option<i32>,
+// }
+
+async fn add_widget_modifier(
+    State(state): State<ApiState>,
+    Path(widget_id): Path<String>,
+    Json(modifier): Json<WidgetModifier>,
+) -> impl IntoResponse {
+    info!("Adding modifier to widget {}: {:?}", widget_id, modifier);
+
+    let widget_modifier = WidgetModifier {
+        id: nanoid_gen(8),
+        widget_id: NanoId(widget_id),
+        modifier_type: match modifier.modifier_type {
+            Modifier::Scrape { selector } => Modifier::Scrape { selector },
+            Modifier::Refresh {} => Modifier::Refresh {},
+        },
+    };
+
+    let mut db = state.db.lock().unwrap();
+    match db.insert_widget_modifier(widget_modifier) {
+        Ok(_) => StatusCode::CREATED.into_response(),
+        Err(e) => {
+            error!("Failed to add modifier: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 #[cfg(test)]
