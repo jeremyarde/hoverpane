@@ -1,43 +1,17 @@
 import { useState, useEffect } from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
-
-interface WidgetDetails {
-  id: string;
-  title: string;
-  widget_type: {
-    url?: { url: string };
-    file?: { html: string };
-  };
-  level: "alwaysontop" | "normal" | "alwaysonbottom";
-}
-
-interface WidgetModifier {
-  id: string;
-  widget_id: string;
-  modifier_type: {
-    scrape?: { selector: string };
-    refresh?: { interval: number };
-  };
-}
-
-interface ModifierConfig {
-  type: "scrape" | "refresh";
-  config: {
-    selector?: string;
-    interval?: number;
-  };
-}
+import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { Modifier, WidgetConfiguration, WidgetModifier } from "./types";
 
 export default function EditWidget() {
-  const [data, setData] = useState<WidgetDetails[]>([]);
+  const [data, setData] = useState<WidgetConfiguration[]>([]);
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modifierType, setModifierType] = useState<"scrape" | "refresh" | null>(
     null
   );
-  const [modifierConfig, setModifierConfig] = useState<
-    ModifierConfig["config"]
-  >({});
+  const [modifierConfig, setModifierConfig] = useState<Modifier | undefined>(
+    undefined
+  );
   const [expandedWidgets, setExpandedWidgets] = useState<Set<string>>(
     new Set()
   );
@@ -49,7 +23,7 @@ export default function EditWidget() {
     const fetchData = async () => {
       const response = await fetch("http://127.0.0.1:3000/widgets", {});
       const data = await response.json();
-      const widgetDetails = data.map((item: WidgetDetails) => ({
+      const widgetDetails = data.map((item: WidgetConfiguration) => ({
         id: item.id,
         title: item.title,
         widget_type: item.widget_type,
@@ -95,9 +69,10 @@ export default function EditWidget() {
   const handleSaveModifier = async () => {
     if (!selectedWidget || !modifierType) return;
 
-    const modifier: ModifierConfig = {
-      type: modifierType,
-      config: modifierConfig,
+    const modifier: WidgetModifier = {
+      id: "",
+      widget_id: selectedWidget,
+      modifier_type: modifierType as unknown as Modifier,
     };
 
     try {
@@ -128,21 +103,21 @@ export default function EditWidget() {
       setIsModalOpen(false);
       setSelectedWidget(null);
       setModifierType(null);
-      setModifierConfig({});
+      setModifierConfig(undefined);
     } catch (error) {
       console.error("Failed to save modifier:", error);
     }
   };
 
   const renderModifierDetails = (modifier: WidgetModifier) => {
-    if (modifier.modifier_type.scrape) {
+    if (modifier.modifier_type.type === "scrape") {
       return (
         <div className="text-sm text-gray-600">
-          Scrape: {modifier.modifier_type.scrape.selector}
+          Scrape: {modifier.modifier_type.content.selector}
         </div>
       );
     }
-    if (modifier.modifier_type.refresh) {
+    if (modifier.modifier_type.type === "refresh") {
       return <div className="text-sm text-gray-600">Auto Refresh</div>;
     }
     return null;
@@ -167,9 +142,9 @@ export default function EditWidget() {
                       className="text-gray-500 hover:text-gray-700"
                     >
                       {expandedWidgets.has(item.id) ? (
-                        <ChevronUpIcon className="h-5 w-5" />
-                      ) : (
                         <ChevronDownIcon className="h-5 w-5" />
+                      ) : (
+                        <ChevronRightIcon className="h-5 w-5" />
                       )}
                     </button>
                     <div>
@@ -251,7 +226,7 @@ export default function EditWidget() {
                   type="text"
                   className="w-full border rounded-md p-2"
                   placeholder=".my-element"
-                  value={modifierConfig.selector || ""}
+                  value={modifierConfig?.content.selector || ""}
                   onChange={(e) =>
                     setModifierConfig({
                       ...modifierConfig,
@@ -271,7 +246,7 @@ export default function EditWidget() {
                   type="number"
                   className="w-full border rounded-md p-2"
                   min="1"
-                  value={modifierConfig.interval || ""}
+                  value={modifierConfig?.content.interval || ""}
                   onChange={(e) =>
                     setModifierConfig({
                       ...modifierConfig,
