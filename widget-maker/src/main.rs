@@ -249,13 +249,6 @@ impl std::fmt::Display for NanoId {
     }
 }
 
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// struct Record {
-//     id: i32,
-//     window_id: String,
-//     data: String,
-// }
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct MonitoredSite {
     id: i32,
@@ -539,38 +532,6 @@ JSON.stringify({
                     .expect("Something failed");
                 Some(webview)
             }
-            // WidgetType::Source(source_config) => {
-            //     let updated_url = if source_config.url.starts_with("http") {
-            //         source_config.url.clone()
-            //     } else {
-            //         format!("https://{}", source_config.url)
-            //     };
-            //     info!("Creating source widget with url: {}", updated_url);
-            //     let webview = WebViewBuilder::new()
-            //         .with_bounds(Rect {
-            //             position: LogicalPosition::new(0, 0).into(),
-            //             size: self.current_size.into(),
-            //         })
-            //         .with_initialization_script(
-            //             // include_str!("../assets/init_script.js")
-            //             //     .replace("$widget_id", &widget.id.0)
-            //             r#"
-            //             window.WINDOW_ID = "$window_id  ";
-            //             window.WIDGET_ID = "$widget_id";
-            //             "#
-            //             .replace("$window_id", &format!("{:?}", new_window.id()))
-            //             .replace("$widget_id", &widget_config.id.0)
-            //             .as_str(),
-            //         )
-            //         .with_url(updated_url)
-            //         // .with_html(file_config.html_file.as_str())
-            //         .with_ipc_handler(move |message| {
-            //             App::ipc_handler(message.body(), proxy_clone.clone());
-            //         })
-            //         .build_as_child(&new_window)
-            //         .expect("Something failed");
-            //     Some(webview)
-            // }
             WidgetType::Url(url_config) => {
                 let updated_url = if url_config.url.starts_with("http") {
                     url_config.url.clone()
@@ -776,10 +737,6 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, userevent: UserEvent) {
         let size = self.current_size.clone();
         match userevent {
-            // UserEvent::Refresh(id) => {
-            //     info!("Refresh event received for index {}", id);
-            //     self.refresh_webview(id, 30); // Default 30 second interval
-            // }
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id);
                 self.remove_webview(id);
@@ -797,10 +754,6 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Minimizing webview at index {}", id);
                 self.minimize_webview(id);
             }
-            // UserEvent::Scrape(id, source_config) => {
-            //     info!("Scraping webview at index {}", id);
-            //     self.scrape_webview(id, source_config);
-            // }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
                 let widget_config = WidgetConfiguration::new()
