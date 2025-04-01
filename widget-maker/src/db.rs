@@ -263,6 +263,25 @@ WHERE rn = 1"#,
             Ok(())
         }
 
+        pub fn insert_widget_modifiers(
+            &mut self,
+            widget_modifiers: Vec<WidgetModifier>,
+        ) -> Result<(), rusqlite::Error> {
+            let mut stmt = self.connection.prepare(
+                "INSERT INTO modifiers (id, widget_id, modifier_type) VALUES (?1, ?2, ?3)",
+            )?;
+            for widget_modifier in widget_modifiers {
+                stmt.execute([
+                    widget_modifier.id.as_str(),
+                    &widget_modifier.widget_id.to_string(),
+                    serde_json::to_string(&widget_modifier.modifier_type)
+                        .unwrap()
+                        .as_str(),
+                ])?;
+            }
+            Ok(())
+        }
+
         pub fn get_widget_modifiers(
             &self,
             widget_id: &str,

@@ -410,6 +410,8 @@ window.ipc.postMessage(
       error: "Element not found",
       value: null,
       id: "$id",
+      widget_id: "$widget_id",
+      timestamp: new Date().toISOString(),
     }
   })
 );
@@ -423,6 +425,8 @@ JSON.stringify({
     error: null,
     value: scrape_value,
     id: "$id",
+    widget_id: "$widget_id",
+    timestamp: new Date().toISOString(),
   }
 })
 );
@@ -433,6 +437,8 @@ JSON.stringify({
   error: JSON.stringify(e.message),
   value: null,
   id: "$id",
+  widget_id: "$widget_id",
+  timestamp: new Date().toISOString(),
 }
 })
 );
@@ -443,7 +449,8 @@ JSON.stringify({
 
         let script_content = script_content
             .replace("$selector", &element_selector)
-            .replace("$id", &id.0);
+            .replace("$id", &id.0)
+            .replace("$widget_id", &widget_view.nano_id.0);
 
         let result = widget_view
             .app_webview
@@ -548,9 +555,10 @@ JSON.stringify({
                         0.0, 0.0,
                     )))
                     .with_url(updated_url)
-                    // .with_ipc_handler(move |message| {
-                    //     App::ipc_handler(message.body(), proxy_clone.clone());
-                    // })
+                    .with_ipc_handler(move |message| {
+                        info!("IPC handler received message: {:?}", message);
+                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    })
                     .with_initialization_script(
                         // include_str!("../assets/init_script.js")
                         //     .replace("$widget_id", &widget.id.0)
@@ -599,6 +607,13 @@ JSON.stringify({
             .unwrap()
             .insert_widget_configuration(vec![widget_config]);
     }
+
+    fn ipc_handler(body: &str, clone: Arc<EventLoopProxy<UserEvent>>) {
+        info!("IPC handler received message: {:?}", body);
+        let body_text = body.to_string();
+        let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
+        clone.send_event(UserEvent::ExtractResult(message));
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -642,11 +657,6 @@ enum UserEvent {
     ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
-    // SelectedText { widget_id: NanoId, text: String },
-    // CopyText { widget_id: NanoId, text: String },
-    // PasteText { widget_id: NanoId },
-    // Extract(String, String),
-    // ExtractResult(String),
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -835,13 +845,21 @@ fn main() {
             }))
             .with_level(Level::Normal),
         WidgetConfiguration::new()
-            // .with_id(NanoId("Test SPY".to_string()))
+            .with_id(NanoId("Test SPY".to_string()))
             .with_title("Test SPY".to_string())
             .with_widget_type(WidgetType::Url(UrlConfiguration {
                 url: "https://finance.yahoo.com/quote/SPY/".to_string(),
             }))
             .with_level(Level::Normal),
     ];
+
+    let modifiers: Vec<WidgetModifier> = vec![WidgetModifier {
+        id: "refresh".to_string(),
+        widget_id: NanoId("Test SPY".to_string()),
+        modifier_type: Modifier::Scrape {
+            selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
+        },
+    }];
 
     info!("Debug Config: {:?}", config.len());
 
@@ -882,6 +900,10 @@ fn main() {
         match db.insert_widget_configuration(config) {
             Ok(_) => info!("Inserted widget configurations"),
             Err(e) => error!("Error inserting widget configurations: {:?}", e),
+        }
+        match db.insert_widget_modifiers(modifiers) {
+            Ok(_) => info!("Inserted widget modifiers"),
+            Err(e) => error!("Error inserting widget modifiers: {:?}", e),
         }
     }
     let api_proxy = Arc::new(event_loop_proxy.clone());
@@ -1150,5 +1172,19 @@ async fn add_widget_modifier(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
+
+    #[test]
+    fn test_serde_deserialize_from_webview() {
+        let body = "{\"extractresult\":{\"error\":null,\"value\":\"562.01\",\"id\":\"Test SPY\",\"widget_id\":\"Test SPY\",\"timestamp\":\"2021-01-01T00:00:00.000Z\"}}";
+        serde_json::Value::from_str(s)
+        let body_text = body.to_string();
+        let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
+        assert_eq!(message.id, 1);
+        assert_eq!(message.widget_id, NanoId("Test SPY".to_string()));
+        assert_eq!(message.value, "562.01");
+        assert_eq!(message.timestamp, "2021-01-01T00:00:00.000Z");
+    }
 }
