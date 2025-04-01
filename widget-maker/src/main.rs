@@ -232,7 +232,7 @@ struct ViewSize {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScrapedValue {
-    pub id: i32,
+    // pub id: String,
     pub widget_id: NanoId,
     pub value: String,
     pub error: Option<String>,
@@ -409,7 +409,6 @@ window.ipc.postMessage(
     extractresult: {
       error: "Element not found",
       value: null,
-      id: "$id",
       widget_id: "$widget_id",
       timestamp: new Date().toISOString(),
     }
@@ -424,7 +423,6 @@ JSON.stringify({
   extractresult: {
     error: null,
     value: scrape_value,
-    id: "$id",
     widget_id: "$widget_id",
     timestamp: new Date().toISOString(),
   }
@@ -436,7 +434,6 @@ JSON.stringify({
   extractresult: {
   error: JSON.stringify(e.message),
   value: null,
-  id: "$id",
   widget_id: "$widget_id",
   timestamp: new Date().toISOString(),
 }
@@ -449,7 +446,7 @@ JSON.stringify({
 
         let script_content = script_content
             .replace("$selector", &element_selector)
-            .replace("$id", &id.0)
+            // .replace("$id", &id.0)
             .replace("$widget_id", &widget_view.nano_id.0);
 
         let result = widget_view
@@ -465,7 +462,7 @@ JSON.stringify({
             .db
             .try_lock()
             .expect("Something failed")
-            .insert_data("scraped_values", result);
+            .insert_data(result);
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
@@ -532,9 +529,9 @@ JSON.stringify({
                         .as_str(),
                     )
                     .with_html(file_config.html.as_str())
-                    // .with_ipc_handler(move |message| {
-                    //     App::ipc_handler(message.body(), proxy_clone.clone());
-                    // })
+                    .with_ipc_handler(move |message| {
+                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    })
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -560,8 +557,6 @@ JSON.stringify({
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
                     .with_initialization_script(
-                        // include_str!("../assets/init_script.js")
-                        //     .replace("$widget_id", &widget.id.0)
                         r#"
                         window.WINDOW_ID = "$window_id  ";
                         window.WIDGET_ID = "$widget_id";
@@ -610,8 +605,9 @@ JSON.stringify({
 
     fn ipc_handler(body: &str, clone: Arc<EventLoopProxy<UserEvent>>) {
         info!("IPC handler received message: {:?}", body);
-        let body_text = body.to_string();
-        let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
+        let val = serde_json::from_str::<Value>(body).unwrap();
+        info!("Value: {:?}", val);
+        let message: ScrapedValue = serde_json::from_value(val["extractresult"].clone()).unwrap();
         clone.send_event(UserEvent::ExtractResult(message));
     }
 }
@@ -1179,10 +1175,9 @@ mod tests {
     #[test]
     fn test_serde_deserialize_from_webview() {
         let body = "{\"extractresult\":{\"error\":null,\"value\":\"562.01\",\"id\":\"Test SPY\",\"widget_id\":\"Test SPY\",\"timestamp\":\"2021-01-01T00:00:00.000Z\"}}";
-        serde_json::Value::from_str(s)
+        // serde_json::Value::from_str(s)
         let body_text = body.to_string();
         let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
-        assert_eq!(message.id, 1);
         assert_eq!(message.widget_id, NanoId("Test SPY".to_string()));
         assert_eq!(message.value, "562.01");
         assert_eq!(message.timestamp, "2021-01-01T00:00:00.000Z");

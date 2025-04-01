@@ -157,7 +157,7 @@ pub mod db {
                 .query_map([], |row| {
                     info!("querying row: {:?}", row);
                     Ok(ScrapedValue {
-                        id: row.get(0)?,
+                        // id: row.get(0)?,
                         widget_id: row.get(1)?,
                         value: row.get(2)?,
                         error: None,
@@ -182,7 +182,7 @@ WHERE rn = 1"#,
             let data = stmt
                 .query_map([], |row| {
                     Ok(ScrapedValue {
-                        id: row.get(0)?,
+                        // id: row.get(0)?,
                         widget_id: row.get(1)?,
                         value: row.get(2)?,
                         error: None,
@@ -197,15 +197,14 @@ WHERE rn = 1"#,
 
         pub(crate) fn insert_data(
             &mut self,
-            table: &str,
             insert_data: ScrapedValue,
         ) -> Result<(), rusqlite::Error> {
-            info!("Inserting data into table: {}, {:?}", table, insert_data);
+            info!("Inserting data into table: {:?}", insert_data);
             let mut stmt = self.connection.prepare(
-                "INSERT INTO test (widget_id, value, error, timestamp) VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?1, ?2, ?3, ?4)",
             )?;
             stmt.execute([
-                insert_data.widget_id.to_string().as_str(),
+                insert_data.widget_id.0.as_str(),
                 insert_data.value.as_str(),
                 insert_data
                     .error

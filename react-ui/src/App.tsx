@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useState, useEffect } from "react";
 // import { createFormHook, createFormHookContexts } from "@tanstack/react-form";
-import WidgetForm from "./form";
-import EditWidget from "./edit";
+import WidgetForm from "./FormWidget";
+import EditWidget from "./EditorWidget";
+import DataWidget from "./DataWidget";
 
 // import "./App.css";
 
@@ -30,9 +31,9 @@ declare global {
 }
 
 const App = () => {
-  const [displayedWidget, setDisplayedWidget] = useState<"create" | "edit">(
-    "create"
-  );
+  const [displayedWidget, setDisplayedWidget] = useState<
+    "create" | "edit" | "data"
+  >("create");
   return (
     <div className="min-h-screen flex justify-center p-4">
       <div className="flex flex-col">
@@ -46,9 +47,13 @@ const App = () => {
           <button className="w-full" onClick={() => setDisplayedWidget("edit")}>
             Edit
           </button>
+          <button className="w-full" onClick={() => setDisplayedWidget("data")}>
+            Data
+          </button>
         </div>
         {displayedWidget === "create" && <WidgetForm />}
         {displayedWidget === "edit" && <EditWidget />}
+        {displayedWidget === "data" && <DataWidget />}
       </div>
     </div>
   );
