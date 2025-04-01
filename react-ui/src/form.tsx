@@ -23,6 +23,9 @@ export default function WidgetForm() {
 
     const res = await fetch("http://127.0.0.1:3000/widgets", {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(data),
     });
     const widget = await res.json();

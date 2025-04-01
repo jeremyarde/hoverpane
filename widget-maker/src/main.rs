@@ -928,6 +928,8 @@ fn main() {
         }
     }
 
+    let api_proxy = Arc::new(Mutex::new(event_loop_proxy.clone()));
+
     let mut app = App {
         tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
@@ -952,35 +954,17 @@ fn main() {
         loop {
             std::thread::sleep(min_refresh_interval);
             {
-                let mut widget_configs = vec![];
+                let mut modifiers: Vec<WidgetModifier> = vec![];
                 {
                     let mut db = db_clone.lock().expect("Something failed");
-                    let views = db.get_configuration().expect("Something failed");
-                    widget_configs.extend(views);
+                    let curr_modifiers = db.get_modifiers().expect("Something failed");
+                    modifiers.extend(curr_modifiers);
                 }
-                info!(
-                    "Scraping widget configs: {:?}",
-                    widget_configs
-                        .iter()
-                        .map(|c| c.id.0.clone())
-                        .collect::<Vec<_>>()
-                );
+                info!("Found # modifiers: {:?}", modifiers.len());
 
                 // instead of going through the configs, we ought to grab different events from the db
                 // events including: scraping, refreshing, minimizing, etc.
-                for config in widget_configs.iter_mut() {
-                    // let mut last_refresh = last_refresh.entry(config.id.clone()).or_insert(now);
-                    match &config.widget_type {
-                        WidgetType::Url(url_config) => {
-                            proxy_clone
-                                .send_event(UserEvent::Refresh(config.id.clone()))
-                                .expect("Something failed");
-                        }
-                        _ => {
-                            info!("Widget type not handled...");
-                        }
-                    };
-                }
+                for modifier in modifiers {}
             }
         }
     });
@@ -990,7 +974,10 @@ fn main() {
 
         // Execute the future, blocking the current thread until completion
         rt.block_on(async {
-            let state = ApiState { db: db.clone() };
+            let state = ApiState {
+                db: db.clone(),
+                proxy: api_proxy.clone(),
+            };
 
             let cors_layer = CorsLayer::new()
                 .allow_methods(vec![http::Method::GET, http::Method::POST])
@@ -1001,7 +988,7 @@ fn main() {
                 .route("/sites", get(get_sites))
                 .route("/elements", get(get_elements))
                 .route("/latest", get(get_latest_values))
-                .route("/widgets", get(get_widgets))
+                .route("/widgets", get(get_widgets).post(create_widget))
                 .route(
                     "/widgets/{id}/modifiers",
                     post(add_widget_modifier).get(get_widget_modifiers),
@@ -1017,6 +1004,38 @@ fn main() {
     });
 
     event_loop.run_app(&mut app).expect("Something failed");
+}
+
+async fn create_widget(
+    State(state): State<ApiState>,
+    Json(widget_options): Json<CreateWidgetRequest>,
+) -> impl IntoResponse {
+    info!("Creating widget: {:?}", widget_options);
+
+    let res = state
+        .proxy
+        .lock()
+        .unwrap()
+        .send_event(UserEvent::CreateWidget(widget_options.clone()));
+
+    if res.is_err() {
+        error!("Failed to send event to event loop");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // let widget_config = WidgetConfiguration::new()
+    //     .with_id(NanoId(nanoid_gen(8)))
+    //     .with_title(widget_options.title.clone())
+    //     .with_widget_type(WidgetType::Url(UrlConfiguration {
+    //         url: widget_options.url.clone(),
+    //     }))
+    //     .with_level(widget_options.level.clone());
+
+    // let mut db = state.db.lock().unwrap();
+    // db.insert_widget_configuration(vec![widget_config])
+    //     .expect("Something failed");
+
+    StatusCode::CREATED.into_response()
 }
 
 pub fn set_app_dock_icon(_window: &Window) {
@@ -1125,6 +1144,7 @@ async fn get_widget_modifiers(
 #[derive(Clone)]
 struct ApiState {
     db: Arc<Mutex<db::db::Database>>,
+    proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
 }
 
 // #[derive(Debug, Deserialize)]
