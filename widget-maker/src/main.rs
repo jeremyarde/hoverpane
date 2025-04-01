@@ -232,9 +232,11 @@ struct ViewSize {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScrapedValue {
-    pub id: NanoId,
+    pub id: i32,
+    pub widget_id: NanoId,
     pub value: String,
     pub error: Option<String>,
+    pub timestamp: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
@@ -247,12 +249,12 @@ impl std::fmt::Display for NanoId {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct Record {
-    id: i32,
-    window_id: String,
-    data: String,
-}
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// struct Record {
+//     id: i32,
+//     window_id: String,
+//     data: String,
+// }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct MonitoredSite {
@@ -459,14 +461,11 @@ JSON.stringify({
     }
 
     fn add_scrape_result(&mut self, result: ScrapedValue) {
-        let res = self.db.try_lock().expect("Something failed").insert_data(
-            "scraped_values",
-            Record {
-                id: 0,
-                window_id: result.id.0.clone(),
-                data: result.value.clone(),
-            },
-        );
+        let res = self
+            .db
+            .try_lock()
+            .expect("Something failed")
+            .insert_data("scraped_values", result);
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
@@ -932,8 +931,8 @@ fn main() {
             Err(e) => error!("Error inserting widget configurations: {:?}", e),
         }
     }
-    let api_proxy = Arc::new(Mutex::new(event_loop_proxy.clone()));
-    let modifier_thread_event_proxy = Arc::new(Mutex::new(event_loop_proxy.clone()));
+    let api_proxy = Arc::new(event_loop_proxy.clone());
+    let modifier_thread_event_proxy = Arc::new(event_loop_proxy.clone());
     let mut app = App {
         tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
@@ -969,10 +968,8 @@ fn main() {
                 // instead of going through the configs, we ought to grab different events from the db
                 // events including: scraping, refreshing, minimizing, etc.
                 for modifier in modifiers {
-                    let res = modifier_thread_event_proxy
-                        .try_lock()
-                        .unwrap()
-                        .send_event(UserEvent::ModifierEvent(modifier));
+                    let res =
+                        modifier_thread_event_proxy.send_event(UserEvent::ModifierEvent(modifier));
                     if res.is_err() {
                         error!("Failed to send event to event loop");
                     }
@@ -1034,8 +1031,6 @@ async fn create_widget(
 
     let res = state
         .proxy
-        .lock()
-        .unwrap()
         .send_event(UserEvent::CreateWidget(widget_options.clone()));
 
     if res.is_err() {
@@ -1101,15 +1096,15 @@ fn setup_menu() -> Menu {
     menu
 }
 
-async fn get_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
+async fn get_values(State(state): State<ApiState>) -> Json<Vec<ScrapedValue>> {
     let state = state.db.try_lock().unwrap();
-    let values: Vec<Record> = state.get_data().unwrap();
+    let values: Vec<ScrapedValue> = state.get_data().unwrap();
     Json(values)
 }
 
-async fn get_latest_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
+async fn get_latest_values(State(state): State<ApiState>) -> Json<Vec<ScrapedValue>> {
     let state = state.db.try_lock().unwrap();
-    let values: Vec<Record> = state.get_latest_data().unwrap();
+    let values: Vec<ScrapedValue> = state.get_latest_data().unwrap();
     Json(values)
 }
 

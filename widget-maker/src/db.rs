@@ -2,12 +2,11 @@ pub mod db {
     use log::info;
     use nanoid::NanoId;
 
-    use crate::Record;
-
     use crate::MonitoredSite;
 
     use crate::Level;
 
+    use crate::ScrapedValue;
     use crate::WidgetConfiguration;
 
     use crate::MonitoredElement;
@@ -31,17 +30,6 @@ pub mod db {
                     (),
                 )
                 .unwrap();
-            connection
-                .execute(
-                    "CREATE TABLE elements (
-                id TEXT PRIMARY KEY,
-                site_id TEXT NOT NULL,
-                selector TEXT NOT NULL,
-                data_key TEXT NOT NULL
-            )",
-                    (),
-                )
-                .unwrap();
 
             connection
                 .execute(
@@ -61,6 +49,19 @@ pub mod db {
                 id TEXT PRIMARY KEY,
                 widget_id TEXT NOT NULL,
                 modifier_type TEXT NOT NULL
+            )",
+                    (),
+                )
+                .unwrap();
+
+            connection
+                .execute(
+                    "CREATE TABLE scraped_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    widget_id TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    error TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
             )",
                     (),
                 )
@@ -150,15 +151,17 @@ pub mod db {
             Ok(sites)
         }
 
-        pub(crate) fn get_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
-            let mut stmt = self.connection.prepare("SELECT * FROM test")?;
+        pub(crate) fn get_data(&self) -> Result<Vec<ScrapedValue>, rusqlite::Error> {
+            let mut stmt = self.connection.prepare("SELECT * FROM scraped_data")?;
             let records = stmt
                 .query_map([], |row| {
                     info!("querying row: {:?}", row);
-                    Ok(Record {
+                    Ok(ScrapedValue {
                         id: row.get(0)?,
-                        window_id: row.get(1)?,
-                        data: row.get(2)?,
+                        widget_id: row.get(1)?,
+                        value: row.get(2)?,
+                        error: None,
+                        timestamp: row.get(3)?,
                     })
                 })?
                 .filter_map(|record| record.ok())
@@ -166,7 +169,7 @@ pub mod db {
             Ok(records)
         }
 
-        pub(crate) fn get_latest_data(&self) -> Result<Vec<Record>, rusqlite::Error> {
+        pub(crate) fn get_latest_data(&self) -> Result<Vec<ScrapedValue>, rusqlite::Error> {
             info!("Getting latest data");
             let mut stmt = self.connection.prepare(
                 r#"SELECT *
@@ -178,10 +181,12 @@ WHERE rn = 1"#,
             )?;
             let data = stmt
                 .query_map([], |row| {
-                    Ok(Record {
+                    Ok(ScrapedValue {
                         id: row.get(0)?,
-                        window_id: row.get(1)?,
-                        data: row.get(2)?,
+                        widget_id: row.get(1)?,
+                        value: row.get(2)?,
+                        error: None,
+                        timestamp: row.get(3)?,
                     })
                 })?
                 .filter_map(|record| record.ok())
@@ -193,13 +198,22 @@ WHERE rn = 1"#,
         pub(crate) fn insert_data(
             &mut self,
             table: &str,
-            insert_data: Record,
+            insert_data: ScrapedValue,
         ) -> Result<(), rusqlite::Error> {
             info!("Inserting data into table: {}, {:?}", table, insert_data);
-            let mut stmt = self
-                .connection
-                .prepare("INSERT INTO test (window_id, data) VALUES (?1, ?2)")?;
-            stmt.execute([insert_data.window_id, insert_data.data])?;
+            let mut stmt = self.connection.prepare(
+                "INSERT INTO test (widget_id, value, error, timestamp) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            stmt.execute([
+                insert_data.widget_id.to_string().as_str(),
+                insert_data.value.as_str(),
+                insert_data
+                    .error
+                    .as_ref()
+                    .unwrap_or(&"".to_string())
+                    .as_str(),
+                insert_data.timestamp.as_str(),
+            ])?;
             Ok(())
         }
 
