@@ -40,6 +40,7 @@ export type Modifier =
 	selector: string;
 }}
 	| { type: "refresh", content: {
+	interval_sec: number;
 }};
 
 export interface WidgetModifier {

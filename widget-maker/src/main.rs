@@ -2,7 +2,7 @@ use axum::{
     extract::{ConnectInfo, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, get_service, post},
+    routing::{delete, get, get_service, post},
     Json, Router,
 };
 use db::db::Database;
@@ -86,7 +86,7 @@ pub enum WidgetType {
 #[typeshare]
 pub enum Modifier {
     Scrape { selector: String },
-    Refresh {},
+    Refresh { interval_sec: i32 },
 }
 
 impl ToSql for Modifier {
@@ -283,7 +283,7 @@ struct App {
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
-    proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
+    proxy: Arc<EventLoopProxy<UserEvent>>,
     last_resize: Option<Instant>,
     db: Arc<Mutex<Database>>,
     // widgets: HashMap<NanoId, WidgetView>,
@@ -296,6 +296,8 @@ struct App {
 struct WidgetView {
     // webview: wry::WebView,
     app_webview: AppWebView,
+    last_scrape: Option<Instant>,
+    last_refresh: Option<Instant>,
     window: Window,
     nano_id: NanoId,
     visible: bool,
@@ -335,16 +337,42 @@ type Seconds = i32;
 
 impl App {
     // TODO: possibly split out the refresh timer and the extraction logic - maybe a page auto reloads already, and we just need to grab the newest value
-    fn refresh_webview(&mut self, id: NanoId) {
-        info!("Refreshing webview for {}", id);
+    fn refresh_webview(&mut self, id: NanoId, refresh_interval_secs: i32) {
+        info!("Refreshing webview for: {}", id);
 
         let window_id = self.widget_id_to_window_id[&id];
-        if let Some(webview) = self.all_windows.get_mut(&window_id) {
-            webview
-                .app_webview
-                .webview
-                .reload()
-                .expect("Something failed");
+        let Some(webview) = self.all_windows.get_mut(&window_id) else {
+            error!("Webview not found");
+            return;
+        };
+
+        if webview.last_refresh.is_some()
+            && webview.last_refresh.unwrap().elapsed()
+                > Duration::from_secs(refresh_interval_secs as u64)
+        {
+            webview.last_refresh = Some(Instant::now());
+        } else {
+            return;
+        }
+
+        match &webview.options.widget_type {
+            WidgetType::Url(url_config) => {
+                webview
+                    .app_webview
+                    .webview
+                    .reload()
+                    .expect("Something failed");
+            }
+            WidgetType::File(file_config) => {
+                webview
+                    .app_webview
+                    .webview
+                    .load_html(file_config.html.as_str())
+                    .expect("Something failed");
+            }
+            _ => {
+                error!("Cannot refresh non-url widget");
+            }
         }
     }
 
@@ -592,6 +620,8 @@ JSON.stringify({
             self.all_windows.insert(
                 new_window.id(),
                 WidgetView {
+                    last_scrape: None,
+                    last_refresh: None,
                     app_webview: AppWebView { webview: webview },
                     window: new_window,
                     nano_id: widget_config.id.clone(),
@@ -640,11 +670,12 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
+    ModifierEvent(WidgetModifier),
     MenuEvent(muda::MenuEvent),
     TrayIconEvent(tray_icon::TrayIconEvent),
     CreateWidget(CreateWidgetRequest),
-    Refresh(NanoId),
-    Scrape(NanoId, String),
+    // Refresh(NanoId),
+    // Scrape(NanoId, String),
     RemoveWebView(NanoId),
     // ShowNewViewForm,
     MoveWebView(NanoId, Direction),
@@ -746,10 +777,10 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, userevent: UserEvent) {
         let size = self.current_size.clone();
         match userevent {
-            UserEvent::Refresh(id) => {
-                info!("Refresh event received for index {}", id);
-                self.refresh_webview(id);
-            }
+            // UserEvent::Refresh(id) => {
+            //     info!("Refresh event received for index {}", id);
+            //     self.refresh_webview(id, 30); // Default 30 second interval
+            // }
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id);
                 self.remove_webview(id);
@@ -767,10 +798,10 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Minimizing webview at index {}", id);
                 self.minimize_webview(id);
             }
-            UserEvent::Scrape(id, source_config) => {
-                info!("Scraping webview at index {}", id);
-                self.scrape_webview(id, source_config);
-            }
+            // UserEvent::Scrape(id, source_config) => {
+            //     info!("Scraping webview at index {}", id);
+            //     self.scrape_webview(id, source_config);
+            // }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
                 let widget_config = WidgetConfiguration::new()
@@ -794,6 +825,19 @@ impl ApplicationHandler<UserEvent> for App {
                     event_loop.exit();
                 } else {
                     info!("Unhandled Menu event: {:?}", menu_event);
+                }
+            }
+            UserEvent::ModifierEvent(modifier) => {
+                info!("Modifier event: {:?}", modifier);
+                match modifier.modifier_type {
+                    Modifier::Refresh { interval_sec } => {
+                        info!("Refreshing widget: {:?}", modifier.widget_id);
+                        self.refresh_webview(modifier.widget_id, interval_sec);
+                    }
+                    Modifier::Scrape { selector } => {
+                        info!("Scraping widget: {:?}", modifier.widget_id);
+                        self.scrape_webview(modifier.widget_id, selector);
+                    }
                 }
             }
             _ => {
@@ -838,52 +882,13 @@ fn main() {
                 html: include_str!("../../react-ui/dist/index.html").to_string(),
             }))
             .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
-        //         url: "https://twitch.com".to_string(),
-        //         refresh_interval: 1000,
-        //     }))
-        //     .with_level(Level::AlwaysOnTop), // WidgetConfiguration::new()
-        //     .with_id(NanoId("Viewer".to_string()))
-        //     .with_title("Viewer".to_string())
-        //     .with_widget_type(WidgetType::File(FileConfiguration {
-        //         html: include_str!("../assets/simple_viewer.html").to_string(),
-        //     }))
-        //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_id(NanoId("SPY".to_string()))
-        //     .with_title("SPY".to_string())
-        //     .with_widget_type(WidgetType::Source(SourceConfiguration {
-        //         url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-        //         element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
-        //         refresh_interval: 240,
-        //     }))
-        //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_id(NanoId("NVDA".to_string()))
-        //     .with_title("NVDA".to_string())
-        //     .with_widget_type(WidgetType::Source(SourceConfiguration {
-        //         url: "https://finance.yahoo.com/quote/NVDA/".to_string(),
-        //         element_selectors: vec![r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string()],
-        //         refresh_interval: 240,
-        //     }))
-        //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_id(NanoId("test".to_string()))
-        //     .with_title("test".to_string())
-        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
-        //         url: "http://localhost:3000/test".to_string(),
-        //         refresh_interval: 1000,
-        //     }))
-        //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_id(NanoId("from vite server".to_string()))
-        //     .with_title("from vite server".to_string())
-        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
-        //         url: "http://localhost:5173".to_string(),
-        //         refresh_interval: 1000,
-        //     }))
-        //     .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            // .with_id(NanoId("Test SPY".to_string()))
+            .with_title("Test SPY".to_string())
+            .with_widget_type(WidgetType::Url(UrlConfiguration {
+                url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+            }))
+            .with_level(Level::Normal),
     ];
 
     info!("Debug Config: {:?}", config.len());
@@ -927,9 +932,8 @@ fn main() {
             Err(e) => error!("Error inserting widget configurations: {:?}", e),
         }
     }
-
     let api_proxy = Arc::new(Mutex::new(event_loop_proxy.clone()));
-
+    let modifier_thread_event_proxy = Arc::new(Mutex::new(event_loop_proxy.clone()));
     let mut app = App {
         tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
@@ -939,7 +943,7 @@ fn main() {
         widget_id_to_window_id: HashMap::new(),
         window_id_to_webview_id: HashMap::new(),
         db: db.clone(),
-        proxy: Arc::new(Mutex::new(event_loop_proxy)),
+        proxy: Arc::new(event_loop_proxy),
         last_resize: None,
         // clipboard: arboard::Clipboard::new().unwrap(),
         menu,
@@ -964,7 +968,15 @@ fn main() {
 
                 // instead of going through the configs, we ought to grab different events from the db
                 // events including: scraping, refreshing, minimizing, etc.
-                for modifier in modifiers {}
+                for modifier in modifiers {
+                    let res = modifier_thread_event_proxy
+                        .try_lock()
+                        .unwrap()
+                        .send_event(UserEvent::ModifierEvent(modifier));
+                    if res.is_err() {
+                        error!("Failed to send event to event loop");
+                    }
+                }
             }
         }
     });
@@ -980,7 +992,11 @@ fn main() {
             };
 
             let cors_layer = CorsLayer::new()
-                .allow_methods(vec![http::Method::GET, http::Method::POST])
+                .allow_methods(vec![
+                    http::Method::GET,
+                    http::Method::POST,
+                    http::Method::DELETE,
+                ])
                 .allow_headers(vec![http::HeaderName::from_static("content-type")])
                 .allow_origin(AllowOrigin::any());
             let router = Router::new()
@@ -992,6 +1008,10 @@ fn main() {
                 .route(
                     "/widgets/{id}/modifiers",
                     post(add_widget_modifier).get(get_widget_modifiers),
+                )
+                .route(
+                    "/widgets/{widget_id}/modifiers/{modifier_id}",
+                    delete(delete_widget_modifier),
                 )
                 .layer(cors_layer)
                 .with_state(state);
@@ -1022,18 +1042,6 @@ async fn create_widget(
         error!("Failed to send event to event loop");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-
-    // let widget_config = WidgetConfiguration::new()
-    //     .with_id(NanoId(nanoid_gen(8)))
-    //     .with_title(widget_options.title.clone())
-    //     .with_widget_type(WidgetType::Url(UrlConfiguration {
-    //         url: widget_options.url.clone(),
-    //     }))
-    //     .with_level(widget_options.level.clone());
-
-    // let mut db = state.db.lock().unwrap();
-    // db.insert_widget_configuration(vec![widget_config])
-    //     .expect("Something failed");
 
     StatusCode::CREATED.into_response()
 }
@@ -1094,32 +1102,32 @@ fn setup_menu() -> Menu {
 }
 
 async fn get_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
-    let state = state.db.lock().unwrap();
+    let state = state.db.try_lock().unwrap();
     let values: Vec<Record> = state.get_data().unwrap();
     Json(values)
 }
 
 async fn get_latest_values(State(state): State<ApiState>) -> Json<Vec<Record>> {
-    let state = state.db.lock().unwrap();
+    let state = state.db.try_lock().unwrap();
     let values: Vec<Record> = state.get_latest_data().unwrap();
     Json(values)
 }
 
 async fn get_sites(State(state): State<ApiState>) -> Json<Vec<MonitoredSite>> {
-    let state = state.db.lock().unwrap();
+    let state = state.db.try_lock().unwrap();
     let sites: Vec<MonitoredSite> = state.get_sites().unwrap();
     Json(sites)
 }
 
 async fn get_elements(State(state): State<ApiState>) -> Json<Vec<MonitoredElement>> {
-    let state = state.db.lock().unwrap();
+    let state = state.db.try_lock().unwrap();
     let elements: Vec<MonitoredElement> = state.get_elements().unwrap();
     Json(elements)
 }
 
 async fn get_widgets(State(state): State<ApiState>) -> Json<Vec<WidgetConfiguration>> {
     info!("get widgets called");
-    let state = state.db.lock().unwrap();
+    let state = state.db.try_lock().unwrap();
     let widgets = state.get_configuration().unwrap();
     info!("# widgets: {:?}", widgets.len());
     Json(widgets)
@@ -1131,7 +1139,7 @@ async fn get_widget_modifiers(
 ) -> impl IntoResponse {
     info!("Getting modifiers for widget {}", widget_id);
 
-    let db = state.db.lock().unwrap();
+    let db = state.db.try_lock().unwrap();
     match db.get_widget_modifiers(widget_id.as_str()) {
         Ok(modifiers) => Json(modifiers).into_response(),
         Err(e) => {
@@ -1141,24 +1149,30 @@ async fn get_widget_modifiers(
     }
 }
 
+async fn delete_widget_modifier(
+    State(state): State<ApiState>,
+    Path((widget_id, modifier_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    info!(
+        "Deleting modifier {} from widget {}",
+        modifier_id, widget_id
+    );
+
+    let mut db = state.db.try_lock().unwrap();
+    match db.delete_widget_modifier(&modifier_id) {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to delete modifier: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ApiState {
     db: Arc<Mutex<db::db::Database>>,
-    proxy: Arc<Mutex<EventLoopProxy<UserEvent>>>,
+    proxy: Arc<EventLoopProxy<UserEvent>>,
 }
-
-// #[derive(Debug, Deserialize)]
-// struct ModifierConfig {
-//     #[serde(rename = "type")]
-//     modifier_type: String,
-//     config: ModifierConfigDetails,
-// }
-
-// #[derive(Debug, Deserialize)]
-// struct ModifierConfigDetails {
-//     selector: Option<String>,
-//     interval: Option<i32>,
-// }
 
 async fn add_widget_modifier(
     State(state): State<ApiState>,
@@ -1172,11 +1186,11 @@ async fn add_widget_modifier(
         widget_id: NanoId(widget_id),
         modifier_type: match modifier.modifier_type {
             Modifier::Scrape { selector } => Modifier::Scrape { selector },
-            Modifier::Refresh {} => Modifier::Refresh {},
+            Modifier::Refresh { interval_sec } => Modifier::Refresh { interval_sec },
         },
     };
 
-    let mut db = state.db.lock().unwrap();
+    let mut db = state.db.try_lock().unwrap();
     match db.insert_widget_modifier(widget_modifier) {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(e) => {

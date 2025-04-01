@@ -268,6 +268,14 @@ WHERE rn = 1"#,
                 .collect();
             Ok(modifiers)
         }
+
+        pub fn delete_widget_modifier(&mut self, modifier_id: &str) -> Result<(), rusqlite::Error> {
+            let mut stmt = self
+                .connection
+                .prepare("DELETE FROM modifiers WHERE id = ?")?;
+            stmt.execute([modifier_id])?;
+            Ok(())
+        }
     }
 
     #[cfg(test)]
@@ -282,14 +290,17 @@ WHERE rn = 1"#,
             let modifier = WidgetModifier {
                 id: "1".to_string(),
                 widget_id: crate::NanoId(String::from("1")),
-                modifier_type: Modifier::Refresh {},
+                modifier_type: Modifier::Refresh { interval_sec: 30 },
             };
             db.insert_modifier(modifier).unwrap();
             let modifiers = db.get_modifiers().unwrap();
             assert_eq!(modifiers.len(), 1);
             assert_eq!(modifiers[0].id, "1");
             assert_eq!(modifiers[0].widget_id, crate::NanoId(String::from("1")));
-            assert_eq!(modifiers[0].modifier_type, Modifier::Refresh {});
+            assert_eq!(
+                modifiers[0].modifier_type,
+                Modifier::Refresh { interval_sec: 30 }
+            );
         }
 
         #[test]

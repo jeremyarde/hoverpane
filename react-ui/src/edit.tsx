@@ -9,9 +9,7 @@ export default function EditWidget() {
   const [modifierType, setModifierType] = useState<"scrape" | "refresh" | null>(
     null
   );
-  const [modifierConfig, setModifierConfig] = useState<Modifier | undefined>(
-    undefined
-  );
+  const [modifierConfig, setModifierConfig] = useState<Modifier>();
   const [expandedWidgets, setExpandedWidgets] = useState<Set<string>>(
     new Set()
   );
@@ -69,10 +67,11 @@ export default function EditWidget() {
   const handleSaveModifier = async () => {
     if (!selectedWidget || !modifierType) return;
 
-    const modifier: WidgetModifier = {
-      id: "",
+    // Convert the frontend format to the backend format
+    const backendModifier: WidgetModifier = {
+      id: "", // This will be set by the backend
       widget_id: selectedWidget,
-      modifier_type: modifierType as unknown as Modifier,
+      modifier_type: modifierConfig as Modifier,
     };
 
     try {
@@ -83,7 +82,7 @@ export default function EditWidget() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(modifier),
+          body: JSON.stringify(backendModifier),
         }
       );
 
@@ -106,6 +105,31 @@ export default function EditWidget() {
       setModifierConfig(undefined);
     } catch (error) {
       console.error("Failed to save modifier:", error);
+    }
+  };
+
+  const handleDeleteModifier = async (widgetId: string, modifierId: string) => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:3000/widgets/${widgetId}/modifiers/${modifierId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to delete modifier");
+
+      // Refresh modifiers for this widget
+      const modifiersResponse = await fetch(
+        `http://127.0.0.1:3000/widgets/${widgetId}/modifiers`
+      );
+      const updatedModifiers = await modifiersResponse.json();
+      setWidgetModifiers((prev) => ({
+        ...prev,
+        [widgetId]: updatedModifiers,
+      }));
+    } catch (error) {
+      console.error("Failed to delete modifier:", error);
     }
   };
 
@@ -175,6 +199,14 @@ export default function EditWidget() {
                           className="bg-white p-3 rounded border border-gray-200"
                         >
                           {renderModifierDetails(modifier)}
+                          <button
+                            onClick={() =>
+                              handleDeleteModifier(item.id, modifier.id)
+                            }
+                            className="ml-2 text-red-500 hover:text-red-700"
+                          >
+                            Delete
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -226,11 +258,18 @@ export default function EditWidget() {
                   type="text"
                   className="w-full border rounded-md p-2"
                   placeholder=".my-element"
-                  value={modifierConfig?.content.selector || ""}
+                  value={
+                    modifierConfig?.type === "scrape"
+                      ? modifierConfig?.content?.selector || ""
+                      : ""
+                  }
                   onChange={(e) =>
                     setModifierConfig({
                       ...modifierConfig,
-                      selector: e.target.value,
+                      type: "scrape",
+                      content: {
+                        selector: e.target.value,
+                      },
                     })
                   }
                 />
@@ -246,11 +285,18 @@ export default function EditWidget() {
                   type="number"
                   className="w-full border rounded-md p-2"
                   min="1"
-                  value={modifierConfig?.content.interval || ""}
+                  value={
+                    modifierConfig?.type === "refresh"
+                      ? modifierConfig?.content?.interval_sec || ""
+                      : ""
+                  }
                   onChange={(e) =>
                     setModifierConfig({
                       ...modifierConfig,
-                      interval: Number(e.target.value),
+                      type: "refresh",
+                      content: {
+                        interval_sec: Number(e.target.value),
+                      },
                     })
                   }
                 />
