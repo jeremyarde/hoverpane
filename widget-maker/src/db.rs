@@ -234,7 +234,11 @@ WHERE rn = 1"#,
             )?;
             stmt.execute([
                 insert_data.widget_id.0.as_str(),
-                insert_data.value.as_str(),
+                insert_data
+                    .value
+                    .as_ref()
+                    .unwrap_or(&"".to_string())
+                    .as_str(),
                 insert_data
                     .error
                     .as_ref()

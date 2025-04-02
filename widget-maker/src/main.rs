@@ -235,7 +235,7 @@ struct ViewSize {
 pub struct ScrapedValue {
     // pub id: i32,
     pub widget_id: NanoId,
-    pub value: String,
+    pub value: Option<String>,
     pub error: Option<String>,
     pub timestamp: i64,
 }
@@ -495,6 +495,7 @@ JSON.stringify({
             .with_titlebar_hidden(false)
             .with_title("Watcher")
             .with_has_shadow(false)
+            .with_movable_by_window_background(true)
             .with_resizable(true);
         let new_window: Window = event_loop
             .create_window(
@@ -538,6 +539,7 @@ JSON.stringify({
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
+                    .with_transparent(true)
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -562,6 +564,7 @@ JSON.stringify({
                         info!("IPC handler received message: {:?}", message);
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
+                    .with_transparent(true)
                     .with_initialization_script(
                         r#"
                         window.WINDOW_ID = "$window_id  ";
@@ -858,6 +861,13 @@ fn main() {
             .with_title("Test Data View Widget".to_string())
             .with_widget_type(WidgetType::File(FileConfiguration {
                 html: include_str!("../assets/widget_template.html").to_string(),
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_id(NanoId("transparent".to_string()))
+            .with_title("Transparent Widget".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../assets/widget_transparent.html").to_string(),
             }))
             .with_level(Level::Normal),
     ];
@@ -1203,7 +1213,7 @@ mod tests {
         let body_text = body.to_string();
         let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
         assert_eq!(message.widget_id, NanoId("Test SPY".to_string()));
-        assert_eq!(message.value, "562.01");
+        assert_eq!(message.value, Some("562.01".to_string()));
         assert_eq!(message.timestamp, 1614556800000);
     }
 }
