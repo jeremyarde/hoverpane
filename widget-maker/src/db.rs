@@ -1,27 +1,28 @@
 pub mod db {
-    use log::info;
-    use nanoid::NanoId;
+    use log::debug;
+    use log::{error, info};
     use serde::Deserialize;
     use serde::Serialize;
+    use typeshare::typeshare;
 
     use crate::MonitoredSite;
 
     use crate::Level;
 
     use crate::ScrapedValue;
-    // use crate::ScrapedValue;
     use crate::WidgetConfiguration;
 
     use crate::MonitoredElement;
     use crate::WidgetModifier;
 
     #[derive(Debug, Clone, Deserialize, Serialize)]
+    #[typeshare]
     pub struct ScrapedData {
         pub id: i32,
         pub widget_id: String,
         pub value: String,
         pub error: Option<String>,
-        pub timestamp: i64,
+        pub timestamp: String,
     }
     pub struct Database {
         // data: HashMap<String, Vec<Record>>, // table -> data????
@@ -72,7 +73,7 @@ pub mod db {
                     widget_id TEXT NOT NULL,
                     value TEXT NOT NULL,
                     error TEXT NOT NULL,
-                    timestamp INTEGER NOT NULL
+                    timestamp TEXT NOT NULL
             )",
                     (),
                 )
@@ -113,7 +114,7 @@ pub mod db {
                 })?
                 .filter_map(|configuration| {
                     if let Err(e) = &configuration {
-                        info!("Error mapping row: {:?}", e);
+                        error!("Error mapping WidgetConfiguration row: {:?}", e);
                     }
                     configuration.ok()
                 })
@@ -157,7 +158,12 @@ pub mod db {
                         refresh_interval: row.get(4)?,
                     })
                 })?
-                .filter_map(|site| site.ok())
+                .filter_map(|site| {
+                    if let Err(e) = &site {
+                        error!("Error mapping MonitoredSite row: {:?}", e);
+                    }
+                    site.ok()
+                })
                 .collect();
             Ok(sites)
         }
@@ -166,6 +172,7 @@ pub mod db {
             let mut stmt = self.connection.prepare("SELECT * FROM scraped_data")?;
             let records = stmt
                 .query_map([], |row| {
+                    debug!("scraped_data row: {:?}", row);
                     Ok(ScrapedData {
                         id: row.get(0)?,
                         widget_id: row.get(1)?,
@@ -175,12 +182,10 @@ pub mod db {
                     })
                 })?
                 .filter_map(|record| {
-                    if let Ok(record) = record {
-                        Some(record)
-                    } else {
-                        info!("Error mapping row: {:?}", record);
-                        None
+                    if let Err(e) = &record {
+                        error!("Error mapping ScrapedData row: {:?}", e);
                     }
+                    record.ok()
                 })
                 .collect();
             Ok(records)
@@ -198,15 +203,22 @@ WHERE rn = 1"#,
             )?;
             let data = stmt
                 .query_map([], |row| {
+                    debug!("scraped_data row: {:?}", row);
+
                     Ok(ScrapedData {
                         id: row.get(0)?,
                         widget_id: row.get(1)?,
                         value: row.get(2)?,
-                        error: None,
-                        timestamp: row.get(3)?,
+                        error: row.get(3)?,
+                        timestamp: row.get(4)?,
                     })
                 })?
-                .filter_map(|record| record.ok())
+                .filter_map(|record| {
+                    if let Err(e) = &record {
+                        error!("Error mapping ScrapedData row: {:?}", e);
+                    }
+                    record.ok()
+                })
                 .collect();
 
             Ok(data)

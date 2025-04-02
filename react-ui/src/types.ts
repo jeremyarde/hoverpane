@@ -20,6 +20,14 @@ export interface FileConfiguration {
 	html: string;
 }
 
+export interface ScrapedData {
+	id: number;
+	widget_id: string;
+	value: string;
+	error?: string;
+	timestamp: string;
+}
+
 export interface UrlConfiguration {
 	url: string;
 }

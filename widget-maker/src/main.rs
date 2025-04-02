@@ -231,6 +231,7 @@ struct ViewSize {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// #[typeshare]
 pub struct ScrapedValue {
     // pub id: i32,
     pub widget_id: NanoId,

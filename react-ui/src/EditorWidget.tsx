@@ -69,7 +69,7 @@ export default function EditWidget() {
 
     // Convert the frontend format to the backend format
     const backendModifier: WidgetModifier = {
-      id: "", // This will be set by the backend
+      id: 0, // This will be set by the backend
       widget_id: selectedWidget,
       modifier_type: modifierConfig as Modifier,
     };
@@ -108,7 +108,7 @@ export default function EditWidget() {
     }
   };
 
-  const handleDeleteModifier = async (widgetId: string, modifierId: string) => {
+  const handleDeleteModifier = async (widgetId: string, modifierId: number) => {
     try {
       const response = await fetch(
         `http://127.0.0.1:3000/widgets/${widgetId}/modifiers/${modifierId}`,
