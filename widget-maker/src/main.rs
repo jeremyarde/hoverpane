@@ -107,7 +107,7 @@ impl FromSql for Modifier {
 #[serde(rename_all = "lowercase")]
 #[typeshare]
 pub struct WidgetModifier {
-    id: String,
+    id: i32,
     widget_id: NanoId,
     modifier_type: Modifier,
 }
@@ -359,6 +359,7 @@ impl App {
                     .expect("Something failed");
             }
             WidgetType::File(file_config) => {
+                // TODO: may need to take the file and replace the window.WIDGET_ID with the actual widget id
                 webview
                     .app_webview
                     .webview
@@ -410,7 +411,7 @@ window.ipc.postMessage(
       error: "Element not found",
       value: null,
       widget_id: "$widget_id",
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
     }
   })
 );
@@ -424,7 +425,7 @@ JSON.stringify({
     error: null,
     value: scrape_value,
     widget_id: "$widget_id",
-    timestamp: new Date().toISOString(),
+    timestamp: Date.now(),
   }
 })
 );
@@ -435,7 +436,7 @@ JSON.stringify({
   error: JSON.stringify(e.message),
   value: null,
   widget_id: "$widget_id",
-  timestamp: new Date().toISOString(),
+  timestamp: Date.now(),
 }
 })
 );
@@ -514,6 +515,10 @@ JSON.stringify({
 
         let webview = match &widget_config.widget_type {
             WidgetType::File(file_config) => {
+                let html = file_config.html.clone();
+                let html = html.replace("$widget_id", &widget_config.id.0);
+                let html = html.replace("$window_id", &format!("{:?}", new_window.id()));
+
                 let webview = WebViewBuilder::new()
                     .with_bounds(Rect {
                         position: LogicalPosition::new(0, 0).into(),
@@ -528,7 +533,7 @@ JSON.stringify({
                         .replace("$widget_id", &widget_config.id.0)
                         .as_str(),
                     )
-                    .with_html(file_config.html.as_str())
+                    .with_html(html.as_str())
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
@@ -847,15 +852,28 @@ fn main() {
                 url: "https://finance.yahoo.com/quote/SPY/".to_string(),
             }))
             .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_id(NanoId("testdata".to_string()))
+            .with_title("Test Data View Widget".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../assets/widget_template.html").to_string(),
+            }))
+            .with_level(Level::Normal),
     ];
 
     let modifiers: Vec<WidgetModifier> = vec![WidgetModifier {
-        id: "refresh".to_string(),
+        id: 1,
         widget_id: NanoId("Test SPY".to_string()),
         modifier_type: Modifier::Scrape {
             selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
         },
-    }];
+    },
+    WidgetModifier {
+        id: 2,
+        widget_id: NanoId("testdata".to_string()),
+        modifier_type: Modifier::Refresh { interval_sec: 5 },
+    },
+    ];
 
     info!("Debug Config: {:?}", config.len());
 
@@ -971,7 +989,8 @@ fn main() {
                 .route("/values", get(get_values))
                 .route("/sites", get(get_sites))
                 .route("/elements", get(get_elements))
-                .route("/latest", get(get_latest_values))
+                // .route("/latest", get(get_latest_values))
+                .route("/widgets/{widget_id}/latest", get(get_latest_values))
                 .route("/widgets", get(get_widgets).post(create_widget))
                 .route(
                     "/widgets/{id}/modifiers",
@@ -1073,7 +1092,11 @@ async fn get_values(State(state): State<ApiState>) -> Json<Vec<ScrapedValue>> {
     Json(values)
 }
 
-async fn get_latest_values(State(state): State<ApiState>) -> Json<Vec<ScrapedValue>> {
+async fn get_latest_values(
+    State(state): State<ApiState>,
+    Path(widget_id): Path<String>,
+) -> Json<Vec<ScrapedValue>> {
+    info!("Getting latest values for widget {}", widget_id);
     let state = state.db.try_lock().unwrap();
     let values: Vec<ScrapedValue> = state.get_latest_data().unwrap();
     Json(values)
@@ -1148,7 +1171,7 @@ async fn add_widget_modifier(
     info!("Adding modifier to widget {}: {:?}", widget_id, modifier);
 
     let widget_modifier = WidgetModifier {
-        id: nanoid_gen(8),
+        id: 0,
         widget_id: NanoId(widget_id),
         modifier_type: match modifier.modifier_type {
             Modifier::Scrape { selector } => Modifier::Scrape { selector },

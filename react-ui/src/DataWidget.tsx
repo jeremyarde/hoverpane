@@ -49,25 +49,37 @@ export default function DataWidget() {
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4">Scraped Data</h2>
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white shadow-md rounded-lg">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      <div className="relative max-h-[600px] overflow-auto border border-gray-200 rounded-lg">
+        <table className="w-full bg-white">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th
+                scope="col"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
                 Widget ID
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th
+                scope="col"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
                 Value
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th
+                scope="col"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
                 Timestamp
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th
+                scope="col"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
                 Status
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-gray-200">
             {values.map((value) => (
               <tr key={`${value.id}-${value.timestamp}`}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -90,10 +102,10 @@ export default function DataWidget() {
             ))}
           </tbody>
         </table>
+        {values.length === 0 && (
+          <div className="text-center text-gray-500 p-4">No data available</div>
+        )}
       </div>
-      {values.length === 0 && (
-        <div className="text-center text-gray-500 mt-4">No data available</div>
-      )}
     </div>
   );
 }

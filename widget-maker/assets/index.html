@@ -49,9 +49,7 @@
           // Try to parse as JSON
           const data = JSON.parse(message);
           messageElement.innerHTML = `
-                    <div class="timestamp">${
-                      data.timestamp || new Date().toISOString()
-                    }</div>
+                    <div class="timestamp">${data.timestamp || Date.now()}</div>
                     <div>Selector: ${data.selector || "N/A"}</div>
                     <div>Text: ${data.text || "N/A"}</div>
                     <div>URL: ${data.url || "N/A"}</div>
@@ -75,7 +73,7 @@
           selector: "#test",
           text: "Test Element",
           url: "https://example.com",
-          timestamp: new Date().toISOString(),
+          timestamp: Date.now(),
         })
       );
     </script>

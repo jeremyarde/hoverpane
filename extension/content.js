@@ -93,7 +93,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         text:
           currentHoveredElement.innerText || currentHoveredElement.value || "",
         url: window.location.href,
-        timestamp: new Date().toISOString(),
+        timestamp: Date.now(),
       };
       console.log("Sending element info:", elementInfo);
       chrome.runtime.sendMessage(elementInfo, (response) => {

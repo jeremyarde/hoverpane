@@ -46,7 +46,7 @@ pub mod db {
             connection
                 .execute(
                     "CREATE TABLE modifiers (
-                id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 widget_id TEXT NOT NULL,
                 modifier_type TEXT NOT NULL
             )",
@@ -174,8 +174,8 @@ pub mod db {
             let mut stmt = self.connection.prepare(
                 r#"SELECT *
 FROM (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY window_id ORDER BY id DESC) AS rn
-    FROM test
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY widget_id ORDER BY id DESC) AS rn
+    FROM scraped_data
 )
 WHERE rn = 1"#,
             )?;
@@ -232,11 +232,10 @@ WHERE rn = 1"#,
         }
 
         pub fn insert_modifier(&mut self, modifier: WidgetModifier) -> Result<(), rusqlite::Error> {
-            let mut stmt = self.connection.prepare(
-                "INSERT INTO modifiers (id, widget_id, modifier_type) VALUES (?1, ?2, ?3)",
-            )?;
+            let mut stmt = self
+                .connection
+                .prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?1, ?2)")?;
             stmt.execute([
-                modifier.id.as_str(),
                 &modifier.widget_id.to_string(),
                 serde_json::to_string(&modifier.modifier_type)
                     .unwrap()
@@ -249,11 +248,10 @@ WHERE rn = 1"#,
             &mut self,
             widget_modifier: WidgetModifier,
         ) -> Result<(), rusqlite::Error> {
-            let mut stmt = self.connection.prepare(
-                "INSERT INTO modifiers (id, widget_id, modifier_type) VALUES (?1, ?2, ?3)",
-            )?;
+            let mut stmt = self
+                .connection
+                .prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?1, ?2)")?;
             stmt.execute([
-                widget_modifier.id.as_str(),
                 &widget_modifier.widget_id.to_string(),
                 serde_json::to_string(&widget_modifier.modifier_type)
                     .unwrap()
@@ -266,12 +264,12 @@ WHERE rn = 1"#,
             &mut self,
             widget_modifiers: Vec<WidgetModifier>,
         ) -> Result<(), rusqlite::Error> {
-            let mut stmt = self.connection.prepare(
-                "INSERT INTO modifiers (id, widget_id, modifier_type) VALUES (?1, ?2, ?3)",
-            )?;
+            let mut stmt = self
+                .connection
+                .prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?1, ?2)")?;
             for widget_modifier in widget_modifiers {
+                // info!("Inserting widget modifier: {:?}", widget_modifier);
                 stmt.execute([
-                    widget_modifier.id.as_str(),
                     &widget_modifier.widget_id.to_string(),
                     serde_json::to_string(&widget_modifier.modifier_type)
                         .unwrap()
@@ -320,14 +318,14 @@ WHERE rn = 1"#,
         fn test_modifier_roundtrip() {
             let mut db = Database::new();
             let modifier = WidgetModifier {
-                id: "1".to_string(),
+                id: 1,
                 widget_id: crate::NanoId(String::from("1")),
                 modifier_type: Modifier::Refresh { interval_sec: 30 },
             };
             db.insert_modifier(modifier).unwrap();
             let modifiers = db.get_modifiers().unwrap();
             assert_eq!(modifiers.len(), 1);
-            assert_eq!(modifiers[0].id, "1");
+            assert_eq!(modifiers[0].id, 1);
             assert_eq!(modifiers[0].widget_id, crate::NanoId(String::from("1")));
             assert_eq!(
                 modifiers[0].modifier_type,

@@ -44,7 +44,7 @@ export type Modifier =
 }};
 
 export interface WidgetModifier {
-	id: string;
+	id: number;
 	widget_id: NanoId;
 	modifier_type: Modifier;
 }
