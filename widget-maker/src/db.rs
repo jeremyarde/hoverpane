@@ -1,17 +1,28 @@
 pub mod db {
     use log::info;
     use nanoid::NanoId;
+    use serde::Deserialize;
+    use serde::Serialize;
 
     use crate::MonitoredSite;
 
     use crate::Level;
 
     use crate::ScrapedValue;
+    // use crate::ScrapedValue;
     use crate::WidgetConfiguration;
 
     use crate::MonitoredElement;
     use crate::WidgetModifier;
 
+    #[derive(Debug, Clone, Deserialize, Serialize)]
+    pub struct ScrapedData {
+        pub id: i32,
+        pub widget_id: String,
+        pub value: String,
+        pub error: Option<String>,
+        pub timestamp: i64,
+    }
     pub struct Database {
         // data: HashMap<String, Vec<Record>>, // table -> data????
         pub(crate) connection: rusqlite::Connection,
@@ -61,7 +72,7 @@ pub mod db {
                     widget_id TEXT NOT NULL,
                     value TEXT NOT NULL,
                     error TEXT NOT NULL,
-                    timestamp TEXT NOT NULL
+                    timestamp INTEGER NOT NULL
             )",
                     (),
                 )
@@ -151,25 +162,31 @@ pub mod db {
             Ok(sites)
         }
 
-        pub(crate) fn get_data(&self) -> Result<Vec<ScrapedValue>, rusqlite::Error> {
+        pub(crate) fn get_data(&self) -> Result<Vec<ScrapedData>, rusqlite::Error> {
             let mut stmt = self.connection.prepare("SELECT * FROM scraped_data")?;
             let records = stmt
                 .query_map([], |row| {
-                    info!("querying row: {:?}", row);
-                    Ok(ScrapedValue {
-                        // id: row.get(0)?,
+                    Ok(ScrapedData {
+                        id: row.get(0)?,
                         widget_id: row.get(1)?,
                         value: row.get(2)?,
-                        error: None,
-                        timestamp: row.get(3)?,
+                        error: row.get(3)?,
+                        timestamp: row.get(4)?,
                     })
                 })?
-                .filter_map(|record| record.ok())
+                .filter_map(|record| {
+                    if let Ok(record) = record {
+                        Some(record)
+                    } else {
+                        info!("Error mapping row: {:?}", record);
+                        None
+                    }
+                })
                 .collect();
             Ok(records)
         }
 
-        pub(crate) fn get_latest_data(&self) -> Result<Vec<ScrapedValue>, rusqlite::Error> {
+        pub(crate) fn get_latest_data(&self) -> Result<Vec<ScrapedData>, rusqlite::Error> {
             info!("Getting latest data");
             let mut stmt = self.connection.prepare(
                 r#"SELECT *
@@ -181,8 +198,8 @@ WHERE rn = 1"#,
             )?;
             let data = stmt
                 .query_map([], |row| {
-                    Ok(ScrapedValue {
-                        // id: row.get(0)?,
+                    Ok(ScrapedData {
+                        id: row.get(0)?,
                         widget_id: row.get(1)?,
                         value: row.get(2)?,
                         error: None,
@@ -211,7 +228,7 @@ WHERE rn = 1"#,
                     .as_ref()
                     .unwrap_or(&"".to_string())
                     .as_str(),
-                insert_data.timestamp.as_str(),
+                insert_data.timestamp.to_string().as_str(),
             ])?;
             Ok(())
         }

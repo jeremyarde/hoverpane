@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, get_service, post},
     Json, Router,
 };
-use db::db::Database;
+use db::db::{Database, ScrapedData};
 use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
@@ -232,11 +232,11 @@ struct ViewSize {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScrapedValue {
-    // pub id: String,
+    // pub id: i32,
     pub widget_id: NanoId,
     pub value: String,
     pub error: Option<String>,
-    pub timestamp: String,
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
@@ -299,11 +299,11 @@ struct WidgetView {
     options: WidgetOptions,
 }
 
-struct ElementView {
-    webview: wry::WebView,
-    nano_id: NanoId,
-    visible: bool,
-}
+// struct ElementView {
+//     webview: wry::WebView,
+//     nano_id: NanoId,
+//     visible: bool,
+// }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -447,8 +447,7 @@ JSON.stringify({
 
         let script_content = script_content
             .replace("$selector", &element_selector)
-            // .replace("$id", &id.0)
-            .replace("$widget_id", &widget_view.nano_id.0);
+            .replace("$widget_id", &widget_view.nano_id.0.clone());
 
         let result = widget_view
             .app_webview
@@ -464,6 +463,7 @@ JSON.stringify({
             .try_lock()
             .expect("Something failed")
             .insert_data(result);
+        info!("Inserted data result: {:?}", res);
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
@@ -516,8 +516,8 @@ JSON.stringify({
         let webview = match &widget_config.widget_type {
             WidgetType::File(file_config) => {
                 let html = file_config.html.clone();
-                let html = html.replace("$widget_id", &widget_config.id.0);
-                let html = html.replace("$window_id", &format!("{:?}", new_window.id()));
+                // let html = html.replace("$widget_id", &widget_config.id.0);
+                // let html = html.replace("$window_id", &format!("{:?}", new_window.id()));
 
                 let webview = WebViewBuilder::new()
                     .with_bounds(Rect {
@@ -1086,19 +1086,19 @@ fn setup_menu() -> Menu {
     menu
 }
 
-async fn get_values(State(state): State<ApiState>) -> Json<Vec<ScrapedValue>> {
+async fn get_values(State(state): State<ApiState>) -> Json<Vec<ScrapedData>> {
     let state = state.db.try_lock().unwrap();
-    let values: Vec<ScrapedValue> = state.get_data().unwrap();
+    let values: Vec<ScrapedData> = state.get_data().unwrap();
     Json(values)
 }
 
 async fn get_latest_values(
     State(state): State<ApiState>,
     Path(widget_id): Path<String>,
-) -> Json<Vec<ScrapedValue>> {
+) -> Json<Vec<ScrapedData>> {
     info!("Getting latest values for widget {}", widget_id);
     let state = state.db.try_lock().unwrap();
-    let values: Vec<ScrapedValue> = state.get_latest_data().unwrap();
+    let values: Vec<ScrapedData> = state.get_latest_data().unwrap();
     Json(values)
 }
 
@@ -1203,6 +1203,6 @@ mod tests {
         let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
         assert_eq!(message.widget_id, NanoId("Test SPY".to_string()));
         assert_eq!(message.value, "562.01");
-        assert_eq!(message.timestamp, "2021-01-01T00:00:00.000Z");
+        assert_eq!(message.timestamp, 1614556800000);
     }
 }

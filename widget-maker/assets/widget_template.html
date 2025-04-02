@@ -41,6 +41,7 @@
     <div class="container">
       <div class="value" id="value">Loading...</div>
       <div class="timestamp" id="timestamp"></div>
+      <div class="widget_id" id="widget_id"></div>
       <div class="error" id="error"></div>
     </div>
 
@@ -60,6 +61,7 @@
 
           document.getElementById("value").textContent = data.value;
           document.getElementById("timestamp").textContent = Date.now();
+          document.getElementById("widget_id").textContent = widgetId;
 
           if (data.error) {
             document.getElementById(
