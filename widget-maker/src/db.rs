@@ -1,8 +1,11 @@
 pub mod db {
+    use directories::ProjectDirs;
     use log::debug;
     use log::{error, info};
     use serde::Deserialize;
     use serde::Serialize;
+    use std::fs;
+    use std::path::PathBuf;
     use typeshare::typeshare;
 
     use crate::MonitoredSite;
@@ -24,6 +27,22 @@ pub mod db {
         pub error: Option<String>,
         pub timestamp: String,
     }
+
+    fn get_db_path() -> PathBuf {
+        // Get the standard project directories for your app
+        let proj_dirs = ProjectDirs::from("com", "widget-maker", "widget-maker")
+            .expect("Failed to get project directories");
+
+        // Use the data directory for the database
+        let data_dir = proj_dirs.data_dir();
+
+        // Create the directory if it doesn't exist
+        fs::create_dir_all(data_dir).expect("Failed to create data directory");
+
+        // Return the full path to the database file
+        data_dir.join("widgets.db")
+    }
+
     pub struct Database {
         // data: HashMap<String, Vec<Record>>, // table -> data????
         pub(crate) connection: rusqlite::Connection,
@@ -31,7 +50,8 @@ pub mod db {
 
     impl Database {
         pub(crate) fn new() -> Self {
-            let connection = rusqlite::Connection::open_in_memory().unwrap();
+            let db_path = get_db_path();
+            let connection = rusqlite::Connection::open(db_path).unwrap();
             connection
                 .execute(
                     "CREATE TABLE sites (
