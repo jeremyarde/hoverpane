@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM widgets",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "widget_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "widget_type",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "level",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "transparent",
+        "ordinal": 5,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "04101c49d1c71051b84a0455c02b8fa9325a9adc4ac2457db369cb7ce9ffe463"
+}

@@ -132,42 +132,67 @@ pub mod api {
         StatusCode::CREATED.into_response()
     }
 
-    pub(crate) async fn get_values(State(state): State<ApiState>) -> Json<Vec<ScrapedData>> {
+    pub(crate) async fn get_values(State(state): State<ApiState>) -> impl IntoResponse {
         let state = state.db.try_lock().unwrap();
-        let values: Vec<ScrapedData> = state.get_data().unwrap();
-        Json(values)
+        match state.get_data().await {
+            Ok(values) => Json(values).into_response(),
+            Err(e) => {
+                error!("Failed to get values: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 
     pub(crate) async fn get_latest_values(
         State(state): State<ApiState>,
         Path(widget_id): Path<String>,
-    ) -> Json<Vec<ScrapedData>> {
+    ) -> impl IntoResponse {
         info!("Getting latest values for widget {}", widget_id);
         let state = state.db.try_lock().unwrap();
-        let values: Vec<ScrapedData> = state.get_latest_data().unwrap();
-        Json(values)
+        match state.get_latest_data().await {
+            Ok(values) => Json(values).into_response(),
+            Err(e) => {
+                error!("Failed to get latest values: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 
-    pub(crate) async fn get_sites(State(state): State<ApiState>) -> Json<Vec<MonitoredSite>> {
+    pub(crate) async fn get_sites(State(state): State<ApiState>) -> impl IntoResponse {
         let state = state.db.try_lock().unwrap();
-        let sites: Vec<MonitoredSite> = state.get_sites().unwrap();
-        Json(sites)
+        match state.get_sites().await {
+            Ok(sites) => Json(sites).into_response(),
+            Err(e) => {
+                error!("Failed to get sites: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 
-    pub(crate) async fn get_elements(State(state): State<ApiState>) -> Json<Vec<MonitoredElement>> {
+    pub(crate) async fn get_elements(State(state): State<ApiState>) -> impl IntoResponse {
         let state = state.db.try_lock().unwrap();
-        let elements: Vec<MonitoredElement> = state.get_elements().unwrap();
-        Json(elements)
+        match state.get_elements().await {
+            Ok(elements) => Json(elements).into_response(),
+            Err(e) => {
+                error!("Failed to get elements: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 
-    pub(crate) async fn get_widgets(
-        State(state): State<ApiState>,
-    ) -> Json<Vec<WidgetConfiguration>> {
+    pub(crate) async fn get_widgets(State(state): State<ApiState>) -> impl IntoResponse {
         info!("get widgets called");
         let state = state.db.try_lock().unwrap();
-        let widgets = state.get_configuration().unwrap();
-        info!("# widgets: {:?}", widgets.len());
-        Json(widgets)
+        match state.get_configuration().await {
+            Ok(widgets) => {
+                info!("# widgets: {:?}", widgets.len());
+                Json(widgets).into_response()
+            }
+            Err(e) => {
+                error!("Failed to get widgets: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 
     pub(crate) async fn get_widget_modifiers(
@@ -177,7 +202,7 @@ pub mod api {
         info!("Getting modifiers for widget {}", widget_id);
 
         let db = state.db.try_lock().unwrap();
-        match db.get_widget_modifiers(widget_id.as_str()) {
+        match db.get_widget_modifiers(widget_id.as_str()).await {
             Ok(modifiers) => Json(modifiers).into_response(),
             Err(e) => {
                 error!("Failed to get modifiers: {:?}", e);
@@ -196,7 +221,7 @@ pub mod api {
         );
 
         let mut db = state.db.try_lock().unwrap();
-        match db.delete_widget_modifier(&modifier_id) {
+        match db.delete_widget_modifier(&modifier_id).await {
             Ok(_) => StatusCode::NO_CONTENT.into_response(),
             Err(e) => {
                 error!("Failed to delete modifier: {:?}", e);
@@ -228,7 +253,7 @@ pub mod api {
         };
 
         let mut db = state.db.try_lock().unwrap();
-        match db.insert_widget_modifier(widget_modifier) {
+        match db.insert_widget_modifier(widget_modifier).await {
             Ok(_) => StatusCode::CREATED.into_response(),
             Err(e) => {
                 error!("Failed to add modifier: {:?}", e);

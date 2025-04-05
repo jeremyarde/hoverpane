@@ -4,24 +4,20 @@ pub mod db {
     use log::{error, info};
     use serde::Deserialize;
     use serde::Serialize;
+    use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
     use std::fs;
     use std::path::PathBuf;
     use typeshare::typeshare;
 
-    use crate::MonitoredSite;
-
     use crate::Level;
-
     use crate::ScrapedValue;
     use crate::WidgetConfiguration;
-
-    use crate::MonitoredElement;
     use crate::WidgetModifier;
 
     #[derive(Debug, Clone, Deserialize, Serialize)]
     #[typeshare]
     pub struct ScrapedData {
-        pub id: i32,
+        pub id: i64,
         pub widget_id: String,
         pub value: String,
         pub error: Option<String>,
@@ -44,324 +40,272 @@ pub mod db {
     }
 
     pub struct Database {
-        // data: HashMap<String, Vec<Record>>, // table -> data????
-        pub(crate) connection: rusqlite::Connection,
+        pub(crate) pool: Pool<Sqlite>,
     }
 
     impl Database {
-        pub(crate) fn new() -> Self {
+        pub async fn new() -> Result<Self, sqlx::Error> {
             let db_path = get_db_path();
-            let connection = rusqlite::Connection::open(db_path).unwrap();
-            connection
-                .execute(
-                    "CREATE TABLE sites (
-                id INTEGER PRIMARY KEY,
-                url TEXT NOT NULL,
-                title TEXT NOT NULL
-            )",
-                    (),
-                )
-                .unwrap();
+            let db_url = format!("sqlite:{}", db_path.to_str().unwrap());
 
-            connection
-                .execute(
-                    "CREATE TABLE widgets (
-                id INTEGER PRIMARY KEY,
-                widget_id TEXT KEY NOT NULL,
-                title TEXT NOT NULL,
-                widget_type TEXT NOT NULL,
-                level TEXT NOT NULL,
-                transparent BOOL NOT NULL
-            )",
-                    (),
-                )
-                .unwrap();
+            // Create database if it doesn't exist
+            if !db_path.exists() {
+                sqlx::sqlite::SqlitePoolOptions::new()
+                    .max_connections(1)
+                    .connect(&db_url)
+                    .await?;
+            }
 
-            connection
-                .execute(
-                    "CREATE TABLE modifiers (
-                id INTEGER PRIMARY KEY,
-                widget_id TEXT NOT NULL,
-                modifier_type TEXT NOT NULL
-            )",
-                    (),
-                )
-                .unwrap();
+            // Create connection pool
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(5)
+                .connect(&db_url)
+                .await?;
 
-            connection
-                .execute(
-                    "CREATE TABLE scraped_data (
+            // Create tables if they don't exist
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS sites (
+                    id INTEGER PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    title TEXT NOT NULL
+                )
+                "#,
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS widgets (
+                    id INTEGER PRIMARY KEY,
+                    widget_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    widget_type TEXT NOT NULL,
+                    level TEXT NOT NULL,
+                    transparent INTEGER NOT NULL
+                )
+                "#,
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS modifiers (
+                    id INTEGER PRIMARY KEY,
+                    widget_id TEXT NOT NULL,
+                    modifier_type TEXT NOT NULL
+                )
+                "#,
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS scraped_data (
                     id INTEGER PRIMARY KEY,
                     widget_id TEXT NOT NULL,
                     value TEXT NOT NULL,
                     error TEXT NOT NULL,
                     timestamp TEXT NOT NULL
-            )",
-                    (),
                 )
-                .unwrap();
+                "#,
+            )
+            .execute(&pool)
+            .await?;
 
-            Self { connection }
+            Ok(Self { pool })
         }
 
-        pub(crate) fn get_elements(&self) -> Result<Vec<MonitoredElement>, rusqlite::Error> {
-            let mut stmt = self.connection.prepare("SELECT * FROM elements")?;
-            let elements = stmt
-                .query_map([], |row| {
-                    Ok(MonitoredElement {
-                        id: row.get(0)?,
-                        site_id: row.get(1)?,
-                        selector: row.get(2)?,
-                        data_key: row.get(3)?,
-                    })
-                })?
-                .filter_map(|element| element.ok())
-                .collect();
-            Ok(elements)
-        }
+        pub async fn get_configuration(&self) -> Result<Vec<WidgetConfiguration>, sqlx::Error> {
+            let rows = sqlx::query!("SELECT * FROM widgets")
+                .fetch_all(&self.pool)
+                .await?;
 
-        pub(crate) fn get_configuration(
-            &self,
-        ) -> Result<Vec<WidgetConfiguration>, rusqlite::Error> {
-            let mut stmt = self.connection.prepare("SELECT * FROM widgets")?;
-            let configuration = stmt
-                .query_map([], |row| {
-                    Ok(WidgetConfiguration {
-                        id: row.get(0)?,
-                        widget_id: row.get(1)?,
-                        title: row.get(2)?,
-                        widget_type: row.get(3)?,
-                        level: row.get(4)?,
-                        transparent: row.get(5)?,
-                    })
-                })?
-                .filter_map(|configuration| {
-                    if let Err(e) = &configuration {
-                        error!("Error mapping WidgetConfiguration row: {:?}", e);
-                    }
-                    configuration.ok()
+            let configurations = rows
+                .into_iter()
+                .map(|row| WidgetConfiguration {
+                    id: row.id,
+                    widget_id: crate::NanoId(row.widget_id),
+                    title: row.title,
+                    widget_type: serde_json::from_str(&row.widget_type).unwrap(),
+                    level: match row.level.as_str() {
+                        "AlwaysOnTop" => Level::AlwaysOnTop,
+                        "Normal" => Level::Normal,
+                        "AlwaysOnBottom" => Level::AlwaysOnBottom,
+                        _ => Level::Normal,
+                    },
+                    transparent: row.transparent != 0,
                 })
                 .collect();
-            Ok(configuration)
+
+            Ok(configurations)
         }
 
-        pub(crate) fn insert_widget_configuration(
-            &mut self,
+        pub async fn insert_widget_configuration(
+            &self,
             configs: Vec<WidgetConfiguration>,
-        ) -> Result<(), rusqlite::Error> {
-            info!("Inserting ({}) widget configurations", configs.len());
-            let mut stmt = self.connection.prepare(
-                "INSERT INTO widgets (widget_id, title, widget_type, level, transparent) VALUES (?1, ?2, ?3, ?4, ?5)",
-            )?;
+        ) -> Result<(), sqlx::Error> {
             for config in configs {
-                info!("Inserting widget configuration: {:?}", config.id);
-                let res = stmt.execute([
-                    config.widget_id.0.as_str(),
-                    config.title.as_str(),
-                    serde_json::to_string(&config.widget_type).unwrap().as_str(),
-                    match config.level {
-                        Level::AlwaysOnTop => "AlwaysOnTop",
-                        Level::Normal => "Normal",
-                        Level::AlwaysOnBottom => "AlwaysOnBottom",
-                    },
-                    (config.transparent as i32).to_string().as_str(),
-                ])?;
-                info!("Inserted widget configuration: {:?}", res);
+                let widget_type = serde_json::to_string(&config.widget_type).unwrap();
+                let level = serde_json::to_string(&config.level).unwrap();
+                let transparent = serde_json::to_string(&config.transparent).unwrap();
+                sqlx::query!(
+                    "INSERT INTO widgets (widget_id, title, widget_type, level, transparent) VALUES (?, ?, ?, ?, ?)",
+                    config.widget_id.0,
+                    config.title,
+                    widget_type,
+                    level,
+                    config.transparent
+                )
+                .execute(&self.pool)
+                .await?;
             }
             Ok(())
         }
 
-        pub(crate) fn get_sites(&self) -> Result<Vec<MonitoredSite>, rusqlite::Error> {
-            let mut stmt = self.connection.prepare("SELECT * FROM sites")?;
-            let sites = stmt
-                .query_map([], |row| {
-                    Ok(MonitoredSite {
-                        id: row.get(0)?,
-                        site_id: row.get(1)?,
-                        url: row.get(2)?,
-                        title: row.get(3)?,
-                        refresh_interval: row.get(4)?,
-                    })
-                })?
-                .filter_map(|site| {
-                    if let Err(e) = &site {
-                        error!("Error mapping MonitoredSite row: {:?}", e);
-                    }
-                    site.ok()
-                })
-                .collect();
-            Ok(sites)
+        // pub async fn get_sites(&self) -> Result<Vec<MonitoredSite>, sqlx::Error> {
+        //     let rows = sqlx::query!("SELECT * FROM sites")
+        //         .fetch_all(&self.pool)
+        //         .await?;
+
+        //     let sites = rows
+        //         .into_iter()
+        //         .map(|row| MonitoredSite {
+        //             id: row.id,
+        //             site_id: row.site_id,
+        //             url: row.url,
+        //             title: row.title,
+        //             refresh_interval: row.refresh_interval,
+        //         })
+        //         .collect();
+
+        //     Ok(sites)
+        // }
+
+        pub async fn get_data(&self) -> Result<Vec<ScrapedData>, sqlx::Error> {
+            sqlx::query_as!(ScrapedData, "SELECT * FROM scraped_data")
+                .fetch_all(&self.pool)
+                .await
         }
 
-        pub(crate) fn get_data(&self) -> Result<Vec<ScrapedData>, rusqlite::Error> {
-            let mut stmt = self.connection.prepare("SELECT * FROM scraped_data")?;
-            let records = stmt
-                .query_map([], |row| {
-                    debug!("scraped_data row: {:?}", row);
-                    Ok(ScrapedData {
-                        id: row.get(0)?,
-                        widget_id: row.get(1)?,
-                        value: row.get(2)?,
-                        error: row.get(3)?,
-                        timestamp: row.get(4)?,
-                    })
-                })?
-                .filter_map(|record| {
-                    if let Err(e) = &record {
-                        error!("Error mapping ScrapedData row: {:?}", e);
-                    }
-                    record.ok()
-                })
-                .collect();
-            Ok(records)
+        pub async fn get_latest_data(&self) -> Result<Vec<ScrapedData>, sqlx::Error> {
+            sqlx::query_as!(
+                ScrapedData,
+                r#"
+                SELECT *
+                FROM scraped_data
+                ORDER BY timestamp DESC
+                LIMIT 1
+                "#
+            )
+            .fetch_all(&self.pool)
+            .await
         }
 
-        pub(crate) fn get_latest_data(&self) -> Result<Vec<ScrapedData>, rusqlite::Error> {
-            info!("Getting latest data");
-            let mut stmt = self.connection.prepare(
-                r#"SELECT *
-FROM (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY widget_id ORDER BY id DESC) AS rn
-    FROM scraped_data
-)
-WHERE rn = 1"#,
-            )?;
-            let data = stmt
-                .query_map([], |row| {
-                    debug!("scraped_data row: {:?}", row);
-
-                    Ok(ScrapedData {
-                        id: row.get(0)?,
-                        widget_id: row.get(1)?,
-                        value: row.get(2)?,
-                        error: row.get(3)?,
-                        timestamp: row.get(4)?,
-                    })
-                })?
-                .filter_map(|record| {
-                    if let Err(e) = &record {
-                        error!("Error mapping ScrapedData row: {:?}", e);
-                    }
-                    record.ok()
-                })
-                .collect();
-
-            Ok(data)
-        }
-
-        pub(crate) fn insert_data(
-            &mut self,
-            insert_data: ScrapedValue,
-        ) -> Result<(), rusqlite::Error> {
-            info!("Inserting data into table: {:?}", insert_data);
-            let mut stmt = self.connection.prepare(
-                "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?1, ?2, ?3, ?4)",
-            )?;
-            stmt.execute([
-                insert_data.widget_id.0.as_str(),
-                insert_data
-                    .value
-                    .as_ref()
-                    .unwrap_or(&"".to_string())
-                    .as_str(),
-                insert_data
-                    .error
-                    .as_ref()
-                    .unwrap_or(&"".to_string())
-                    .as_str(),
-                insert_data.timestamp.to_string().as_str(),
-            ])?;
+        pub async fn insert_data(&self, insert_data: ScrapedValue) -> Result<(), sqlx::Error> {
+            let value = insert_data.value.unwrap_or_default();
+            let error = insert_data.error.unwrap_or_default();
+            let timestamp = insert_data.timestamp.to_string();
+            sqlx::query!(
+                "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?, ?, ?, ?)",
+                insert_data.widget_id.0,
+                value,
+                error,
+                timestamp
+            )
+            .execute(&self.pool)
+            .await?;
             Ok(())
         }
 
-        pub fn get_modifiers(&self) -> Result<Vec<WidgetModifier>, rusqlite::Error> {
-            let mut stmt = self.connection.prepare("SELECT * FROM modifiers")?;
-            let modifiers = stmt
-                .query_map([], |row| {
-                    Ok(WidgetModifier {
-                        id: row.get(0)?,
-                        widget_id: row.get(1)?,
-                        modifier_type: row.get(2)?,
-                    })
-                })?
-                .filter_map(|modifier| modifier.ok())
+        pub async fn get_modifiers(&self) -> Result<Vec<WidgetModifier>, sqlx::Error> {
+            let rows = sqlx::query!("SELECT * FROM modifiers")
+                .fetch_all(&self.pool)
+                .await?;
+
+            let modifiers = rows
+                .into_iter()
+                .map(|row| WidgetModifier {
+                    id: row.id,
+                    widget_id: crate::NanoId(row.widget_id),
+                    modifier_type: serde_json::from_str(&row.modifier_type).unwrap(),
+                })
                 .collect();
+
             Ok(modifiers)
         }
 
-        pub fn insert_modifier(&mut self, modifier: WidgetModifier) -> Result<(), rusqlite::Error> {
-            let mut stmt = self
-                .connection
-                .prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?1, ?2)")?;
-            stmt.execute([
-                &modifier.widget_id.to_string(),
-                serde_json::to_string(&modifier.modifier_type)
-                    .unwrap()
-                    .as_str(),
-            ])?;
+        pub async fn insert_modifier(&self, modifier: WidgetModifier) -> Result<(), sqlx::Error> {
+            let modifier_type = serde_json::to_string(&modifier.modifier_type).unwrap();
+            sqlx::query!(
+                "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)",
+                modifier.widget_id.0,
+                modifier_type
+            )
+            .execute(&self.pool)
+            .await?;
             Ok(())
         }
 
-        pub fn insert_widget_modifier(
-            &mut self,
+        pub async fn insert_widget_modifier(
+            &self,
             widget_modifier: WidgetModifier,
-        ) -> Result<(), rusqlite::Error> {
-            let mut stmt = self
-                .connection
-                .prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?1, ?2)")?;
-            stmt.execute([
-                &widget_modifier.widget_id.to_string(),
-                serde_json::to_string(&widget_modifier.modifier_type)
-                    .unwrap()
-                    .as_str(),
-            ])?;
+        ) -> Result<(), sqlx::Error> {
+            let modifier_type = serde_json::to_string(&widget_modifier.modifier_type).unwrap();
+            sqlx::query!(
+                "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)",
+                widget_modifier.widget_id.0,
+                modifier_type
+            )
+            .execute(&self.pool)
+            .await?;
             Ok(())
         }
 
-        pub fn insert_widget_modifiers(
-            &mut self,
+        pub async fn insert_widget_modifiers(
+            &self,
             widget_modifiers: Vec<WidgetModifier>,
-        ) -> Result<(), rusqlite::Error> {
-            let mut stmt = self
-                .connection
-                .prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?1, ?2)")?;
+        ) -> Result<(), sqlx::Error> {
             for widget_modifier in widget_modifiers {
-                // info!("Inserting widget modifier: {:?}", widget_modifier);
-                stmt.execute([
-                    &widget_modifier.widget_id.to_string(),
-                    serde_json::to_string(&widget_modifier.modifier_type)
-                        .unwrap()
-                        .as_str(),
-                ])?;
+                let modifier_type = serde_json::to_string(&widget_modifier.modifier_type).unwrap();
+                sqlx::query!(
+                    "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)",
+                    widget_modifier.widget_id.0,
+                    modifier_type
+                )
+                .execute(&self.pool)
+                .await?;
             }
             Ok(())
         }
 
-        pub fn get_widget_modifiers(
+        pub async fn get_widget_modifiers(
             &self,
             widget_id: &str,
-        ) -> Result<Vec<WidgetModifier>, rusqlite::Error> {
-            let mut stmt = self
-                .connection
-                .prepare("SELECT * FROM modifiers WHERE widget_id = ?1")?;
-            let modifiers = stmt
-                .query_map([widget_id], |row| {
-                    Ok(WidgetModifier {
-                        id: row.get(0)?,
-                        widget_id: row.get(1)?,
-                        modifier_type: row.get(2)?,
-                    })
-                })?
-                .filter_map(|modifier| modifier.ok())
+        ) -> Result<Vec<WidgetModifier>, sqlx::Error> {
+            let rows = sqlx::query!("SELECT * FROM modifiers WHERE widget_id = ?", widget_id)
+                .fetch_all(&self.pool)
+                .await?;
+
+            let modifiers = rows
+                .into_iter()
+                .map(|row| WidgetModifier {
+                    id: row.id,
+                    widget_id: crate::NanoId(row.widget_id),
+                    modifier_type: serde_json::from_str(&row.modifier_type).unwrap(),
+                })
                 .collect();
+
             Ok(modifiers)
         }
 
-        pub fn delete_widget_modifier(&mut self, modifier_id: &str) -> Result<(), rusqlite::Error> {
-            let mut stmt = self
-                .connection
-                .prepare("DELETE FROM modifiers WHERE id = ?")?;
-            stmt.execute([modifier_id])?;
+        pub async fn delete_widget_modifier(&self, modifier_id: &str) -> Result<(), sqlx::Error> {
+            sqlx::query!("DELETE FROM modifiers WHERE id = ?", modifier_id)
+                .execute(&self.pool)
+                .await?;
             Ok(())
         }
     }
@@ -372,16 +316,16 @@ WHERE rn = 1"#,
 
         use super::*;
 
-        #[test]
-        fn test_modifier_roundtrip() {
-            let mut db = Database::new();
+        #[tokio::test]
+        async fn test_modifier_roundtrip() {
+            let mut db = Database::new().await.unwrap();
             let modifier = WidgetModifier {
                 id: 1,
                 widget_id: crate::NanoId(String::from("1")),
                 modifier_type: Modifier::Refresh { interval_sec: 30 },
             };
-            db.insert_modifier(modifier).unwrap();
-            let modifiers = db.get_modifiers().unwrap();
+            db.insert_modifier(modifier).await.unwrap();
+            let modifiers = db.get_modifiers().await.unwrap();
             assert_eq!(modifiers.len(), 1);
             assert_eq!(modifiers[0].id, 1);
             assert_eq!(modifiers[0].widget_id, crate::NanoId(String::from("1")));
@@ -391,9 +335,9 @@ WHERE rn = 1"#,
             );
         }
 
-        #[test]
-        fn test_widget_configuration_roundtrip() {
-            let mut db = Database::new();
+        #[tokio::test]
+        async fn test_widget_configuration_roundtrip() {
+            let mut db = Database::new().await.unwrap();
             let widget_configuration = WidgetConfiguration {
                 id: 0,
                 widget_id: crate::NanoId(String::from("1")),
@@ -405,8 +349,9 @@ WHERE rn = 1"#,
                 transparent: false,
             };
             db.insert_widget_configuration(vec![widget_configuration])
+                .await
                 .unwrap();
-            let configurations = db.get_configuration().unwrap();
+            let configurations = db.get_configuration().await.unwrap();
             assert_eq!(configurations.len(), 1);
             assert_eq!(
                 configurations[0].widget_id,

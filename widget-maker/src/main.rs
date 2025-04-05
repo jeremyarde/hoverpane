@@ -63,12 +63,6 @@ use wry::{
 
 mod db;
 
-use rusqlite::{
-    self,
-    types::{FromSql, ToSqlOutput},
-    ToSql,
-};
-
 use image;
 
 pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
@@ -92,25 +86,25 @@ pub enum Modifier {
     Refresh { interval_sec: i32 },
 }
 
-impl ToSql for Modifier {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-        let json = serde_json::to_string(self).unwrap();
-        Ok(ToSqlOutput::from(json))
-    }
-}
+// impl ToSql for Modifier {
+//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+//         let json = serde_json::to_string(self).unwrap();
+//         Ok(ToSqlOutput::from(json))
+//     }
+// }
 
-impl FromSql for Modifier {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let value = value.as_str().unwrap();
-        Ok(serde_json::from_str(value).unwrap())
-    }
-}
+// impl FromSql for Modifier {
+//     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+//         let value = value.as_str().unwrap();
+//         Ok(serde_json::from_str(value).unwrap())
+//     }
+// }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, sqlx::FromRow)]
 #[serde(rename_all = "lowercase")]
 #[typeshare]
 pub struct WidgetModifier {
-    id: i32,
+    id: i64,
     widget_id: NanoId,
     modifier_type: Modifier,
 }
@@ -130,7 +124,7 @@ struct FileConfiguration {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
 struct WidgetConfiguration {
-    id: i32,
+    id: i64,
     widget_id: NanoId,
     title: String,
     widget_type: WidgetType,
@@ -202,38 +196,38 @@ enum Level {
     AlwaysOnBottom,
 }
 
-impl ToSql for WidgetType {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-        let json = serde_json::to_string(self).unwrap(); // Convert to JSON
-        Ok(ToSqlOutput::from(json))
-    }
-}
+// impl ToSql for WidgetType {
+//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+//         let json = serde_json::to_string(self).unwrap(); // Convert to JSON
+//         Ok(ToSqlOutput::from(json))
+//     }
+// }
 
-impl FromSql for WidgetType {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let value = value.as_str().unwrap();
-        Ok(serde_json::from_str(value).unwrap())
-    }
-}
+// impl FromSql for WidgetType {
+//     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+//         let value = value.as_str().unwrap();
+//         Ok(serde_json::from_str(value).unwrap())
+//     }
+// }
 
-impl ToSql for Level {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-        let value = serde_json::to_string(self).unwrap();
-        Ok(ToSqlOutput::from(value))
-    }
-}
+// impl ToSql for Level {
+//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+//         let value = serde_json::to_string(self).unwrap();
+//         Ok(ToSqlOutput::from(value))
+//     }
+// }
 
-impl FromSql for Level {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let value = value.as_str().unwrap();
-        match value {
-            "AlwaysOnTop" => Ok(Level::AlwaysOnTop),
-            "Normal" => Ok(Level::Normal),
-            "AlwaysOnBottom" => Ok(Level::AlwaysOnBottom),
-            _ => Err(rusqlite::types::FromSqlError::InvalidType),
-        }
-    }
-}
+// impl FromSql for Level {
+//     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+//         let value = value.as_str().unwrap();
+//         match value {
+//             "AlwaysOnTop" => Ok(Level::AlwaysOnTop),
+//             "Normal" => Ok(Level::Normal),
+//             "AlwaysOnBottom" => Ok(Level::AlwaysOnBottom),
+//             _ => Err(rusqlite::types::FromSqlError::InvalidType),
+//         }
+//     }
+// }
 
 use nanoid::nanoid_gen;
 
@@ -260,30 +254,6 @@ pub struct NanoId(String);
 impl std::fmt::Display for NanoId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct MonitoredSite {
-    id: i32,
-    site_id: NanoId,
-    url: String,
-    title: String,
-    refresh_interval: Seconds,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct MonitoredElement {
-    id: i32,
-    site_id: i32,
-    selector: String,
-    data_key: String,
-}
-
-impl FromSql for NanoId {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let id = value.as_str().unwrap();
-        Ok(NanoId(id.to_string()))
     }
 }
 
@@ -471,12 +441,13 @@ JSON.stringify({
         info!("Scrape completed");
     }
 
-    fn add_scrape_result(&mut self, result: ScrapedValue) {
+    async fn add_scrape_result(&mut self, result: ScrapedValue) {
         let res = self
             .db
             .try_lock()
             .expect("Something failed")
-            .insert_data(result);
+            .insert_data(result)
+            .await;
         info!("Inserted data result: {:?}", res);
     }
 
@@ -690,7 +661,9 @@ impl ApplicationHandler<UserEvent> for App {
         let mut widgets = vec![];
         {
             let mut db = self.db.lock().expect("Something failed");
-            widgets.extend_from_slice(&db.get_configuration().expect("Something failed"));
+            let config =
+                futures::executor::block_on(db.get_configuration()).expect("Something failed");
+            widgets.extend_from_slice(&config);
         }
 
         info!("Found {} widgets", widgets.len());
@@ -802,7 +775,9 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_title(widget_options.title);
                 let res = {
                     let mut db = self.db.lock().expect("Something failed");
-                    db.insert_widget_configuration(vec![widget_config.clone()])
+                    futures::executor::block_on(
+                        db.insert_widget_configuration(vec![widget_config.clone()]),
+                    )
                 };
                 info!("Inserted widget configuration: {:?}", res);
                 if res.is_err() {
@@ -1010,11 +985,11 @@ fn main() {
     let db = Arc::new(Mutex::new(db::db::Database::new()));
     {
         let mut db = db.lock().unwrap();
-        match db.insert_widget_configuration(config) {
+        match futures::executor::block_on(db.insert_widget_configuration(config)) {
             Ok(_) => info!("Inserted widget configurations"),
             Err(e) => error!("Error inserting widget configurations: {:?}", e),
         }
-        match db.insert_widget_modifiers(modifiers) {
+        match futures::executor::block_on(db.insert_widget_modifiers(modifiers)) {
             Ok(_) => info!("Inserted widget modifiers"),
             Err(e) => error!("Error inserting widget modifiers: {:?}", e),
         }

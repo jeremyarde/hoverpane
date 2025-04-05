@@ -15,7 +15,7 @@ env_logger = "0.10"
 jiff = { version = "0.2.4", features = ["serde"] }
 # element-extractor = { path = "../element-extractor" }
 nanoid = { path = "../../nanoid" }
-rusqlite = { version = "0.34.0", features = ["bundled"] }
+# rusqlite = { version = "0.34.0", features = ["bundled"] }
 tokio = { version = "1.44.1", features = ["full"] }
 axum = "0.8.1"
 tower-http = { version = "0.6.2", features = ["cors", "fs"] }
@@ -31,6 +31,8 @@ typeshare = "1.0.4"
 axum-extra = "0.10.1"
 thiserror = "2.0.12"
 directories = "6.0.0"
+sqlx = { version = "0.7", features = ["runtime-tokio", "tls-native-tls", "sqlite", "macros"] }
+futures = "0.3.31"
 
 
 [dev-dependencies]

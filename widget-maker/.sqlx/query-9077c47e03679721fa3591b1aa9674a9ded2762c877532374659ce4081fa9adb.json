@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO widgets (widget_id, title, widget_type, level, transparent) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "9077c47e03679721fa3591b1aa9674a9ded2762c877532374659ce4081fa9adb"
+}

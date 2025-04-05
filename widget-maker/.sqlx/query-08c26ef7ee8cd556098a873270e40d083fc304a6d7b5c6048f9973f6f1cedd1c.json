@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM modifiers WHERE widget_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "widget_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "modifier_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "08c26ef7ee8cd556098a873270e40d083fc304a6d7b5c6048f9973f6f1cedd1c"
+}
