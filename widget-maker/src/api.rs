@@ -1,6 +1,7 @@
 pub mod api {
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
+    use tokio::sync::Mutex;
 
     use crate::db::db::ScrapedData;
     use crate::Modifier;
@@ -20,15 +21,9 @@ pub mod api {
     use typeshare::typeshare;
     use winit::event_loop::EventLoopProxy;
 
-    use std::sync::Mutex;
-
     use std::sync::Arc;
 
     use crate::WidgetConfiguration;
-
-    use crate::MonitoredElement;
-
-    use crate::MonitoredSite;
 
     use axum::extract::Path;
 
@@ -61,8 +56,8 @@ pub mod api {
             .allow_origin(AllowOrigin::any());
         let router = Router::new()
             .route("/values", get(get_values))
-            .route("/sites", get(get_sites))
-            .route("/elements", get(get_elements))
+            // .route("/sites", get(get_sites))
+            // .route("/elements", get(get_elements))
             // .route("/latest", get(get_latest_values))
             .route("/widgets/{widget_id}/latest", get(get_latest_values))
             .route("/widgets", get(get_widgets).post(create_widget))
@@ -132,6 +127,7 @@ pub mod api {
         StatusCode::CREATED.into_response()
     }
 
+    #[axum::debug_handler]
     pub(crate) async fn get_values(State(state): State<ApiState>) -> impl IntoResponse {
         let state = state.db.try_lock().unwrap();
         match state.get_data().await {
@@ -143,6 +139,7 @@ pub mod api {
         }
     }
 
+    #[axum::debug_handler]
     pub(crate) async fn get_latest_values(
         State(state): State<ApiState>,
         Path(widget_id): Path<String>,
@@ -158,27 +155,27 @@ pub mod api {
         }
     }
 
-    pub(crate) async fn get_sites(State(state): State<ApiState>) -> impl IntoResponse {
-        let state = state.db.try_lock().unwrap();
-        match state.get_sites().await {
-            Ok(sites) => Json(sites).into_response(),
-            Err(e) => {
-                error!("Failed to get sites: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
+    // pub(crate) async fn get_sites(State(state): State<ApiState>) -> impl IntoResponse {
+    //     // let state = state.db.try_lock().unwrap();
+    //     match state.db.try_lock().unwrap().get_sites().await {
+    //         Ok(sites) => Json(sites).into_response(),
+    //         Err(e) => {
+    //             error!("Failed to get sites: {:?}", e);
+    //             StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    //         }
+    //     }
+    // }
 
-    pub(crate) async fn get_elements(State(state): State<ApiState>) -> impl IntoResponse {
-        let state = state.db.try_lock().unwrap();
-        match state.get_elements().await {
-            Ok(elements) => Json(elements).into_response(),
-            Err(e) => {
-                error!("Failed to get elements: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        }
-    }
+    // pub(crate) async fn get_elements(State(state): State<ApiState>) -> impl IntoResponse {
+    //     let state = state.db.try_lock().unwrap();
+    //     match state.get_elements().await {
+    //         Ok(elements) => Json(elements).into_response(),
+    //         Err(e) => {
+    //             error!("Failed to get elements: {:?}", e);
+    //             StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    //         }
+    //     }
+    // }
 
     pub(crate) async fn get_widgets(State(state): State<ApiState>) -> impl IntoResponse {
         info!("get widgets called");
@@ -195,6 +192,7 @@ pub mod api {
         }
     }
 
+    #[axum::debug_handler]
     pub(crate) async fn get_widget_modifiers(
         State(state): State<ApiState>,
         Path(widget_id): Path<String>,
@@ -211,6 +209,7 @@ pub mod api {
         }
     }
 
+    #[axum::debug_handler]
     pub(crate) async fn delete_widget_modifier(
         State(state): State<ApiState>,
         Path((widget_id, modifier_id)): Path<(String, String)>,
@@ -232,11 +231,12 @@ pub mod api {
 
     #[derive(Clone)]
     pub(crate) struct ApiState {
-        pub(crate) db: Arc<Mutex<crate::db::db::Database>>,
-        pub(crate) proxy: Arc<EventLoopProxy<UserEvent>>,
+        pub db: Arc<Mutex<crate::db::db::Database>>,
+        pub proxy: Arc<EventLoopProxy<UserEvent>>,
     }
 
-    pub(crate) async fn add_widget_modifier(
+    #[axum::debug_handler]
+    pub async fn add_widget_modifier(
         State(state): State<ApiState>,
         Path(widget_id): Path<String>,
         Json(modifier): Json<WidgetModifier>,

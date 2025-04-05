@@ -22,11 +22,11 @@ use serde_json::{json, Value};
 use std::{
     cmp::max,
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, time::sleep};
+use tokio::{runtime::Runtime, sync::Mutex, time::sleep};
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     services::ServeFile,
@@ -660,9 +660,8 @@ impl ApplicationHandler<UserEvent> for App {
         // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let mut widgets = vec![];
         {
-            let mut db = self.db.lock().expect("Something failed");
-            let config =
-                futures::executor::block_on(db.get_configuration()).expect("Something failed");
+            let mut db = futures::executor::block_on(self.db.lock());
+            let config = futures::executor::block_on(db.get_configuration()).unwrap();
             widgets.extend_from_slice(&config);
         }
 
@@ -774,7 +773,7 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_level(widget_options.level)
                     .with_title(widget_options.title);
                 let res = {
-                    let mut db = self.db.lock().expect("Something failed");
+                    let mut db = futures::executor::block_on(self.db.lock());
                     futures::executor::block_on(
                         db.insert_widget_configuration(vec![widget_config.clone()]),
                     )
@@ -982,9 +981,11 @@ fn main() {
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
-    let db = Arc::new(Mutex::new(db::db::Database::new()));
+    let db = Arc::new(Mutex::new(
+        futures::executor::block_on(db::db::Database::new()).unwrap(),
+    ));
     {
-        let mut db = db.lock().unwrap();
+        let mut db = futures::executor::block_on(db.lock());
         match futures::executor::block_on(db.insert_widget_configuration(config)) {
             Ok(_) => info!("Inserted widget configurations"),
             Err(e) => error!("Error inserting widget configurations: {:?}", e),
@@ -1023,8 +1024,8 @@ fn main() {
             {
                 let mut modifiers: Vec<WidgetModifier> = vec![];
                 {
-                    let mut db = db_clone.lock().expect("Something failed");
-                    let curr_modifiers = db.get_modifiers().expect("Something failed");
+                    let mut db = futures::executor::block_on(db_clone.lock());
+                    let curr_modifiers = futures::executor::block_on(db.get_modifiers()).unwrap();
                     modifiers.extend(curr_modifiers);
                 }
                 info!("Found # modifiers: {:?}", modifiers.len());
