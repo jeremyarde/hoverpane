@@ -148,80 +148,85 @@ export default function EditWidget() {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4 h-full">
       {/* Widget List */}
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className="h-full">
         <h2 className="text-xl font-bold mb-4">Widget Modifiers</h2>
-        {data.length > 0 ? (
-          data.map((item) => (
-            <div
-              key={item.widget_id}
-              className="border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+        <div className="h-[calc(100%-2rem)] overflow-auto">
+          {data.length > 0 ? (
+            data.map((item) => (
+              <div
+                key={item.widget_id}
+                className="border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleWidget(item.widget_id)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {expandedWidgets.has(item.widget_id) ? (
+                          <ChevronDownIcon className="h-5 w-5" />
+                        ) : (
+                          <ChevronRightIcon className="h-5 w-5" />
+                        )}
+                      </button>
+                      <div>
+                        <h3 className="font-semibold">{item.title}</h3>
+                        <p className="text-sm text-gray-600">
+                          Level: {item.level}
+                        </p>
+                      </div>
+                    </div>
                     <button
-                      onClick={() => toggleWidget(item.widget_id)}
-                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => handleAddModifier(item.widget_id)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
                     >
-                      {expandedWidgets.has(item.widget_id) ? (
-                        <ChevronDownIcon className="h-5 w-5" />
-                      ) : (
-                        <ChevronRightIcon className="h-5 w-5" />
-                      )}
+                      Add Modifier
                     </button>
-                    <div>
-                      <h3 className="font-semibold">{item.title}</h3>
-                      <p className="text-sm text-gray-600">
-                        Level: {item.level}
-                      </p>
-                    </div>
                   </div>
-                  <button
-                    onClick={() => handleAddModifier(item.widget_id)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
-                  >
-                    Add Modifier
-                  </button>
                 </div>
-              </div>
 
-              {/* Expanded Content */}
-              {expandedWidgets.has(item.widget_id) && (
-                <div className="border-t border-gray-200 p-4 bg-gray-50">
-                  <h4 className="font-medium mb-2">Active Modifiers</h4>
-                  {widgetModifiers[item.widget_id]?.length > 0 ? (
-                    <div className="space-y-2">
-                      {widgetModifiers[item.widget_id].map((modifier) => (
-                        <div
-                          key={modifier.id}
-                          className="bg-white p-3 rounded border border-gray-200"
-                        >
-                          {renderModifierDetails(modifier)}
-                          <button
-                            onClick={() =>
-                              handleDeleteModifier(item.widget_id, modifier.id)
-                            }
-                            className="ml-2 text-red-500 hover:text-red-700"
+                {/* Expanded Content */}
+                {expandedWidgets.has(item.widget_id) && (
+                  <div className="border-t border-gray-200 p-4 bg-gray-50">
+                    <h4 className="font-medium mb-2">Active Modifiers</h4>
+                    {widgetModifiers[item.widget_id]?.length > 0 ? (
+                      <div className="space-y-2">
+                        {widgetModifiers[item.widget_id].map((modifier) => (
+                          <div
+                            key={modifier.id}
+                            className="bg-white p-3 rounded border border-gray-200"
                           >
-                            Delete
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      No modifiers added yet
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="text-center text-gray-500">No widgets found</div>
-        )}
+                            {renderModifierDetails(modifier)}
+                            <button
+                              onClick={() =>
+                                handleDeleteModifier(
+                                  item.widget_id,
+                                  modifier.id
+                                )
+                              }
+                              className="ml-2 text-red-500 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        No modifiers added yet
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="text-center text-gray-500">No widgets found</div>
+          )}
+        </div>
       </div>
 
       {/* Modifier Modal */}

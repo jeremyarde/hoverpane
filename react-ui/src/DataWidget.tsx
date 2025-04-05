@@ -51,7 +51,7 @@ export default function DataWidget() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">Scraped Data</h2>
         <div className="relative">
@@ -72,7 +72,7 @@ export default function DataWidget() {
           )}
         </div>
       </div>
-      <div className="h-[600px] overflow-auto rounded-lg border border-gray-200">
+      <div className="flex-1 overflow-auto rounded-lg border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200 bg-white border-separate border-spacing-x-4">
           <thead className="bg-gray-50 sticky top-0">
             <tr>

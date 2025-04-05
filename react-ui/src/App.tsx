@@ -36,7 +36,7 @@ const App = () => {
   >("create");
   return (
     <div className="min-h-screen flex justify-center p-4">
-      <div className="flex flex-col">
+      <div className="flex flex-col min-w-[400px]">
         <div className="flex flex-row">
           <button
             className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-2 rounded-t-lg transition-colors ${
@@ -70,7 +70,7 @@ const App = () => {
           </button>
         </div>
         {/* Border around the widget contents */}
-        <div className="border-2 border-black rounded-b-lg">
+        <div className="border-2 border-black rounded-b-lg min-h-[200px]">
           {displayedWidget === "create" && <WidgetForm />}
           {displayedWidget === "edit" && <EditWidget />}
           {displayedWidget === "data" && <DataWidget />}

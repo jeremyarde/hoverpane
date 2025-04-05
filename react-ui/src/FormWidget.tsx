@@ -69,7 +69,7 @@ export default function WidgetForm() {
     "block w-full bg-[#FF90BC] h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase tracking-wider";
 
   return (
-    <div className="p-2 max-w-md mx-auto">
+    <div className="p-4">
       <div className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
         <form onSubmit={handleSubmit} onReset={handleReset}>
           {/* URL Field */}
