@@ -70,9 +70,9 @@ export default function WidgetForm() {
   };
 
   const inputClass =
-    "w-full px-4 h-8 bg-[#FDFD96] border-[3px] border-black text-lg focus:outline-none appearance-none";
+    "w-full px-4 h-8 bg-white border-[3px] border-black text-lg focus:outline-none appearance-none";
   const labelClass =
-    "block w-full bg-[#FF90BC] h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase";
+    "block w-full bg-[#FF90BC] h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase tracking-wider";
 
   return (
     <div className="p-2 max-w-md mx-auto">
@@ -93,7 +93,7 @@ export default function WidgetForm() {
             >
               <label
                 htmlFor="url"
-                className={`block w-full h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase cursor-pointer ${
+                className={`block w-full h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase tracking-wider cursor-pointer ${
                   widgetType.type === "url" ? "text-black" : "text-gray-700"
                 }`}
               >
@@ -114,7 +114,7 @@ export default function WidgetForm() {
             >
               <label
                 htmlFor="url"
-                className={`block w-full h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase cursor-pointer ${
+                className={`block w-full h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase tracking-wider cursor-pointer ${
                   widgetType.type === "file" ? "text-black" : "text-gray-700"
                 }`}
               >
