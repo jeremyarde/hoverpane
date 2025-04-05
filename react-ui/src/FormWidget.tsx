@@ -1,23 +1,49 @@
-type WidgetSchema = {
-  url: string;
-  level: "normal" | "alwaysontop" | "alwaysonbottom";
-  title: string;
+// type WidgetSchema = {
+//   url: string;
+//   level: "normal" | "alwaysontop" | "alwaysonbottom";
+//   title: string;
+// };
+
+import { useState } from "react";
+import {
+  CreateWidgetRequest,
+  Level,
+  WidgetConfiguration,
+  WidgetType,
+} from "./types";
+
+type ApiError = {
+  message: string;
+  origin: string;
 };
 
-const defaultValues: WidgetSchema = {
-  level: "normal",
+const defaultValues: CreateWidgetRequest = {
   url: "",
+  html: "",
   title: "",
+  level: Level.Normal,
+  transparent: false,
 };
 
 export default function WidgetForm() {
+  // const [currFormValues, setCurrFormValues] =
+  //   useState<CreateWidgetRequest>(defaultValues);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [widgetType, setWidgetType] = useState<WidgetType>({
+    type: "url",
+    content: { url: "" },
+  });
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const data = {
-      url: formData.get("url") as string,
-      level: formData.get("level") as WidgetSchema["level"],
-      title: formData.get("title") as string,
+    const data: CreateWidgetRequest = {
+      url: (formData.get("url") as string) ?? "",
+      html: (formData.get("html") as string) ?? "",
+      title: (formData.get("title") as string) ?? "",
+      level:
+        (formData.get("level") as WidgetConfiguration["level"]) ?? Level.Normal,
+      transparent: formData.get("transparent") === "true",
     };
     console.log("Form submitted:", data);
 
@@ -28,19 +54,15 @@ export default function WidgetForm() {
       },
       body: JSON.stringify(data),
     });
-    const widget = await res.json();
-    console.log("Widget created:", widget);
 
-    // window.ipc.postMessage(
-    //   JSON.stringify({
-    //     createwidget: {
-    //       url: data.url,
-    //       level: data.level,
-    //       title: data.title ? data.title : "",
-    //       // refresh_interval: data.refresh_interval,
-    //     },
-    //   })
-    // );
+    if (res.ok) {
+      setError(null);
+      const widget = await res.json();
+      console.log("Widget created:", widget);
+    } else {
+      const error = await res.json();
+      setError(error);
+    }
   };
 
   const handleReset = (event: React.FormEvent<HTMLFormElement>) => {
@@ -57,20 +79,77 @@ export default function WidgetForm() {
       <div className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
         <form onSubmit={handleSubmit} onReset={handleReset}>
           {/* URL Field */}
-          <div>
-            <label htmlFor="url" className={labelClass}>
-              URL
-            </label>
-            <input
-              type="text"
-              id="url"
-              name="url"
-              defaultValue={defaultValues.url}
-              placeholder="https://example.com"
-              className={`${inputClass} border-b-[3px]`}
-              required
-            />
+          <div className="flex justify-between w-full">
+            <button
+              type="button"
+              className={`w-full transition-colors ${
+                widgetType.type === "url"
+                  ? "bg-[#98EECC] hover:bg-[#7DCCAA]"
+                  : "bg-[#FF90BC] hover:bg-[#FF7FAD] opacity-75"
+              }`}
+              onClick={() =>
+                setWidgetType({ type: "url", content: { url: "" } })
+              }
+            >
+              <label
+                htmlFor="url"
+                className={`block w-full h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase cursor-pointer ${
+                  widgetType.type === "url" ? "text-black" : "text-gray-700"
+                }`}
+              >
+                URL
+              </label>
+            </button>
+
+            <button
+              type="button"
+              className={`w-full transition-colors ${
+                widgetType.type === "file"
+                  ? "bg-[#98EECC] hover:bg-[#7DCCAA]"
+                  : "bg-[#FF90BC] hover:bg-[#FF7FAD] opacity-75"
+              }`}
+              onClick={() =>
+                setWidgetType({ type: "file", content: { html: "" } })
+              }
+            >
+              <label
+                htmlFor="url"
+                className={`block w-full h-8 leading-7 border-x-[3px] border-t-[3px] border-black text-center font-black text-lg uppercase cursor-pointer ${
+                  widgetType.type === "file" ? "text-black" : "text-gray-700"
+                }`}
+              >
+                HTML/JS
+              </label>
+            </button>
           </div>
+          {widgetType.type === "url" && (
+            <div>
+              <input
+                type="text"
+                id="url"
+                name="url"
+                defaultValue={defaultValues.url}
+                placeholder="https://example.com"
+                className={`${inputClass} border-b-[3px]`}
+                required
+              />
+            </div>
+          )}
+          {widgetType.type === "file" && (
+            <div>
+              <textarea
+                id="file"
+                name="file"
+                defaultValue={defaultValues.html}
+                placeholder="<div>Hello World</div>"
+                className={`${inputClass} border-b-[3px]`}
+                rows={10}
+                cols={50}
+                required
+              />
+            </div>
+          )}
+
           <div>
             <label htmlFor="title" className={labelClass}>
               Title
@@ -103,20 +182,20 @@ export default function WidgetForm() {
             </select>
           </div>
 
-          {/* Refresh Interval Field */}
-          <div>
-            {/* <label htmlFor="refresh_interval" className={labelClass}>
-              Refresh Interval (ms)
+          {/* Transparent Field */}
+          <div className="flex justify-between w-full border-b-[3px] border-black">
+            <label htmlFor="transparent" className={labelClass}>
+              Transparent
             </label>
-            <input
-              type="number"
-              id="refresh_interval"
-              name="refresh_interval"
-              defaultValue={defaultValues.refresh_interval}
-              min="0"
-              placeholder="0"
-              className={`${inputClass} border-b-[3px]`}
-            /> */}
+            <div className={`${inputClass} flex items-center justify-center`}>
+              <input
+                type="checkbox"
+                id="transparent"
+                name="transparent"
+                defaultChecked={defaultValues.transparent}
+                className="w-6 h-6 border-[3px] border-black bg-white checked:bg-[#98EECC] appearance-none cursor-pointer"
+              />
+            </div>
           </div>
 
           {/* Form Actions */}
@@ -136,6 +215,11 @@ export default function WidgetForm() {
           </div>
         </form>
       </div>
+      {error && (
+        <div className="text-red-500 h-12 text-center text-lg flex flex-col justify-center items-center">
+          <label>Error: {error.message}</label>
+        </div>
+      )}
     </div>
   );
 }

@@ -35,7 +35,7 @@ pub mod db {
             connection
                 .execute(
                     "CREATE TABLE sites (
-                id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY,
                 url TEXT NOT NULL,
                 title TEXT NOT NULL
             )",
@@ -46,10 +46,12 @@ pub mod db {
             connection
                 .execute(
                     "CREATE TABLE widgets (
-                id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY,
+                widget_id TEXT KEY NOT NULL,
                 title TEXT NOT NULL,
                 widget_type TEXT NOT NULL,
-                level TEXT NOT NULL
+                level TEXT NOT NULL,
+                transparent BOOL NOT NULL
             )",
                     (),
                 )
@@ -58,7 +60,7 @@ pub mod db {
             connection
                 .execute(
                     "CREATE TABLE modifiers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY,
                 widget_id TEXT NOT NULL,
                 modifier_type TEXT NOT NULL
             )",
@@ -69,7 +71,7 @@ pub mod db {
             connection
                 .execute(
                     "CREATE TABLE scraped_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY,
                     widget_id TEXT NOT NULL,
                     value TEXT NOT NULL,
                     error TEXT NOT NULL,
@@ -104,12 +106,13 @@ pub mod db {
             let mut stmt = self.connection.prepare("SELECT * FROM widgets")?;
             let configuration = stmt
                 .query_map([], |row| {
-                    // info!("querying row: {:?}", row);
                     Ok(WidgetConfiguration {
                         id: row.get(0)?,
-                        title: row.get(1)?,
-                        widget_type: row.get(2)?,
-                        level: row.get(3)?,
+                        widget_id: row.get(1)?,
+                        title: row.get(2)?,
+                        widget_type: row.get(3)?,
+                        level: row.get(4)?,
+                        transparent: row.get(5)?,
                     })
                 })?
                 .filter_map(|configuration| {
@@ -127,12 +130,12 @@ pub mod db {
             configs: Vec<WidgetConfiguration>,
         ) -> Result<(), rusqlite::Error> {
             let mut stmt = self.connection.prepare(
-                "INSERT INTO widgets (id, title, widget_type, level) VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO widgets (widget_id, title, widget_type, level, transparent) VALUES (?1, ?2, ?3, ?4, ?5)",
             )?;
             for config in configs {
                 info!("Inserting widget configuration: {:?}", config.id);
                 let res = stmt.execute([
-                    config.id.0.as_str(),
+                    config.widget_id.0.as_str(),
                     config.title.as_str(),
                     serde_json::to_string(&config.widget_type).unwrap().as_str(),
                     match config.level {
@@ -140,6 +143,7 @@ pub mod db {
                         Level::Normal => "Normal",
                         Level::AlwaysOnBottom => "AlwaysOnBottom",
                     },
+                    (config.transparent as i32).to_string().as_str(),
                 ])?;
                 info!("Inserted widget configuration: {:?}", res);
             }
@@ -370,18 +374,23 @@ WHERE rn = 1"#,
         fn test_widget_configuration_roundtrip() {
             let mut db = Database::new();
             let widget_configuration = WidgetConfiguration {
-                id: crate::NanoId(String::from("1")),
+                id: 0,
+                widget_id: crate::NanoId(String::from("1")),
                 title: "Test Widget".to_string(),
                 widget_type: WidgetType::Url(UrlConfiguration {
                     url: "https://example.com".to_string(),
                 }),
                 level: Level::Normal,
+                transparent: false,
             };
             db.insert_widget_configuration(vec![widget_configuration])
                 .unwrap();
             let configurations = db.get_configuration().unwrap();
             assert_eq!(configurations.len(), 1);
-            assert_eq!(configurations[0].id, crate::NanoId(String::from("1")));
+            assert_eq!(
+                configurations[0].widget_id,
+                crate::NanoId(String::from("1"))
+            );
             assert_eq!(configurations[0].title, "Test Widget");
             assert_eq!(
                 configurations[0].widget_type,

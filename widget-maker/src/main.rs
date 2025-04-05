@@ -1,11 +1,14 @@
 use axum::{
-    extract::{ConnectInfo, Path, State},
+    extract::ConnectInfo,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::Response,
     routing::{delete, get, get_service, post},
-    Json, Router,
+    Router,
 };
-use db::db::{Database, ScrapedData};
+
+mod api;
+
+use db::db::Database;
 use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
@@ -127,19 +130,22 @@ struct FileConfiguration {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
 struct WidgetConfiguration {
-    id: NanoId,
+    id: i32,
+    widget_id: NanoId,
     title: String,
     widget_type: WidgetType,
     level: Level,
+    transparent: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
 struct CreateWidgetRequest {
     url: String,
+    html: String,
     title: String,
     level: Level,
-    // refresh_interval: Seconds,
+    transparent: bool,
 }
 
 trait SqliteDetails {
@@ -150,17 +156,24 @@ trait SqliteDetails {
 impl WidgetConfiguration {
     fn new() -> Self {
         Self {
-            id: NanoId(nanoid_gen(8)),
+            id: 0,
+            widget_id: NanoId(nanoid_gen(8)),
             title: "".to_string(),
             widget_type: WidgetType::Url(UrlConfiguration {
                 url: "".to_string(),
             }),
             level: Level::Normal,
+            transparent: false,
         }
     }
 
     pub fn with_level(mut self, level: Level) -> Self {
         self.level = level;
+        self
+    }
+
+    pub fn with_transparent(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
         self
     }
 
@@ -174,8 +187,8 @@ impl WidgetConfiguration {
         self
     }
 
-    pub fn with_id(mut self, id: NanoId) -> Self {
-        self.id = id;
+    pub fn with_widget_id(mut self, id: NanoId) -> Self {
+        self.widget_id = id;
         self
     }
 }
@@ -486,8 +499,8 @@ JSON.stringify({
         // event_loop.set_allows_automatic_window_tabbing(enabled);
         let window_attributes = Window::default_attributes()
             .with_inner_size(self.current_size)
-            .with_transparent(true)
-            .with_blur(true)
+            .with_transparent(widget_config.transparent)
+            // .with_blur(true) // barely supported, not really working
             .with_movable_by_window_background(true)
             .with_fullsize_content_view(true)
             .with_title_hidden(true)
@@ -532,14 +545,15 @@ JSON.stringify({
                         window.WIDGET_ID = "$widget_id";
                         "#
                         .replace("$window_id", &format!("{:?}", new_window.id()))
-                        .replace("$widget_id", &widget_config.id.0)
+                        .replace("$widget_id", &widget_config.widget_id.0)
                         .as_str(),
                     )
                     .with_html(html.as_str())
                     .with_ipc_handler(move |message| {
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
-                    .with_transparent(true)
+                    .with_transparent(widget_config.transparent)
+                    // .with_background_color((100, 255, 150, 0))
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -564,14 +578,15 @@ JSON.stringify({
                         info!("IPC handler received message: {:?}", message);
                         App::ipc_handler(message.body(), proxy_clone.clone());
                     })
-                    .with_transparent(true)
+                    .with_transparent(widget_config.transparent)
+                    // .with_background_color((100, 255, 150, 0)) // this is not working
                     .with_initialization_script(
                         r#"
                         window.WINDOW_ID = "$window_id  ";
                         window.WIDGET_ID = "$widget_id";
                         "#
                         .replace("$window_id", &format!("{:?}", new_window.id()))
-                        .replace("$widget_id", &widget_config.id.0)
+                        .replace("$widget_id", &widget_config.widget_id.0)
                         .as_str(),
                     )
                     .build_as_child(&new_window)
@@ -586,9 +601,9 @@ JSON.stringify({
 
         if let Some(webview) = webview {
             self.widget_id_to_window_id
-                .insert(widget_config.id.clone(), new_window.id());
+                .insert(widget_config.widget_id.clone(), new_window.id());
             self.window_id_to_webview_id
-                .insert(new_window.id(), widget_config.id.clone());
+                .insert(new_window.id(), widget_config.widget_id.clone());
             self.all_windows.insert(
                 new_window.id(),
                 WidgetView {
@@ -596,7 +611,7 @@ JSON.stringify({
                     last_refresh: None,
                     app_webview: AppWebView { webview: webview },
                     window: new_window,
-                    nano_id: widget_config.id.clone(),
+                    nano_id: widget_config.widget_id.clone(),
                     visible: true,
                     options: WidgetOptions {
                         title: widget_config.title.clone(),
@@ -771,11 +786,20 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
+
                 let widget_config = WidgetConfiguration::new()
-                    .with_widget_type(WidgetType::Url(UrlConfiguration {
-                        url: widget_options.url,
-                    }))
-                    .with_level(widget_options.level);
+                    .with_widget_type(if widget_options.url.is_empty() {
+                        WidgetType::File(FileConfiguration {
+                            html: widget_options.html,
+                        })
+                    } else {
+                        WidgetType::Url(UrlConfiguration {
+                            url: widget_options.url,
+                        })
+                    })
+                    .with_transparent(widget_options.transparent)
+                    .with_level(widget_options.level)
+                    .with_title(widget_options.title);
                 self.create_widget(event_loop, widget_config);
             }
             UserEvent::TrayIconEvent(trayevent) => match trayevent {
@@ -812,234 +836,6 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
     }
-}
-
-fn main() {
-    env_logger::init();
-    info!("Starting application...");
-
-    #[cfg(target_os = "macos")]
-    {
-        info!("Initializing Macos App...");
-        winit::platform::macos::EventLoopBuilderExtMacOS::with_activation_policy(
-            &mut EventLoop::builder(),
-            winit::platform::macos::ActivationPolicy::Accessory,
-            // winit::platform::macos::ActivationPolicy::Regular,
-        );
-
-        winit::platform::macos::EventLoopBuilderExtMacOS::with_default_menu(
-            &mut EventLoop::builder(),
-            false,
-        );
-    }
-
-    let event_loop = EventLoop::<UserEvent>::with_user_event()
-        .with_default_menu(false)
-        .build()
-        .expect("Something failed");
-    let event_loop_proxy = event_loop.create_proxy();
-    let menu = setup_menu();
-    // menu.init_for_nsapp();
-
-    let config: Vec<WidgetConfiguration> = vec![
-        WidgetConfiguration::new()
-            .with_id(NanoId("controls".to_string()))
-            .with_title("Controls".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../../react-ui/dist/index.html").to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("Test SPY".to_string()))
-            .with_title("Test SPY".to_string())
-            .with_widget_type(WidgetType::Url(UrlConfiguration {
-                url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("testdata".to_string()))
-            .with_title("Test Data View Widget".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../assets/widget_template.html").to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_id(NanoId("transparent".to_string()))
-            .with_title("Transparent Widget".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../assets/widget_transparent.html").to_string(),
-            }))
-            .with_level(Level::Normal),
-    ];
-
-    let modifiers: Vec<WidgetModifier> = vec![WidgetModifier {
-        id: 1,
-        widget_id: NanoId("Test SPY".to_string()),
-        modifier_type: Modifier::Scrape {
-            selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
-        },
-    },
-    WidgetModifier {
-        id: 2,
-        widget_id: NanoId("testdata".to_string()),
-        modifier_type: Modifier::Refresh { interval_sec: 5 },
-    },
-    ];
-
-    info!("Debug Config: {:?}", config.len());
-
-    let proxy_clone = event_loop_proxy.clone();
-    let proxy_clone_muda = event_loop_proxy.clone();
-    muda::MenuEvent::set_event_handler(Some(move |event| {
-        info!("Menu event: {:?}", event);
-        proxy_clone_muda.send_event(UserEvent::MenuEvent(event));
-    }));
-
-    // setup the icon
-    let img = image::load_from_memory(include_bytes!("/Users/jarde/Documents/misc/app-icon2.png"))
-        .expect("Failed to load icon")
-        .into_rgba8();
-    let (width, height) = img.dimensions();
-
-    let tray_menu = tray_icon::menu::Menu::new();
-    let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
-    tray_menu.append(&quit_item).unwrap();
-
-    let tray_quit_id = quit_item.id().0.clone();
-
-    let tray_icon = TrayIconBuilder::new()
-        .with_tooltip("system-tray - tray icon library!")
-        .with_icon(tray_icon::Icon::from_rgba(img.into_raw(), width, height).unwrap())
-        .with_menu(Box::new(tray_menu))
-        .build()
-        .unwrap();
-    let tray_icon_proxy = proxy_clone.clone();
-    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-        info!("Tray icon event: {:?}", event);
-        tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
-    }));
-
-    let db = Arc::new(Mutex::new(db::db::Database::new()));
-    {
-        let mut db = db.lock().unwrap();
-        match db.insert_widget_configuration(config) {
-            Ok(_) => info!("Inserted widget configurations"),
-            Err(e) => error!("Error inserting widget configurations: {:?}", e),
-        }
-        match db.insert_widget_modifiers(modifiers) {
-            Ok(_) => info!("Inserted widget modifiers"),
-            Err(e) => error!("Error inserting widget modifiers: {:?}", e),
-        }
-    }
-    let api_proxy = Arc::new(event_loop_proxy.clone());
-    let modifier_thread_event_proxy = Arc::new(event_loop_proxy.clone());
-    let mut app = App {
-        tray_menu_quit_id: tray_quit_id,
-        current_size: LogicalSize::new(480, 360),
-        // current_size: LogicalSize::new(320, 240),
-        current_modifiers: Modifiers::default(),
-        all_windows: HashMap::new(),
-        widget_id_to_window_id: HashMap::new(),
-        window_id_to_webview_id: HashMap::new(),
-        db: db.clone(),
-        proxy: Arc::new(event_loop_proxy),
-        last_resize: None,
-        // clipboard: arboard::Clipboard::new().unwrap(),
-        menu,
-    };
-
-    // scraping thread
-    let db_clone = db.clone();
-    std::thread::spawn(move || {
-        info!("Starting scraping thread");
-        let mut min_refresh_interval = std::time::Duration::from_secs(4);
-        // let mut last_refresh = HashMap::new();
-        loop {
-            std::thread::sleep(min_refresh_interval);
-            {
-                let mut modifiers: Vec<WidgetModifier> = vec![];
-                {
-                    let mut db = db_clone.lock().expect("Something failed");
-                    let curr_modifiers = db.get_modifiers().expect("Something failed");
-                    modifiers.extend(curr_modifiers);
-                }
-                info!("Found # modifiers: {:?}", modifiers.len());
-
-                // instead of going through the configs, we ought to grab different events from the db
-                // events including: scraping, refreshing, minimizing, etc.
-                for modifier in modifiers {
-                    let res =
-                        modifier_thread_event_proxy.send_event(UserEvent::ModifierEvent(modifier));
-                    if res.is_err() {
-                        error!("Failed to send event to event loop");
-                    }
-                }
-            }
-        }
-    });
-
-    thread::spawn(move || {
-        let rt = Runtime::new().unwrap();
-
-        // Execute the future, blocking the current thread until completion
-        rt.block_on(async {
-            let state = ApiState {
-                db: db.clone(),
-                proxy: api_proxy.clone(),
-            };
-
-            let cors_layer = CorsLayer::new()
-                .allow_methods(vec![
-                    http::Method::GET,
-                    http::Method::POST,
-                    http::Method::DELETE,
-                ])
-                .allow_headers(vec![http::HeaderName::from_static("content-type")])
-                .allow_origin(AllowOrigin::any());
-            let router = Router::new()
-                .route("/values", get(get_values))
-                .route("/sites", get(get_sites))
-                .route("/elements", get(get_elements))
-                // .route("/latest", get(get_latest_values))
-                .route("/widgets/{widget_id}/latest", get(get_latest_values))
-                .route("/widgets", get(get_widgets).post(create_widget))
-                .route(
-                    "/widgets/{id}/modifiers",
-                    post(add_widget_modifier).get(get_widget_modifiers),
-                )
-                .route(
-                    "/widgets/{widget_id}/modifiers/{modifier_id}",
-                    delete(delete_widget_modifier),
-                )
-                .layer(cors_layer)
-                .with_state(state);
-
-            let addr = format!("{}:{}", "127.0.0.1", 3000);
-            let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-            println!("API listening on http://{}", addr);
-            axum::serve(listener, router).await.unwrap();
-        });
-    });
-
-    event_loop.run_app(&mut app).expect("Something failed");
-}
-
-async fn create_widget(
-    State(state): State<ApiState>,
-    Json(widget_options): Json<CreateWidgetRequest>,
-) -> impl IntoResponse {
-    info!("Creating widget: {:?}", widget_options);
-
-    let res = state
-        .proxy
-        .send_event(UserEvent::CreateWidget(widget_options.clone()));
-
-    if res.is_err() {
-        error!("Failed to send event to event loop");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    StatusCode::CREATED.into_response()
 }
 
 pub fn set_app_dock_icon(_window: &Window) {
@@ -1097,107 +893,182 @@ fn setup_menu() -> Menu {
     menu
 }
 
-async fn get_values(State(state): State<ApiState>) -> Json<Vec<ScrapedData>> {
-    let state = state.db.try_lock().unwrap();
-    let values: Vec<ScrapedData> = state.get_data().unwrap();
-    Json(values)
-}
+fn main() {
+    env_logger::init();
+    info!("Starting application...");
 
-async fn get_latest_values(
-    State(state): State<ApiState>,
-    Path(widget_id): Path<String>,
-) -> Json<Vec<ScrapedData>> {
-    info!("Getting latest values for widget {}", widget_id);
-    let state = state.db.try_lock().unwrap();
-    let values: Vec<ScrapedData> = state.get_latest_data().unwrap();
-    Json(values)
-}
+    #[cfg(target_os = "macos")]
+    {
+        info!("Initializing Macos App...");
+        winit::platform::macos::EventLoopBuilderExtMacOS::with_activation_policy(
+            &mut EventLoop::builder(),
+            winit::platform::macos::ActivationPolicy::Accessory,
+            // winit::platform::macos::ActivationPolicy::Regular,
+        );
 
-async fn get_sites(State(state): State<ApiState>) -> Json<Vec<MonitoredSite>> {
-    let state = state.db.try_lock().unwrap();
-    let sites: Vec<MonitoredSite> = state.get_sites().unwrap();
-    Json(sites)
-}
-
-async fn get_elements(State(state): State<ApiState>) -> Json<Vec<MonitoredElement>> {
-    let state = state.db.try_lock().unwrap();
-    let elements: Vec<MonitoredElement> = state.get_elements().unwrap();
-    Json(elements)
-}
-
-async fn get_widgets(State(state): State<ApiState>) -> Json<Vec<WidgetConfiguration>> {
-    info!("get widgets called");
-    let state = state.db.try_lock().unwrap();
-    let widgets = state.get_configuration().unwrap();
-    info!("# widgets: {:?}", widgets.len());
-    Json(widgets)
-}
-
-async fn get_widget_modifiers(
-    State(state): State<ApiState>,
-    Path(widget_id): Path<String>,
-) -> impl IntoResponse {
-    info!("Getting modifiers for widget {}", widget_id);
-
-    let db = state.db.try_lock().unwrap();
-    match db.get_widget_modifiers(widget_id.as_str()) {
-        Ok(modifiers) => Json(modifiers).into_response(),
-        Err(e) => {
-            error!("Failed to get modifiers: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        winit::platform::macos::EventLoopBuilderExtMacOS::with_default_menu(
+            &mut EventLoop::builder(),
+            false,
+        );
     }
-}
 
-async fn delete_widget_modifier(
-    State(state): State<ApiState>,
-    Path((widget_id, modifier_id)): Path<(String, String)>,
-) -> impl IntoResponse {
-    info!(
-        "Deleting modifier {} from widget {}",
-        modifier_id, widget_id
-    );
+    let event_loop = EventLoop::<UserEvent>::with_user_event()
+        .with_default_menu(false)
+        .build()
+        .expect("Something failed");
+    let event_loop_proxy = event_loop.create_proxy();
+    let menu = setup_menu();
+    // menu.init_for_nsapp();
 
-    let mut db = state.db.try_lock().unwrap();
-    match db.delete_widget_modifier(&modifier_id) {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => {
-            error!("Failed to delete modifier: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
+    let config: Vec<WidgetConfiguration> = vec![
+        WidgetConfiguration::new()
+            .with_widget_id(NanoId("controls".to_string()))
+            .with_title("Controls".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../../react-ui/dist/index.html").to_string(),
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_widget_id(NanoId("Test SPY".to_string()))
+            .with_title("Test SPY".to_string())
+            .with_widget_type(WidgetType::Url(UrlConfiguration {
+                url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_widget_id(NanoId("testdata".to_string()))
+            .with_title("Test Data View Widget".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../assets/widget_template.html").to_string(),
+            }))
+            .with_level(Level::Normal),
+        WidgetConfiguration::new()
+            .with_widget_id(NanoId("transparent".to_string()))
+            .with_title("Transparent Widget".to_string())
+            .with_widget_type(WidgetType::File(FileConfiguration {
+                html: include_str!("../assets/widget_transparent.html").to_string(),
+            }))
+            .with_transparent(true)
+            .with_level(Level::Normal),
+    ];
 
-#[derive(Clone)]
-struct ApiState {
-    db: Arc<Mutex<db::db::Database>>,
-    proxy: Arc<EventLoopProxy<UserEvent>>,
-}
-
-async fn add_widget_modifier(
-    State(state): State<ApiState>,
-    Path(widget_id): Path<String>,
-    Json(modifier): Json<WidgetModifier>,
-) -> impl IntoResponse {
-    info!("Adding modifier to widget {}: {:?}", widget_id, modifier);
-
-    let widget_modifier = WidgetModifier {
-        id: 0,
-        widget_id: NanoId(widget_id),
-        modifier_type: match modifier.modifier_type {
-            Modifier::Scrape { selector } => Modifier::Scrape { selector },
-            Modifier::Refresh { interval_sec } => Modifier::Refresh { interval_sec },
+    let modifiers: Vec<WidgetModifier> = vec![WidgetModifier {
+        id: 1,
+        widget_id: NanoId("Test SPY".to_string()),
+        modifier_type: Modifier::Scrape {
+            selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
         },
+    },
+    WidgetModifier {
+        id: 2,
+        widget_id: NanoId("testdata".to_string()),
+        modifier_type: Modifier::Refresh { interval_sec: 5 },
+    },
+    ];
+
+    info!("Debug Config: {:?}", config.len());
+
+    let proxy_clone = event_loop_proxy.clone();
+    let proxy_clone_muda = event_loop_proxy.clone();
+    muda::MenuEvent::set_event_handler(Some(move |event| {
+        info!("Menu event: {:?}", event);
+        proxy_clone_muda.send_event(UserEvent::MenuEvent(event));
+    }));
+
+    // setup the icon
+    let img = image::load_from_memory(include_bytes!("/Users/jarde/Documents/misc/app-icon2.png"))
+        .expect("Failed to load icon")
+        .into_rgba8();
+    let (width, height) = img.dimensions();
+
+    let tray_menu = tray_icon::menu::Menu::new();
+    let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
+    tray_menu.append(&quit_item).unwrap();
+
+    let tray_quit_id = quit_item.id().0.clone();
+
+    let tray_icon = TrayIconBuilder::new()
+        .with_tooltip("system-tray - tray icon library!")
+        .with_icon(tray_icon::Icon::from_rgba(img.into_raw(), width, height).unwrap())
+        .with_menu(Box::new(tray_menu))
+        .build()
+        .unwrap();
+    let tray_icon_proxy = proxy_clone.clone();
+    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+        info!("Tray icon event: {:?}", event);
+        tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
+    }));
+
+    let db = Arc::new(Mutex::new(db::db::Database::new()));
+    {
+        let mut db = db.lock().unwrap();
+        match db.insert_widget_configuration(config) {
+            Ok(_) => info!("Inserted widget configurations"),
+            Err(e) => error!("Error inserting widget configurations: {:?}", e),
+        }
+        match db.insert_widget_modifiers(modifiers) {
+            Ok(_) => info!("Inserted widget modifiers"),
+            Err(e) => error!("Error inserting widget modifiers: {:?}", e),
+        }
+    }
+    let api_proxy = Arc::new(event_loop_proxy.clone());
+    let modifier_thread_event_proxy = Arc::new(event_loop_proxy.clone());
+    // let (tx, rx) = tokio::sync::on
+    let mut app = App {
+        tray_menu_quit_id: tray_quit_id,
+        current_size: LogicalSize::new(480, 360),
+        // current_size: LogicalSize::new(320, 240),
+        current_modifiers: Modifiers::default(),
+        all_windows: HashMap::new(),
+        widget_id_to_window_id: HashMap::new(),
+        window_id_to_webview_id: HashMap::new(),
+        db: db.clone(),
+        proxy: Arc::new(event_loop_proxy),
+        last_resize: None,
+        // clipboard: arboard::Clipboard::new().unwrap(),
+        menu,
     };
 
-    let mut db = state.db.try_lock().unwrap();
-    match db.insert_widget_modifier(widget_modifier) {
-        Ok(_) => StatusCode::CREATED.into_response(),
-        Err(e) => {
-            error!("Failed to add modifier: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    // scraping thread
+    let db_clone = db.clone();
+    std::thread::spawn(move || {
+        info!("Starting scraping thread");
+        let mut min_refresh_interval = std::time::Duration::from_secs(4);
+        // let mut last_refresh = HashMap::new();
+        loop {
+            std::thread::sleep(min_refresh_interval);
+            {
+                let mut modifiers: Vec<WidgetModifier> = vec![];
+                {
+                    let mut db = db_clone.lock().expect("Something failed");
+                    let curr_modifiers = db.get_modifiers().expect("Something failed");
+                    modifiers.extend(curr_modifiers);
+                }
+                info!("Found # modifiers: {:?}", modifiers.len());
+
+                // instead of going through the configs, we ought to grab different events from the db
+                // events including: scraping, refreshing, minimizing, etc.
+                for modifier in modifiers {
+                    let res =
+                        modifier_thread_event_proxy.send_event(UserEvent::ModifierEvent(modifier));
+                    if res.is_err() {
+                        error!("Failed to send event to event loop");
+                    }
+                }
+            }
         }
-    }
+    });
+
+    thread::spawn(move || {
+        let rt = Runtime::new().unwrap();
+
+        // Execute the future, blocking the current thread until completion
+        rt.block_on(async {
+            api::api::run_api(db.clone(), api_proxy.clone()).await;
+        });
+    });
+
+    event_loop.run_app(&mut app).expect("Something failed");
 }
 
 #[cfg(test)]

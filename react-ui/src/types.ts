@@ -12,8 +12,10 @@ export enum Level {
 
 export interface CreateWidgetRequest {
 	url: string;
+	html: string;
 	title: string;
 	level: Level;
+	transparent: boolean;
 }
 
 export interface FileConfiguration {
@@ -37,10 +39,12 @@ export type WidgetType =
 	| { type: "url", content: UrlConfiguration };
 
 export interface WidgetConfiguration {
-	id: NanoId;
+	id: number;
+	widget_id: NanoId;
 	title: string;
 	widget_type: WidgetType;
 	level: Level;
+	transparent: boolean;
 }
 
 export type Modifier = 

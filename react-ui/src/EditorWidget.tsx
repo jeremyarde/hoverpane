@@ -22,7 +22,7 @@ export default function EditWidget() {
       const response = await fetch("http://127.0.0.1:3000/widgets", {});
       const data = await response.json();
       const widgetDetails = data.map((item: WidgetConfiguration) => ({
-        id: item.id,
+        id: item.widget_id,
         title: item.title,
         widget_type: item.widget_type,
         level: item.level,
@@ -155,17 +155,17 @@ export default function EditWidget() {
         {data.length > 0 ? (
           data.map((item) => (
             <div
-              key={item.id}
+              key={item.widget_id}
               className="border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => toggleWidget(item.id)}
+                      onClick={() => toggleWidget(item.widget_id)}
                       className="text-gray-500 hover:text-gray-700"
                     >
-                      {expandedWidgets.has(item.id) ? (
+                      {expandedWidgets.has(item.widget_id) ? (
                         <ChevronDownIcon className="h-5 w-5" />
                       ) : (
                         <ChevronRightIcon className="h-5 w-5" />
@@ -179,7 +179,7 @@ export default function EditWidget() {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleAddModifier(item.id)}
+                    onClick={() => handleAddModifier(item.widget_id)}
                     className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
                   >
                     Add Modifier
@@ -188,12 +188,12 @@ export default function EditWidget() {
               </div>
 
               {/* Expanded Content */}
-              {expandedWidgets.has(item.id) && (
+              {expandedWidgets.has(item.widget_id) && (
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
                   <h4 className="font-medium mb-2">Active Modifiers</h4>
-                  {widgetModifiers[item.id]?.length > 0 ? (
+                  {widgetModifiers[item.widget_id]?.length > 0 ? (
                     <div className="space-y-2">
-                      {widgetModifiers[item.id].map((modifier) => (
+                      {widgetModifiers[item.widget_id].map((modifier) => (
                         <div
                           key={modifier.id}
                           className="bg-white p-3 rounded border border-gray-200"
@@ -201,7 +201,7 @@ export default function EditWidget() {
                           {renderModifierDetails(modifier)}
                           <button
                             onClick={() =>
-                              handleDeleteModifier(item.id, modifier.id)
+                              handleDeleteModifier(item.widget_id, modifier.id)
                             }
                             className="ml-2 text-red-500 hover:text-red-700"
                           >
