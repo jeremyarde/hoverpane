@@ -129,6 +129,7 @@ pub mod db {
             &mut self,
             configs: Vec<WidgetConfiguration>,
         ) -> Result<(), rusqlite::Error> {
+            info!("Inserting ({}) widget configurations", configs.len());
             let mut stmt = self.connection.prepare(
                 "INSERT INTO widgets (widget_id, title, widget_type, level, transparent) VALUES (?1, ?2, ?3, ?4, ?5)",
             )?;

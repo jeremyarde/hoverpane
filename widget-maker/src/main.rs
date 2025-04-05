@@ -621,10 +621,10 @@ JSON.stringify({
             );
         }
 
-        self.db
-            .lock()
-            .unwrap()
-            .insert_widget_configuration(vec![widget_config]);
+        // self.db
+        //     .lock()
+        //     .unwrap()
+        //     .insert_widget_configuration(vec![widget_config]);
     }
 
     fn ipc_handler(body: &str, clone: Arc<EventLoopProxy<UserEvent>>) {
@@ -800,7 +800,15 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_transparent(widget_options.transparent)
                     .with_level(widget_options.level)
                     .with_title(widget_options.title);
-                self.create_widget(event_loop, widget_config);
+                let res = {
+                    let mut db = self.db.lock().expect("Something failed");
+                    db.insert_widget_configuration(vec![widget_config.clone()])
+                };
+                info!("Inserted widget configuration: {:?}", res);
+                if res.is_err() {
+                    error!("Failed to insert widget configuration: {:?}", res);
+                }
+                self.create_widget(event_loop, widget_config.clone());
             }
             UserEvent::TrayIconEvent(trayevent) => match trayevent {
                 _ => {
