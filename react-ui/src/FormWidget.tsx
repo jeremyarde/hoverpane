@@ -1,9 +1,3 @@
-// type WidgetSchema = {
-//   url: string;
-//   level: "normal" | "alwaysontop" | "alwaysonbottom";
-//   title: string;
-// };
-
 import { useState } from "react";
 import {
   CreateWidgetRequest,

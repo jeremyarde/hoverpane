@@ -37,23 +37,44 @@ const App = () => {
   return (
     <div className="min-h-screen flex justify-center p-4">
       <div className="flex flex-col">
-        <div className="flex flex-row justify-between text-center">
+        <div className="flex flex-row">
           <button
-            className="w-full"
+            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-2 rounded-t-lg transition-colors ${
+              displayedWidget === "create"
+                ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
+                : "bg-white hover:bg-gray-100"
+            }`}
             onClick={() => setDisplayedWidget("create")}
           >
             Create
           </button>
-          <button className="w-full" onClick={() => setDisplayedWidget("edit")}>
+          <button
+            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-2 rounded-t-lg transition-colors ${
+              displayedWidget === "edit"
+                ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
+                : "bg-white hover:bg-gray-100"
+            }`}
+            onClick={() => setDisplayedWidget("edit")}
+          >
             Edit
           </button>
-          <button className="w-full" onClick={() => setDisplayedWidget("data")}>
+          <button
+            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-2 rounded-t-lg transition-colors ${
+              displayedWidget === "data"
+                ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
+                : "bg-white hover:bg-gray-100"
+            }`}
+            onClick={() => setDisplayedWidget("data")}
+          >
             Data
           </button>
         </div>
-        {displayedWidget === "create" && <WidgetForm />}
-        {displayedWidget === "edit" && <EditWidget />}
-        {displayedWidget === "data" && <DataWidget />}
+        {/* Border around the widget contents */}
+        <div className="border-2 border-black rounded-b-lg">
+          {displayedWidget === "create" && <WidgetForm />}
+          {displayedWidget === "edit" && <EditWidget />}
+          {displayedWidget === "data" && <DataWidget />}
+        </div>
       </div>
     </div>
   );
