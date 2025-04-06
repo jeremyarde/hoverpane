@@ -23,11 +23,11 @@ use std::{
     cmp::max,
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, time::sleep};
+use tokio::{runtime::Runtime, sync::Mutex, time::sleep};
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     services::ServeFile,
@@ -95,7 +95,7 @@ struct App {
     all_windows: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
-    db: Arc<Mutex<widget_db::Database>>,
+    db: widget_db::Database,
     // clipboard: arboard::Clipboard,
 }
 
@@ -823,30 +823,14 @@ fn main() {
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
-    // let db = Arc::new(Mutex::new(
-    //     futures::executor::block_on(db::db::Database::new()).unwrap(),
-    // ));
-    // {
-    //     let mut db = futures::executor::block_on(db.lock());
-    //     match futures::executor::block_on(db.insert_widget_configuration(config)) {
-    //         Ok(_) => info!("Inserted widget configurations"),
-    //         Err(e) => error!("Error inserting widget configurations: {:?}", e),
-    //     }
-    //     match futures::executor::block_on(db.insert_widget_modifiers(modifiers)) {
-    //         Ok(_) => info!("Inserted widget modifiers"),
-    //         Err(e) => error!("Error inserting widget modifiers: {:?}", e),
-    //     }
-    // }
-
-    let db = Arc::new(Mutex::new(
+    let db =
         futures::executor::block_on(widget_db::Database::from("sqlite:../widget-db/widgets.db"))
-            .unwrap(),
-    ));
+            .unwrap();
     let api_proxy: Arc<EventLoopProxy<UserEvent>> = Arc::new(event_loop_proxy.clone());
     let modifier_thread_event_proxy = Arc::new(event_loop_proxy.clone());
     // let (tx, rx) = tokio::sync::on
     let mut app = App {
-        db: Arc::clone(&db),
+        db: db,
         tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
         // current_size: LogicalSize::new(320, 240),
@@ -892,7 +876,6 @@ fn main() {
     // });
 
     let rt = Runtime::new().unwrap();
-    let db_clone = Arc::clone(&db);
     thread::spawn(move || {
         // Execute the future, blocking the current thread until completion
         rt.block_on(async {
@@ -909,7 +892,7 @@ fn main() {
                         Ok(_) => info!("Inserted widget modifiers"),
                         Err(e) => error!("Error inserting widget modifiers: {:?}", e),
                     }
-                    widget_db::run_api(db_clone).await;
+                    widget_db::run_api(Arc::new(Mutex::new(db))).await;
                 }
                 Err(e) => {
                     error!("Failed to create database: {:?}", e);
