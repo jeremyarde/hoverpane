@@ -1,12 +1,16 @@
 pub mod api {
+    use nanoid::NanoId;
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
     use tokio::sync::Mutex;
+    use types::CreateWidgetRequest;
+    use types::Modifier;
+    use types::WidgetModifier;
 
     use crate::db::db::ScrapedData;
-    use crate::Modifier;
-    use crate::NanoId;
-    use crate::WidgetModifier;
+    // use crate::Modifier;
+    // use crate::NanoId;
+    // use crate::WidgetModifier;
     use axum::extract::rejection::JsonRejection;
     use axum::routing::delete;
     use axum::routing::get;
@@ -18,32 +22,34 @@ pub mod api {
     use log::info;
     use tower_http::cors::AllowOrigin;
     use tower_http::cors::CorsLayer;
-    use typeshare::typeshare;
-    use winit::event_loop::EventLoopProxy;
+    // use typeshare::typeshare;
+    // use winit::event_loop::EventLoopProxy;
 
     use std::sync::Arc;
 
-    use crate::WidgetConfiguration;
+    // use crate::WidgetConfiguration;
 
     use axum::extract::Path;
 
     use axum::http::StatusCode;
 
-    use crate::UserEvent;
+    // use crate::UserEvent;
 
     use axum::response::IntoResponse;
 
-    use crate::CreateWidgetRequest;
+    // use crate::CreateWidgetRequest;
 
     use axum::extract::State;
 
+    pub struct ApiClient {}
+
     pub async fn run_api(
         db: Arc<Mutex<crate::db::db::Database>>,
-        api_proxy: Arc<EventLoopProxy<UserEvent>>,
+        // api_proxy: Arc<EventLoopProxy<UserEvent>>,
     ) {
         let state = ApiState {
             db: db.clone(),
-            proxy: api_proxy.clone(),
+            // proxy: api_proxy.clone(),
         };
 
         let cors_layer = CorsLayer::new()
@@ -232,7 +238,6 @@ pub mod api {
     #[derive(Clone)]
     pub(crate) struct ApiState {
         pub db: Arc<Mutex<crate::db::db::Database>>,
-        pub proxy: Arc<EventLoopProxy<UserEvent>>,
     }
 
     #[axum::debug_handler]
@@ -247,8 +252,20 @@ pub mod api {
             id: 0,
             widget_id: NanoId(widget_id),
             modifier_type: match modifier.modifier_type {
-                Modifier::Scrape { selector } => Modifier::Scrape { selector },
-                Modifier::Refresh { interval_sec } => Modifier::Refresh { interval_sec },
+                Modifier::Scrape {
+                    modifier_id,
+                    selector,
+                } => Modifier::Scrape {
+                    modifier_id,
+                    selector,
+                },
+                Modifier::Refresh {
+                    modifier_id,
+                    interval_sec,
+                } => Modifier::Refresh {
+                    modifier_id,
+                    interval_sec,
+                },
             },
         };
 

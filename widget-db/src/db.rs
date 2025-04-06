@@ -2,21 +2,24 @@ pub mod db {
     use directories::ProjectDirs;
     use log::debug;
     use log::{error, info};
+    use nanoid::NanoId;
     use serde::Deserialize;
     use serde::Serialize;
     use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
     use std::fs;
     use std::path::PathBuf;
-    use typeshare::typeshare;
+    use types::{Level, WidgetConfiguration};
+    // use typeshare::typeshare;
 
-    use crate::Level;
-    use crate::ScrapedValue;
-    use crate::WidgetConfiguration;
-    use crate::WidgetModifier;
+    // use crate::Level;
+    // use crate::ScrapedValue;
+    // use crate::WidgetConfiguration;
+    // use crate::WidgetModifier;
 
     #[derive(Debug, Clone, Deserialize, Serialize)]
     #[typeshare]
     pub struct ScrapedData {
+        #[serde(skip)]
         pub id: i64,
         pub widget_id: String,
         pub value: String,
@@ -45,6 +48,8 @@ pub mod db {
 
     impl Database {
         pub async fn new() -> Result<Self, sqlx::Error> {
+            sqlx::migrate!("../widget-db/migrations").await?;
+
             let db_path = get_db_path();
             let db_url = format!("sqlite:{}", db_path.to_str().unwrap());
 
@@ -128,7 +133,7 @@ pub mod db {
                 .into_iter()
                 .map(|row| WidgetConfiguration {
                     id: row.id,
-                    widget_id: crate::NanoId(row.widget_id),
+                    widget_id: NanoId(row.widget_id),
                     title: row.title,
                     widget_type: serde_json::from_str(&row.widget_type).unwrap(),
                     level: match row.level.as_str() {
@@ -322,7 +327,10 @@ pub mod db {
             let modifier = WidgetModifier {
                 id: 1,
                 widget_id: crate::NanoId(String::from("1")),
-                modifier_type: Modifier::Refresh { interval_sec: 30 },
+                modifier_type: Modifier::Refresh {
+                    modifier_id: crate::NanoId(String::from("1")),
+                    interval_sec: 30,
+                },
             };
             db.insert_modifier(modifier).await.unwrap();
             let modifiers = db.get_modifiers().await.unwrap();
@@ -331,7 +339,10 @@ pub mod db {
             assert_eq!(modifiers[0].widget_id, crate::NanoId(String::from("1")));
             assert_eq!(
                 modifiers[0].modifier_type,
-                Modifier::Refresh { interval_sec: 30 }
+                Modifier::Refresh {
+                    modifier_id: crate::NanoId(String::from("1")),
+                    interval_sec: 30
+                }
             );
         }
 

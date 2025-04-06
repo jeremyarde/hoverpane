@@ -5,59 +5,63 @@
 export type NanoId = string;
 
 export enum Level {
-	AlwaysOnTop = "alwaysontop",
-	Normal = "normal",
-	AlwaysOnBottom = "alwaysonbottom",
+  AlwaysOnTop = "alwaysontop",
+  Normal = "normal",
+  AlwaysOnBottom = "alwaysonbottom",
 }
 
 export interface CreateWidgetRequest {
-	url: string;
-	html: string;
-	title: string;
-	level: Level;
-	transparent: boolean;
+  url: string;
+  html: string;
+  title: string;
+  level: Level;
+  transparent: boolean;
 }
 
 export interface FileConfiguration {
-	html: string;
+  html: string;
 }
 
 export interface ScrapedData {
-	id: number;
-	widget_id: string;
-	value: string;
-	error?: string;
-	timestamp: string;
+  widget_id: string;
+  value: string;
+  error?: string;
+  timestamp: string;
 }
 
 export interface UrlConfiguration {
-	url: string;
+  url: string;
 }
 
-export type WidgetType = 
-	| { type: "file", content: FileConfiguration }
-	| { type: "url", content: UrlConfiguration };
+export type WidgetType =
+  | { type: "file"; content: FileConfiguration }
+  | { type: "url"; content: UrlConfiguration };
 
 export interface WidgetConfiguration {
-	id: number;
-	widget_id: NanoId;
-	title: string;
-	widget_type: WidgetType;
-	level: Level;
-	transparent: boolean;
+  widget_id: NanoId;
+  title: string;
+  widget_type: WidgetType;
+  level: Level;
+  transparent: boolean;
 }
 
-export type Modifier = 
-	| { type: "scrape", content: {
-	selector: string;
-}}
-	| { type: "refresh", content: {
-	interval_sec: number;
-}};
+export type Modifier =
+  | {
+      type: "scrape";
+      content: {
+        modifier_id: NanoId;
+        selector: string;
+      };
+    }
+  | {
+      type: "refresh";
+      content: {
+        modifier_id: NanoId;
+        interval_sec: number;
+      };
+    };
 
 export interface WidgetModifier {
-	id: number;
-	widget_id: NanoId;
-	modifier_type: Modifier;
+  widget_id: NanoId;
+  modifier_type: Modifier;
 }
-

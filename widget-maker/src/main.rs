@@ -6,9 +6,9 @@ use axum::{
     Router,
 };
 
-mod api;
+// mod api;
 
-use db::db::Database;
+// use db::db::Database;
 use env_logger::fmt::Timestamp;
 use http::HeaderValue;
 use jiff;
@@ -61,7 +61,7 @@ use wry::{
     PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
 };
 
-mod db;
+// mod db;
 
 use image;
 
@@ -69,132 +69,121 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase", tag = "type", content = "content")]
-#[typeshare]
-pub enum WidgetType {
-    File(FileConfiguration),
-    // Source(SourceConfiguration),
-    Url(UrlConfiguration),
-}
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[serde(rename_all = "lowercase", tag = "type", content = "content")]
+// #[typeshare]
+// pub enum WidgetType {
+//     File(FileConfiguration),
+//     // Source(SourceConfiguration),
+//     Url(UrlConfiguration),
+// }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase", tag = "type", content = "content")]
-#[typeshare]
-pub enum Modifier {
-    Scrape { selector: String },
-    Refresh { interval_sec: i32 },
-}
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[serde(rename_all = "lowercase", tag = "type", content = "content")]
+// #[typeshare]
+// pub enum Modifier {
+//     Scrape {
+//         modifier_id: NanoId,
+//         selector: String,
+//     },
+//     Refresh {
+//         modifier_id: NanoId,
+//         interval_sec: i32,
+//     },
+// }
 
-// impl ToSql for Modifier {
-//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-//         let json = serde_json::to_string(self).unwrap();
-//         Ok(ToSqlOutput::from(json))
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, sqlx::FromRow)]
+// #[serde(rename_all = "lowercase")]
+// #[typeshare]
+// pub struct WidgetModifier {
+//     #[serde(skip)]
+//     id: i64,
+//     widget_id: NanoId,
+//     modifier_type: Modifier,
+// }
+
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[typeshare]
+// struct UrlConfiguration {
+//     url: String,
+// }
+
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[typeshare]
+// struct FileConfiguration {
+//     html: String,
+// }
+
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[typeshare]
+// struct WidgetConfiguration {
+//     #[serde(skip)]
+//     id: i64,
+//     widget_id: NanoId,
+//     title: String,
+//     widget_type: WidgetType,
+//     level: Level,
+//     transparent: bool,
+// }
+
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[typeshare]
+// struct CreateWidgetRequest {
+//     url: String,
+//     html: String,
+//     title: String,
+//     level: Level,
+//     transparent: bool,
+// }
+
+// impl WidgetConfiguration {
+//     fn new() -> Self {
+//         Self {
+//             id: 0,
+//             widget_id: NanoId(nanoid_gen(8)),
+//             title: "".to_string(),
+//             widget_type: WidgetType::Url(UrlConfiguration {
+//                 url: "".to_string(),
+//             }),
+//             level: Level::Normal,
+//             transparent: false,
+//         }
+//     }
+
+//     pub fn with_level(mut self, level: Level) -> Self {
+//         self.level = level;
+//         self
+//     }
+
+//     pub fn with_transparent(mut self, transparent: bool) -> Self {
+//         self.transparent = transparent;
+//         self
+//     }
+
+//     pub fn with_title(mut self, title: String) -> Self {
+//         self.title = title;
+//         self
+//     }
+
+//     pub fn with_widget_type(mut self, widget_type: WidgetType) -> Self {
+//         self.widget_type = widget_type;
+//         self
+//     }
+
+//     pub fn with_widget_id(mut self, id: NanoId) -> Self {
+//         self.widget_id = id;
+//         self
 //     }
 // }
 
-// impl FromSql for Modifier {
-//     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-//         let value = value.as_str().unwrap();
-//         Ok(serde_json::from_str(value).unwrap())
-//     }
+// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// #[serde(rename_all = "lowercase")]
+// #[typeshare]
+// enum Level {
+//     AlwaysOnTop,
+//     Normal,
+//     AlwaysOnBottom,
 // }
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, sqlx::FromRow)]
-#[serde(rename_all = "lowercase")]
-#[typeshare]
-pub struct WidgetModifier {
-    id: i64,
-    widget_id: NanoId,
-    modifier_type: Modifier,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[typeshare]
-struct UrlConfiguration {
-    url: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[typeshare]
-struct FileConfiguration {
-    html: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[typeshare]
-struct WidgetConfiguration {
-    id: i64,
-    widget_id: NanoId,
-    title: String,
-    widget_type: WidgetType,
-    level: Level,
-    transparent: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[typeshare]
-struct CreateWidgetRequest {
-    url: String,
-    html: String,
-    title: String,
-    level: Level,
-    transparent: bool,
-}
-
-trait SqliteDetails {
-    // fn to_sql(&self) -> rusqlite::Result<ToSqlOutput>;
-    // fn from_sql(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self>;
-}
-
-impl WidgetConfiguration {
-    fn new() -> Self {
-        Self {
-            id: 0,
-            widget_id: NanoId(nanoid_gen(8)),
-            title: "".to_string(),
-            widget_type: WidgetType::Url(UrlConfiguration {
-                url: "".to_string(),
-            }),
-            level: Level::Normal,
-            transparent: false,
-        }
-    }
-
-    pub fn with_level(mut self, level: Level) -> Self {
-        self.level = level;
-        self
-    }
-
-    pub fn with_transparent(mut self, transparent: bool) -> Self {
-        self.transparent = transparent;
-        self
-    }
-
-    pub fn with_title(mut self, title: String) -> Self {
-        self.title = title;
-        self
-    }
-
-    pub fn with_widget_type(mut self, widget_type: WidgetType) -> Self {
-        self.widget_type = widget_type;
-        self
-    }
-
-    pub fn with_widget_id(mut self, id: NanoId) -> Self {
-        self.widget_id = id;
-        self
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-#[typeshare]
-enum Level {
-    AlwaysOnTop,
-    Normal,
-    AlwaysOnBottom,
-}
 
 // impl ToSql for WidgetType {
 //     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
@@ -264,8 +253,9 @@ struct App {
     current_modifiers: Modifiers,
     proxy: Arc<EventLoopProxy<UserEvent>>,
     last_resize: Option<Instant>,
-    db: Arc<Mutex<Database>>,
+    // db: Arc<Mutex<Database>>,
     // widgets: HashMap<NanoId, WidgetView>,
+    // api_client: Arc<Mutex<ApiClient>>,
     all_windows: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
@@ -803,13 +793,19 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::ModifierEvent(modifier) => {
                 info!("Modifier event: {:?}", modifier);
                 match modifier.modifier_type {
-                    Modifier::Refresh { interval_sec } => {
-                        info!("Refreshing widget: {:?}", modifier.widget_id);
-                        self.refresh_webview(modifier.widget_id, interval_sec);
+                    Modifier::Refresh {
+                        modifier_id,
+                        interval_sec,
+                    } => {
+                        info!("Refreshing widget: {:?}", modifier_id);
+                        self.refresh_webview(modifier_id, interval_sec);
                     }
-                    Modifier::Scrape { selector } => {
-                        info!("Scraping widget: {:?}", modifier.widget_id);
-                        self.scrape_webview(modifier.widget_id, selector);
+                    Modifier::Scrape {
+                        modifier_id,
+                        selector,
+                    } => {
+                        info!("Scraping widget: {:?}", modifier_id);
+                        self.scrape_webview(modifier_id, selector);
                     }
                 }
             }
@@ -938,14 +934,18 @@ fn main() {
         id: 1,
         widget_id: NanoId("Test SPY".to_string()),
         modifier_type: Modifier::Scrape {
+            modifier_id: NanoId("scrape1".to_string()),
             selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
         },
     },
     WidgetModifier {
         id: 2,
         widget_id: NanoId("testdata".to_string()),
-        modifier_type: Modifier::Refresh { interval_sec: 5 },
-    },
+        modifier_type: Modifier::Refresh {
+                modifier_id: NanoId("refresh1".to_string()),
+                interval_sec: 5,
+            },
+        },
     ];
 
     info!("Debug Config: {:?}", config.len());
@@ -1006,7 +1006,7 @@ fn main() {
         all_windows: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
         window_id_to_webview_id: HashMap::new(),
-        db: db.clone(),
+        // db: db.clone(),
         proxy: Arc::new(event_loop_proxy),
         last_resize: None,
         // clipboard: arboard::Clipboard::new().unwrap(),

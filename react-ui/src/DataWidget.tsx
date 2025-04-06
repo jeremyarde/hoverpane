@@ -105,7 +105,7 @@ export default function DataWidget() {
           <tbody className="divide-y divide-gray-200 bg-white">
             {filteredValues.map((value) => (
               <tr
-                key={`${value.id}-${value.timestamp}`}
+                key={`${value.widget_id}-${value.timestamp}`}
                 className="hover:bg-gray-50"
               >
                 <td className="px-8 py-4 text-sm text-gray-900 whitespace-nowrap">

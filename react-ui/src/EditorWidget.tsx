@@ -196,7 +196,7 @@ export default function EditWidget() {
                       <div className="space-y-2">
                         {widgetModifiers[item.widget_id].map((modifier) => (
                           <div
-                            key={modifier.id}
+                            key={modifier.modifier_id}
                             className="bg-white p-3 rounded border border-gray-200"
                           >
                             {renderModifierDetails(modifier)}
