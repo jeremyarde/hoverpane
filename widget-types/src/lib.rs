@@ -57,8 +57,8 @@ pub struct ScrapedData {
 #[serde(rename_all = "lowercase")]
 #[typeshare]
 pub struct WidgetModifier {
-    // #[serde(skip)]
-    pub id: i32,
+    #[serde(skip)]
+    pub id: i64,
     pub widget_id: NanoId,
     pub modifier_type: Modifier,
 }
