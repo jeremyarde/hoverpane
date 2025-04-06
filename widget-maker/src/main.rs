@@ -34,8 +34,8 @@ use tower_http::{
 };
 use typeshare::typeshare;
 use widget_types::{
-    CreateWidgetRequest, FileConfiguration, Level, Modifier, ScrapedValue, UrlConfiguration,
-    WidgetConfiguration, WidgetModifier, WidgetType,
+    CreateWidgetRequest, EventSender, FileConfiguration, Level, Modifier, ScrapedValue,
+    UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
 };
 use winit::{
     application::ApplicationHandler,
@@ -76,6 +76,9 @@ pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separat
 
 use nanoid::{nanoid_gen, NanoId};
 
+mod event_sender;
+pub use event_sender::WinitEventSender;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
     width: u32,
@@ -87,16 +90,12 @@ struct App {
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
-    proxy: Arc<EventLoopProxy<UserEvent>>,
+    proxy: EventLoopProxy<UserEvent>,
     last_resize: Option<Instant>,
-    // db: Arc<Mutex<Database>>,
-    // widgets: HashMap<NanoId, WidgetView>,
-    // api_client: Arc<Mutex<ApiClient>>,
     all_windows: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
     db: widget_db::Database,
-    // clipboard: arboard::Clipboard,
 }
 
 struct WidgetView {
@@ -268,15 +267,10 @@ JSON.stringify({
         info!("Scrape completed");
     }
 
-    async fn add_scrape_result(&mut self, result: ScrapedValue) {
-        // let res = self
-        //     .db
-        //     .try_lock()
-        //     .expect("Something failed")
-        //     .insert_data(result)
-        //     .await;
-        let res: Result<(), ()> = Ok(());
-        info!("TODO: Inserted data result: {:?}", res);
+    fn add_scrape_result(&mut self, result: ScrapedValue) {
+        if let Err(e) = self.db.insert_data(result) {
+            error!("Failed to insert data: {:?}", e);
+        }
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
@@ -325,7 +319,6 @@ JSON.stringify({
         set_app_dock_icon(&new_window);
 
         let scale_factor = new_window.scale_factor();
-        let proxy_clone = Arc::clone(&self.proxy);
 
         let webview = match &widget_config.widget_type {
             WidgetType::File(file_config) => {
@@ -348,8 +341,11 @@ JSON.stringify({
                         .as_str(),
                     )
                     .with_html(html.as_str())
-                    .with_ipc_handler(move |message| {
-                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    .with_ipc_handler({
+                        let proxy_clone = self.proxy.clone();
+                        move |message| {
+                            App::ipc_handler(message.body(), proxy_clone.clone());
+                        }
                     })
                     .with_transparent(widget_config.transparent)
                     // .with_background_color((100, 255, 150, 0))
@@ -373,9 +369,12 @@ JSON.stringify({
                         0.0, 0.0,
                     )))
                     .with_url(updated_url)
-                    .with_ipc_handler(move |message| {
-                        info!("IPC handler received message: {:?}", message);
-                        App::ipc_handler(message.body(), proxy_clone.clone());
+                    .with_ipc_handler({
+                        let proxy_clone = self.proxy.clone();
+                        move |message| {
+                            info!("IPC handler received message: {:?}", message);
+                            App::ipc_handler(message.body(), proxy_clone.clone());
+                        }
                     })
                     .with_transparent(widget_config.transparent)
                     // .with_background_color((100, 255, 150, 0)) // this is not working
@@ -426,12 +425,12 @@ JSON.stringify({
         //     .insert_widget_configuration(vec![widget_config]);
     }
 
-    fn ipc_handler(body: &str, clone: Arc<EventLoopProxy<UserEvent>>) {
+    fn ipc_handler(body: &str, proxy: EventLoopProxy<UserEvent>) {
         info!("IPC handler received message: {:?}", body);
         let val = serde_json::from_str::<Value>(body).unwrap();
         info!("Value: {:?}", val);
         let message: ScrapedValue = serde_json::from_value(val["extractresult"].clone()).unwrap();
-        clone.send_event(UserEvent::ExtractResult(message));
+        proxy.send_event(UserEvent::ExtractResult(message));
     }
 }
 
@@ -489,10 +488,8 @@ impl ApplicationHandler<UserEvent> for App {
         let mut widgets = vec![];
         {
             info!("TODO: Get widgets from db");
-
-            // let mut db = futures::executor::block_on(self.db.lock());
-            // let config = futures::executor::block_on(db.get_configuration()).unwrap();
-            // widgets.extend_from_slice(&config);
+            let config = self.db.get_configuration().unwrap();
+            widgets.extend_from_slice(&config);
         }
 
         info!("Found {} widgets", widgets.len());
@@ -823,81 +820,42 @@ fn main() {
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
-    let db =
-        futures::executor::block_on(widget_db::Database::from("sqlite:../widget-db/widgets.db"))
-            .unwrap();
-    let api_proxy: Arc<EventLoopProxy<UserEvent>> = Arc::new(event_loop_proxy.clone());
-    let modifier_thread_event_proxy = Arc::new(event_loop_proxy.clone());
-    // let (tx, rx) = tokio::sync::on
+    let app_db = widget_db::Database::new().unwrap();
+
     let mut app = App {
-        db: db,
+        db: app_db,
         tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
-        // current_size: LogicalSize::new(320, 240),
         current_modifiers: Modifiers::default(),
         all_windows: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
         window_id_to_webview_id: HashMap::new(),
-        // db: db.clone(),
-        proxy: Arc::new(event_loop_proxy),
+        proxy: event_loop_proxy.clone(),
         last_resize: None,
-        // clipboard: arboard::Clipboard::new().unwrap(),
         menu,
     };
 
-    // scraping thread
-    // let db_clone = db.clone();
-    // std::thread::spawn(move || {
-    //     info!("Starting scraping thread");
-    //     let mut min_refresh_interval = std::time::Duration::from_secs(4);
-    //     // let mut last_refresh = HashMap::new();
-    //     loop {
-    //         std::thread::sleep(min_refresh_interval);
-    //         {
-    //             let mut modifiers: Vec<WidgetModifier> = vec![];
-    //             {
-    //                 let mut db = futures::executor::block_on(db_clone.lock());
-    //                 let curr_modifiers = futures::executor::block_on(db.get_modifiers()).unwrap();
-    //                 modifiers.extend(curr_modifiers);
-    //             }
-    //             info!("Found # modifiers: {:?}", modifiers.len());
-
-    //             // instead of going through the configs, we ought to grab different events from the db
-    //             // events including: scraping, refreshing, minimizing, etc.
-    //             for modifier in modifiers {
-    //                 let res =
-    //                     modifier_thread_event_proxy.send_event(UserEvent::ModifierEvent(modifier));
-    //                 if res.is_err() {
-    //                     error!("Failed to send event to event loop");
-    //                 }
-    //             }
-    //         }
-    //     }
-    // });
-
+    let event_sender = WinitEventSender::new(event_loop_proxy.clone());
     let rt = Runtime::new().unwrap();
     thread::spawn(move || {
         // Execute the future, blocking the current thread until completion
         rt.block_on(async {
-            let db = widget_db::Database::from("sqlite:../widget-db/widgets.db").await;
-            match db {
-                Ok(db) => {
-                    let res = db.insert_widget_configuration(config).await;
-                    match res {
-                        Ok(_) => info!("Inserted widget configurations"),
-                        Err(e) => error!("Error inserting widget configurations: {:?}", e),
-                    }
-                    let res = db.insert_widget_modifiers(modifiers).await;
-                    match res {
-                        Ok(_) => info!("Inserted widget modifiers"),
-                        Err(e) => error!("Error inserting widget modifiers: {:?}", e),
-                    }
-                    widget_db::run_api(Arc::new(Mutex::new(db))).await;
-                }
-                Err(e) => {
-                    error!("Failed to create database: {:?}", e);
-                }
+            let mut api_db = widget_db::Database::new().unwrap();
+            let res = api_db.insert_widget_configuration(config);
+            match res {
+                Ok(_) => info!("Inserted widget configurations"),
+                Err(e) => error!("Error inserting widget configurations: {:?}", e),
             }
+            let res = api_db.insert_widget_modifiers(modifiers);
+            match res {
+                Ok(_) => info!("Inserted widget modifiers"),
+                Err(e) => error!("Error inserting widget modifiers: {:?}", e),
+            }
+            widget_db::run_api(
+                Arc::new(Mutex::new(api_db)),
+                event_sender.into_event_sender(),
+            )
+            .await;
         });
     });
 

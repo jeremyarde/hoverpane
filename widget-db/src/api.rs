@@ -2,10 +2,12 @@ pub mod api {
     use nanoid::NanoId;
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
+    use std::sync::Arc;
     use tokio::sync::Mutex;
-    use widget_types::CreateWidgetRequest;
-    use widget_types::Modifier;
-    use widget_types::WidgetModifier;
+    use widget_types::{
+        CreateWidgetRequest, EventSender, FileConfiguration, Level, Modifier, ScrapedValue,
+        UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
+    };
 
     // use crate::db::db::ScrapedData;
     // use crate::Modifier;
@@ -25,11 +27,6 @@ pub mod api {
     // use typeshare::typeshare;
     // use winit::event_loop::EventLoopProxy;
 
-    use std::sync::Arc;
-    // use std::sync::Mutex;
-
-    // use crate::WidgetConfiguration;
-
     use axum::extract::Path;
 
     use axum::http::StatusCode;
@@ -44,14 +41,10 @@ pub mod api {
 
     pub struct ApiClient {}
 
-    pub async fn run_api(
-        db: Arc<Mutex<crate::db::db::Database>>,
-        // api_proxy: Arc<EventLoopProxy<UserEvent>>,
-    ) {
-        // let (event_sender, event_receiver) = mpsc::channel(100);
+    pub async fn run_api(db: Arc<Mutex<crate::db::db::Database>>, event_sender: EventSender) {
         let state = ApiState {
             db: db.clone(),
-            // proxy: api_proxy.clone(),
+            event_sender: event_sender.clone(),
         };
 
         let cors_layer = CorsLayer::new()
@@ -62,6 +55,7 @@ pub mod api {
             ])
             .allow_headers(vec![http::HeaderName::from_static("content-type")])
             .allow_origin(AllowOrigin::any());
+
         let router = Router::new()
             .route("/values", get(get_values))
             // .route("/sites", get(get_sites))
@@ -93,17 +87,15 @@ pub mod api {
     pub enum ApiError {
         // The `#[from]` attribute generates `From<JsonRejection> for ApiError`
         // implementation. See `thiserror` docs for more information
-        #[error(transparent)]
-        JsonExtractorRejection(#[from] JsonRejection),
+        #[error("Database error: {0}")]
+        Database(#[from] rusqlite::Error),
     }
 
     // We implement `IntoResponse` so ApiError can be used as a response
     impl IntoResponse for ApiError {
         fn into_response(self) -> axum::response::Response {
             let (status, message) = match self {
-                ApiError::JsonExtractorRejection(json_rejection) => {
-                    (json_rejection.status(), json_rejection.body_text())
-                }
+                ApiError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             };
 
             let payload = json!({
@@ -115,31 +107,44 @@ pub mod api {
         }
     }
 
+    #[axum::debug_handler]
     pub(crate) async fn create_widget(
         State(state): State<ApiState>,
-        WithRejection(Json(widget_options), _): WithRejection<Json<CreateWidgetRequest>, ApiError>,
+        Json(widget_request): Json<CreateWidgetRequest>,
     ) -> impl IntoResponse {
-        info!("Creating widget: {:?}", widget_options);
+        info!("Creating widget: {:?}", widget_request);
 
-        // todo!("Need to send possibly send an event to the app..., because we may be getting a message from somewhere else instead of through the app");
-        // let res = state
-        //     .proxy
-        //     .send_event(UserEvent::CreateWidget(widget_options.clone()));
+        let widget_config = WidgetConfiguration {
+            id: 0,
+            widget_id: NanoId::new(),
+            title: widget_request.title,
+            widget_type: if widget_request.url.is_empty() {
+                WidgetType::File(FileConfiguration {
+                    html: widget_request.html,
+                })
+            } else {
+                WidgetType::Url(UrlConfiguration {
+                    url: widget_request.url,
+                })
+            },
+            level: widget_request.level,
+            transparent: widget_request.transparent,
+        };
 
-        // info!("[DEBUG] Result of event: {:?}", res);
-
-        // if res.is_err() {
-        //     error!("Failed to send event to event loop");
-        //     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        // }
-
-        StatusCode::CREATED.into_response()
+        let mut db = state.db.lock().await;
+        match db.insert_widget_configuration(vec![widget_config]) {
+            Ok(_) => StatusCode::CREATED.into_response(),
+            Err(e) => {
+                error!("Failed to create widget: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
     }
 
     #[axum::debug_handler]
     pub(crate) async fn get_values(State(state): State<ApiState>) -> impl IntoResponse {
-        let state = state.db.try_lock().unwrap();
-        match state.get_data().await {
+        let db = state.db.lock().await;
+        match db.get_data() {
             Ok(values) => Json(values).into_response(),
             Err(e) => {
                 error!("Failed to get values: {:?}", e);
@@ -154,8 +159,8 @@ pub mod api {
         Path(widget_id): Path<String>,
     ) -> impl IntoResponse {
         info!("Getting latest values for widget {}", widget_id);
-        let state = state.db.try_lock().unwrap();
-        match state.get_latest_data().await {
+        let db = state.db.lock().await;
+        match db.get_latest_data() {
             Ok(values) => Json(values).into_response(),
             Err(e) => {
                 error!("Failed to get latest values: {:?}", e);
@@ -186,10 +191,11 @@ pub mod api {
     //     }
     // }
 
+    #[axum::debug_handler]
     pub(crate) async fn get_widgets(State(state): State<ApiState>) -> impl IntoResponse {
         info!("get widgets called");
-        let state = state.db.try_lock().unwrap();
-        match state.get_configuration().await {
+        let db = state.db.lock().await;
+        match db.get_configuration() {
             Ok(widgets) => {
                 info!("# widgets: {:?}", widgets.len());
                 Json(widgets).into_response()
@@ -208,8 +214,8 @@ pub mod api {
     ) -> impl IntoResponse {
         info!("Getting modifiers for widget {}", widget_id);
 
-        let db = state.db.try_lock().unwrap();
-        match db.get_widget_modifiers(widget_id.as_str()).await {
+        let db = state.db.lock().await;
+        match db.get_widget_modifiers(&widget_id) {
             Ok(modifiers) => Json(modifiers).into_response(),
             Err(e) => {
                 error!("Failed to get modifiers: {:?}", e);
@@ -228,8 +234,8 @@ pub mod api {
             modifier_id, widget_id
         );
 
-        let mut db = state.db.try_lock().unwrap();
-        match db.delete_widget_modifier(&modifier_id).await {
+        let db = state.db.lock().await;
+        match db.delete_widget_modifier(&modifier_id) {
             Ok(_) => StatusCode::NO_CONTENT.into_response(),
             Err(e) => {
                 error!("Failed to delete modifier: {:?}", e);
@@ -241,8 +247,7 @@ pub mod api {
     #[derive(Clone)]
     pub(crate) struct ApiState {
         pub db: Arc<Mutex<crate::db::db::Database>>,
-        // pub proxy: Arc<EventLoopProxy<UserEvent>>,
-        // pub event_sender: Sender<UserEvent>,
+        pub event_sender: EventSender,
     }
 
     #[axum::debug_handler]
@@ -274,8 +279,8 @@ pub mod api {
             },
         };
 
-        let mut db = state.db.try_lock().unwrap();
-        match db.insert_widget_modifier(widget_modifier).await {
+        let mut db = state.db.lock().await;
+        match db.insert_widget_modifier(widget_modifier) {
             Ok(_) => StatusCode::CREATED.into_response(),
             Err(e) => {
                 error!("Failed to add modifier: {:?}", e);

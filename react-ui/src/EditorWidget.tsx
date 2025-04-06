@@ -108,7 +108,7 @@ export default function EditWidget() {
     }
   };
 
-  const handleDeleteModifier = async (widgetId: string, modifierId: number) => {
+  const handleDeleteModifier = async (widgetId: string, modifierId: string) => {
     try {
       const response = await fetch(
         `http://127.0.0.1:3000/widgets/${widgetId}/modifiers/${modifierId}`,
@@ -145,6 +145,20 @@ export default function EditWidget() {
       return <div className="text-sm text-gray-600">Auto Refresh</div>;
     }
     return null;
+  };
+
+  const handleDeleteWidget = async (widget_id: string) => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:3000/widgets/${widget_id}`,
+        {
+          method: "DELETE",
+        }
+      );
+      if (!response.ok) throw new Error("Failed to delete widget");
+    } catch (error) {
+      console.error("Failed to delete widget:", error);
+    }
   };
 
   return (
@@ -184,6 +198,12 @@ export default function EditWidget() {
                       className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
                     >
                       Add Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDeleteWidget(item.widget_id)}
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition-colors"
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
