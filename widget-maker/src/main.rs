@@ -22,17 +22,21 @@ use serde_json::{json, Value};
 use std::{
     cmp::max,
     collections::HashMap,
-    sync::Arc,
+    path::PathBuf,
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, sync::Mutex, time::sleep};
+use tokio::{runtime::Runtime, time::sleep};
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     services::ServeFile,
 };
 use typeshare::typeshare;
-use widget_types::{Level, ScrapedValue, WidgetConfiguration, WidgetModifier, WidgetType};
+use widget_types::{
+    CreateWidgetRequest, FileConfiguration, Level, Modifier, ScrapedValue, UrlConfiguration,
+    WidgetConfiguration, WidgetModifier, WidgetType,
+};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -70,171 +74,12 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[serde(rename_all = "lowercase", tag = "type", content = "content")]
-// #[typeshare]
-// pub enum WidgetType {
-//     File(FileConfiguration),
-//     // Source(SourceConfiguration),
-//     Url(UrlConfiguration),
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[serde(rename_all = "lowercase", tag = "type", content = "content")]
-// #[typeshare]
-// pub enum Modifier {
-//     Scrape {
-//         modifier_id: NanoId,
-//         selector: String,
-//     },
-//     Refresh {
-//         modifier_id: NanoId,
-//         interval_sec: i32,
-//     },
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, sqlx::FromRow)]
-// #[serde(rename_all = "lowercase")]
-// #[typeshare]
-// pub struct WidgetModifier {
-//     #[serde(skip)]
-//     id: i64,
-//     widget_id: NanoId,
-//     modifier_type: Modifier,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[typeshare]
-// struct UrlConfiguration {
-//     url: String,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[typeshare]
-// struct FileConfiguration {
-//     html: String,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[typeshare]
-// struct WidgetConfiguration {
-//     #[serde(skip)]
-//     id: i64,
-//     widget_id: NanoId,
-//     title: String,
-//     widget_type: WidgetType,
-//     level: Level,
-//     transparent: bool,
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[typeshare]
-// struct CreateWidgetRequest {
-//     url: String,
-//     html: String,
-//     title: String,
-//     level: Level,
-//     transparent: bool,
-// }
-
-// impl WidgetConfiguration {
-//     fn new() -> Self {
-//         Self {
-//             id: 0,
-//             widget_id: NanoId(nanoid_gen(8)),
-//             title: "".to_string(),
-//             widget_type: WidgetType::Url(UrlConfiguration {
-//                 url: "".to_string(),
-//             }),
-//             level: Level::Normal,
-//             transparent: false,
-//         }
-//     }
-
-//     pub fn with_level(mut self, level: Level) -> Self {
-//         self.level = level;
-//         self
-//     }
-
-//     pub fn with_transparent(mut self, transparent: bool) -> Self {
-//         self.transparent = transparent;
-//         self
-//     }
-
-//     pub fn with_title(mut self, title: String) -> Self {
-//         self.title = title;
-//         self
-//     }
-
-//     pub fn with_widget_type(mut self, widget_type: WidgetType) -> Self {
-//         self.widget_type = widget_type;
-//         self
-//     }
-
-//     pub fn with_widget_id(mut self, id: NanoId) -> Self {
-//         self.widget_id = id;
-//         self
-//     }
-// }
-
-// #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-// #[serde(rename_all = "lowercase")]
-// #[typeshare]
-// enum Level {
-//     AlwaysOnTop,
-//     Normal,
-//     AlwaysOnBottom,
-// }
-
-// impl ToSql for WidgetType {
-//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-//         let json = serde_json::to_string(self).unwrap(); // Convert to JSON
-//         Ok(ToSqlOutput::from(json))
-//     }
-// }
-
-// impl FromSql for WidgetType {
-//     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-//         let value = value.as_str().unwrap();
-//         Ok(serde_json::from_str(value).unwrap())
-//     }
-// }
-
-// impl ToSql for Level {
-//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-//         let value = serde_json::to_string(self).unwrap();
-//         Ok(ToSqlOutput::from(value))
-//     }
-// }
-
-// impl FromSql for Level {
-//     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-//         let value = value.as_str().unwrap();
-//         match value {
-//             "AlwaysOnTop" => Ok(Level::AlwaysOnTop),
-//             "Normal" => Ok(Level::Normal),
-//             "AlwaysOnBottom" => Ok(Level::AlwaysOnBottom),
-//             _ => Err(rusqlite::types::FromSqlError::InvalidType),
-//         }
-//     }
-// }
-
 use nanoid::{nanoid_gen, NanoId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
     width: u32,
     height: u32,
-}
-
-// #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
-// #[typeshare]
-// pub struct NanoId(String);
-
-impl std::fmt::Display for NanoId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
 }
 
 struct App {
@@ -250,6 +95,7 @@ struct App {
     all_windows: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
+    db: Arc<Mutex<widget_db::Database>>,
     // clipboard: arboard::Clipboard,
 }
 
@@ -423,13 +269,14 @@ JSON.stringify({
     }
 
     async fn add_scrape_result(&mut self, result: ScrapedValue) {
-        let res = self
-            .db
-            .try_lock()
-            .expect("Something failed")
-            .insert_data(result)
-            .await;
-        info!("Inserted data result: {:?}", res);
+        // let res = self
+        //     .db
+        //     .try_lock()
+        //     .expect("Something failed")
+        //     .insert_data(result)
+        //     .await;
+        let res: Result<(), ()> = Ok(());
+        info!("TODO: Inserted data result: {:?}", res);
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
@@ -641,9 +488,11 @@ impl ApplicationHandler<UserEvent> for App {
         // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let mut widgets = vec![];
         {
-            let mut db = futures::executor::block_on(self.db.lock());
-            let config = futures::executor::block_on(db.get_configuration()).unwrap();
-            widgets.extend_from_slice(&config);
+            info!("TODO: Get widgets from db");
+
+            // let mut db = futures::executor::block_on(self.db.lock());
+            // let config = futures::executor::block_on(db.get_configuration()).unwrap();
+            // widgets.extend_from_slice(&config);
         }
 
         info!("Found {} widgets", widgets.len());
@@ -753,11 +602,13 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_transparent(widget_options.transparent)
                     .with_level(widget_options.level)
                     .with_title(widget_options.title);
-                let res = {
-                    let mut db = futures::executor::block_on(self.db.lock());
-                    futures::executor::block_on(
-                        db.insert_widget_configuration(vec![widget_config.clone()]),
-                    )
+                let res: Result<(), ()> = {
+                    // let mut db = futures::executor::block_on(self.db.lock());
+                    // futures::executor::block_on(
+                    //     db.insert_widget_configuration(vec![widget_config.clone()]),
+                    // )
+                    info!("TODO: Inserting widget configuration: {:?}", widget_config);
+                    Ok(())
                 };
                 info!("Inserted widget configuration: {:?}", res);
                 if res.is_err() {
@@ -972,24 +823,30 @@ fn main() {
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
+    // let db = Arc::new(Mutex::new(
+    //     futures::executor::block_on(db::db::Database::new()).unwrap(),
+    // ));
+    // {
+    //     let mut db = futures::executor::block_on(db.lock());
+    //     match futures::executor::block_on(db.insert_widget_configuration(config)) {
+    //         Ok(_) => info!("Inserted widget configurations"),
+    //         Err(e) => error!("Error inserting widget configurations: {:?}", e),
+    //     }
+    //     match futures::executor::block_on(db.insert_widget_modifiers(modifiers)) {
+    //         Ok(_) => info!("Inserted widget modifiers"),
+    //         Err(e) => error!("Error inserting widget modifiers: {:?}", e),
+    //     }
+    // }
+
     let db = Arc::new(Mutex::new(
-        futures::executor::block_on(db::db::Database::new()).unwrap(),
+        futures::executor::block_on(widget_db::Database::from("sqlite:../widget-db/widgets.db"))
+            .unwrap(),
     ));
-    {
-        let mut db = futures::executor::block_on(db.lock());
-        match futures::executor::block_on(db.insert_widget_configuration(config)) {
-            Ok(_) => info!("Inserted widget configurations"),
-            Err(e) => error!("Error inserting widget configurations: {:?}", e),
-        }
-        match futures::executor::block_on(db.insert_widget_modifiers(modifiers)) {
-            Ok(_) => info!("Inserted widget modifiers"),
-            Err(e) => error!("Error inserting widget modifiers: {:?}", e),
-        }
-    }
-    let api_proxy = Arc::new(event_loop_proxy.clone());
+    let api_proxy: Arc<EventLoopProxy<UserEvent>> = Arc::new(event_loop_proxy.clone());
     let modifier_thread_event_proxy = Arc::new(event_loop_proxy.clone());
     // let (tx, rx) = tokio::sync::on
     let mut app = App {
+        db: Arc::clone(&db),
         tray_menu_quit_id: tray_quit_id,
         current_size: LogicalSize::new(480, 360),
         // current_size: LogicalSize::new(320, 240),
@@ -1005,41 +862,59 @@ fn main() {
     };
 
     // scraping thread
-    let db_clone = db.clone();
-    std::thread::spawn(move || {
-        info!("Starting scraping thread");
-        let mut min_refresh_interval = std::time::Duration::from_secs(4);
-        // let mut last_refresh = HashMap::new();
-        loop {
-            std::thread::sleep(min_refresh_interval);
-            {
-                let mut modifiers: Vec<WidgetModifier> = vec![];
-                {
-                    let mut db = futures::executor::block_on(db_clone.lock());
-                    let curr_modifiers = futures::executor::block_on(db.get_modifiers()).unwrap();
-                    modifiers.extend(curr_modifiers);
-                }
-                info!("Found # modifiers: {:?}", modifiers.len());
+    // let db_clone = db.clone();
+    // std::thread::spawn(move || {
+    //     info!("Starting scraping thread");
+    //     let mut min_refresh_interval = std::time::Duration::from_secs(4);
+    //     // let mut last_refresh = HashMap::new();
+    //     loop {
+    //         std::thread::sleep(min_refresh_interval);
+    //         {
+    //             let mut modifiers: Vec<WidgetModifier> = vec![];
+    //             {
+    //                 let mut db = futures::executor::block_on(db_clone.lock());
+    //                 let curr_modifiers = futures::executor::block_on(db.get_modifiers()).unwrap();
+    //                 modifiers.extend(curr_modifiers);
+    //             }
+    //             info!("Found # modifiers: {:?}", modifiers.len());
 
-                // instead of going through the configs, we ought to grab different events from the db
-                // events including: scraping, refreshing, minimizing, etc.
-                for modifier in modifiers {
-                    let res =
-                        modifier_thread_event_proxy.send_event(UserEvent::ModifierEvent(modifier));
-                    if res.is_err() {
-                        error!("Failed to send event to event loop");
-                    }
-                }
-            }
-        }
-    });
+    //             // instead of going through the configs, we ought to grab different events from the db
+    //             // events including: scraping, refreshing, minimizing, etc.
+    //             for modifier in modifiers {
+    //                 let res =
+    //                     modifier_thread_event_proxy.send_event(UserEvent::ModifierEvent(modifier));
+    //                 if res.is_err() {
+    //                     error!("Failed to send event to event loop");
+    //                 }
+    //             }
+    //         }
+    //     }
+    // });
 
+    let rt = Runtime::new().unwrap();
+    let db_clone = Arc::clone(&db);
     thread::spawn(move || {
-        let rt = Runtime::new().unwrap();
-
         // Execute the future, blocking the current thread until completion
         rt.block_on(async {
-            api::api::run_api(db.clone(), api_proxy.clone()).await;
+            let db = widget_db::Database::from("sqlite:../widget-db/widgets.db").await;
+            match db {
+                Ok(db) => {
+                    let res = db.insert_widget_configuration(config).await;
+                    match res {
+                        Ok(_) => info!("Inserted widget configurations"),
+                        Err(e) => error!("Error inserting widget configurations: {:?}", e),
+                    }
+                    let res = db.insert_widget_modifiers(modifiers).await;
+                    match res {
+                        Ok(_) => info!("Inserted widget modifiers"),
+                        Err(e) => error!("Error inserting widget modifiers: {:?}", e),
+                    }
+                    widget_db::run_api(db_clone).await;
+                }
+                Err(e) => {
+                    error!("Failed to create database: {:?}", e);
+                }
+            }
         });
     });
 

@@ -30,26 +30,27 @@ pub mod db {
     }
 
     impl Database {
-        pub async fn from(db_path: PathBuf) -> Result<Self, sqlx::Error> {
+        pub async fn from(db_path: &str) -> Result<Self, sqlx::Error> {
             // Ensure parent directory exists
-            if let Some(parent) = db_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
+            // if let Some(parent) = db_path.parent() {
+            //     fs::create_dir_all(parent)?;
+            // }
 
-            let db_url = format!("sqlite:{}", db_path.to_str().unwrap());
+            // let db_url = format!("sqlite:{}", db_path.to_str().unwrap());
 
             // Create database if it doesn't exist
-            if !db_path.exists() {
-                sqlx::sqlite::SqlitePoolOptions::new()
-                    .max_connections(1)
-                    .connect(&db_url)
-                    .await?;
-            }
+            // if !db_path.exists() {
+            //     sqlx::sqlite::SqlitePoolOptions::new()
+            //         .max_connections(1)
+            //         .connect(&db_url)
+            //         .await?;
+            // }
+            info!("DB path: {:?}", db_path);
 
             // Create connection pool
             let pool = sqlx::sqlite::SqlitePoolOptions::new()
                 .max_connections(5)
-                .connect(&db_url)
+                .connect(&db_path)
                 .await?;
 
             // Run migrations if they exist
@@ -305,13 +306,13 @@ pub mod db {
 
     #[cfg(test)]
     mod tests {
-        use crate::{Modifier, UrlConfiguration, WidgetType};
+        use widget_types::{Modifier, UrlConfiguration, WidgetType};
 
         use super::*;
 
         #[tokio::test]
         async fn test_modifier_roundtrip() {
-            let mut db = Database::new().await.unwrap();
+            let mut db = Database::from(PathBuf::from("widgets.db")).await.unwrap();
             let modifier = WidgetModifier {
                 id: 1,
                 widget_id: NanoId(String::from("1")),
@@ -336,7 +337,7 @@ pub mod db {
 
         #[tokio::test]
         async fn test_widget_configuration_roundtrip() {
-            let mut db = Database::new().await.unwrap();
+            let mut db = Database::from(PathBuf::from("widgets.db")).await.unwrap();
             let widget_configuration = WidgetConfiguration {
                 id: 0,
                 widget_id: NanoId(String::from("1")),

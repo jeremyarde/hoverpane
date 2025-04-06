@@ -98,7 +98,7 @@ pub struct CreateWidgetRequest {
 }
 
 impl WidgetConfiguration {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             id: 0,
             widget_id: NanoId(nanoid_gen(8)),
