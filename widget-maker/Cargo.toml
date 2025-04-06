@@ -27,9 +27,9 @@ cocoa = "0.26.0"
 typeshare = "1.0.4"
 axum-extra = "0.10.1"
 thiserror = "2.0.12"
-directories = "6.0.0"
 sqlx = { version = "0.7", features = ["runtime-tokio", "tls-native-tls", "sqlite", "macros"] }
 futures = "0.3.31"
+widget-types = { path = "../widget-types" }
 
 
 [dev-dependencies]

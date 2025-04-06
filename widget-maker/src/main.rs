@@ -32,6 +32,7 @@ use tower_http::{
     services::ServeFile,
 };
 use typeshare::typeshare;
+use widget_types::{Level, ScrapedValue, WidgetConfiguration, WidgetModifier, WidgetType};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -218,7 +219,7 @@ pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separat
 //     }
 // }
 
-use nanoid::nanoid_gen;
+use nanoid::{nanoid_gen, NanoId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
@@ -226,19 +227,9 @@ struct ViewSize {
     height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
 // #[typeshare]
-pub struct ScrapedValue {
-    // pub id: i32,
-    pub widget_id: NanoId,
-    pub value: Option<String>,
-    pub error: Option<String>,
-    pub timestamp: i64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
-#[typeshare]
-pub struct NanoId(String);
+// pub struct NanoId(String);
 
 impl std::fmt::Display for NanoId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

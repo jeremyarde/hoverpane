@@ -8,24 +8,7 @@ pub mod db {
     use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
     use std::fs;
     use std::path::PathBuf;
-    use types::{Level, WidgetConfiguration};
-    // use typeshare::typeshare;
-
-    // use crate::Level;
-    // use crate::ScrapedValue;
-    // use crate::WidgetConfiguration;
-    // use crate::WidgetModifier;
-
-    #[derive(Debug, Clone, Deserialize, Serialize)]
-    #[typeshare]
-    pub struct ScrapedData {
-        #[serde(skip)]
-        pub id: i64,
-        pub widget_id: String,
-        pub value: String,
-        pub error: Option<String>,
-        pub timestamp: String,
-    }
+    use widget_types::{Level, ScrapedData, ScrapedValue, WidgetConfiguration, WidgetModifier};
 
     fn get_db_path() -> PathBuf {
         // Get the standard project directories for your app
@@ -47,10 +30,12 @@ pub mod db {
     }
 
     impl Database {
-        pub async fn new() -> Result<Self, sqlx::Error> {
-            sqlx::migrate!("../widget-db/migrations").await?;
+        pub async fn from(db_path: PathBuf) -> Result<Self, sqlx::Error> {
+            // Ensure parent directory exists
+            if let Some(parent) = db_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
 
-            let db_path = get_db_path();
             let db_url = format!("sqlite:{}", db_path.to_str().unwrap());
 
             // Create database if it doesn't exist
@@ -66,6 +51,9 @@ pub mod db {
                 .max_connections(5)
                 .connect(&db_url)
                 .await?;
+
+            // Run migrations if they exist
+            sqlx::migrate!("./migrations").run(&pool).await?;
 
             // Create tables if they don't exist
             sqlx::query(
@@ -235,7 +223,7 @@ pub mod db {
                 .into_iter()
                 .map(|row| WidgetModifier {
                     id: row.id,
-                    widget_id: crate::NanoId(row.widget_id),
+                    widget_id: NanoId(row.widget_id),
                     modifier_type: serde_json::from_str(&row.modifier_type).unwrap(),
                 })
                 .collect();
@@ -299,7 +287,7 @@ pub mod db {
                 .into_iter()
                 .map(|row| WidgetModifier {
                     id: row.id,
-                    widget_id: crate::NanoId(row.widget_id),
+                    widget_id: NanoId(row.widget_id),
                     modifier_type: serde_json::from_str(&row.modifier_type).unwrap(),
                 })
                 .collect();
@@ -326,9 +314,9 @@ pub mod db {
             let mut db = Database::new().await.unwrap();
             let modifier = WidgetModifier {
                 id: 1,
-                widget_id: crate::NanoId(String::from("1")),
+                widget_id: NanoId(String::from("1")),
                 modifier_type: Modifier::Refresh {
-                    modifier_id: crate::NanoId(String::from("1")),
+                    modifier_id: NanoId(String::from("1")),
                     interval_sec: 30,
                 },
             };
@@ -336,11 +324,11 @@ pub mod db {
             let modifiers = db.get_modifiers().await.unwrap();
             assert_eq!(modifiers.len(), 1);
             assert_eq!(modifiers[0].id, 1);
-            assert_eq!(modifiers[0].widget_id, crate::NanoId(String::from("1")));
+            assert_eq!(modifiers[0].widget_id, NanoId(String::from("1")));
             assert_eq!(
                 modifiers[0].modifier_type,
                 Modifier::Refresh {
-                    modifier_id: crate::NanoId(String::from("1")),
+                    modifier_id: NanoId(String::from("1")),
                     interval_sec: 30
                 }
             );
@@ -351,7 +339,7 @@ pub mod db {
             let mut db = Database::new().await.unwrap();
             let widget_configuration = WidgetConfiguration {
                 id: 0,
-                widget_id: crate::NanoId(String::from("1")),
+                widget_id: NanoId(String::from("1")),
                 title: "Test Widget".to_string(),
                 widget_type: WidgetType::Url(UrlConfiguration {
                     url: "https://example.com".to_string(),
@@ -364,10 +352,7 @@ pub mod db {
                 .unwrap();
             let configurations = db.get_configuration().await.unwrap();
             assert_eq!(configurations.len(), 1);
-            assert_eq!(
-                configurations[0].widget_id,
-                crate::NanoId(String::from("1"))
-            );
+            assert_eq!(configurations[0].widget_id, NanoId(String::from("1")));
             assert_eq!(configurations[0].title, "Test Widget");
             assert_eq!(
                 configurations[0].widget_type,

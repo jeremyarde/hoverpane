@@ -9,6 +9,16 @@ pub struct Widget {
     pub description: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// #[typeshare]
+pub struct ScrapedValue {
+    // pub id: i32,
+    pub widget_id: NanoId,
+    pub value: Option<String>,
+    pub error: Option<String>,
+    pub timestamp: i64,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase", tag = "type", content = "content")]
 #[typeshare]
@@ -30,6 +40,17 @@ pub enum Modifier {
         modifier_id: NanoId,
         interval_sec: i32,
     },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[typeshare]
+pub struct ScrapedData {
+    #[serde(skip)]
+    pub id: i64,
+    pub widget_id: String,
+    pub value: String,
+    pub error: Option<String>,
+    pub timestamp: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

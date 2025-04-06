@@ -3,11 +3,11 @@ pub mod api {
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
     use tokio::sync::Mutex;
-    use types::CreateWidgetRequest;
-    use types::Modifier;
-    use types::WidgetModifier;
+    use widget_types::CreateWidgetRequest;
+    use widget_types::Modifier;
+    use widget_types::WidgetModifier;
 
-    use crate::db::db::ScrapedData;
+    // use crate::db::db::ScrapedData;
     // use crate::Modifier;
     // use crate::NanoId;
     // use crate::WidgetModifier;
@@ -47,6 +47,7 @@ pub mod api {
         db: Arc<Mutex<crate::db::db::Database>>,
         // api_proxy: Arc<EventLoopProxy<UserEvent>>,
     ) {
+        // let (event_sender, event_receiver) = mpsc::channel(100);
         let state = ApiState {
             db: db.clone(),
             // proxy: api_proxy.clone(),
@@ -119,16 +120,17 @@ pub mod api {
     ) -> impl IntoResponse {
         info!("Creating widget: {:?}", widget_options);
 
-        let res = state
-            .proxy
-            .send_event(UserEvent::CreateWidget(widget_options.clone()));
+        // todo!("Need to send possibly send an event to the app..., because we may be getting a message from somewhere else instead of through the app");
+        // let res = state
+        //     .proxy
+        //     .send_event(UserEvent::CreateWidget(widget_options.clone()));
 
-        info!("[DEBUG] Result of event: {:?}", res);
+        // info!("[DEBUG] Result of event: {:?}", res);
 
-        if res.is_err() {
-            error!("Failed to send event to event loop");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        // if res.is_err() {
+        //     error!("Failed to send event to event loop");
+        //     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        // }
 
         StatusCode::CREATED.into_response()
     }
@@ -238,6 +240,7 @@ pub mod api {
     #[derive(Clone)]
     pub(crate) struct ApiState {
         pub db: Arc<Mutex<crate::db::db::Database>>,
+        // pub event_sender: Sender<UserEvent>,
     }
 
     #[axum::debug_handler]
