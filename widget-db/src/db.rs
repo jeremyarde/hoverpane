@@ -1,12 +1,14 @@
 pub mod db {
     use directories::ProjectDirs;
     use log::{debug, error, info};
-    use nanoid::NanoId;
+    // use nanoid::NanoId;
     use rusqlite::{Connection, Result as SqliteResult};
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
-    use widget_types::{Level, ScrapedData, ScrapedValue, WidgetConfiguration, WidgetModifier};
+    use widget_types::{
+        Level, NanoId, ScrapedData, ScrapedValue, WidgetConfiguration, WidgetModifier,
+    };
 
     fn get_db_path() -> PathBuf {
         let proj_dirs = ProjectDirs::from("com", "widget-maker", "widget-maker")

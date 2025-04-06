@@ -74,7 +74,8 @@ pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
-use nanoid::{nanoid_gen, NanoId};
+use nanoid::nanoid_gen;
+use widget_types::NanoId;
 
 mod event_sender;
 pub use event_sender::WinitEventSender;
@@ -143,7 +144,7 @@ type Seconds = i32;
 impl App {
     // TODO: possibly split out the refresh timer and the extraction logic - maybe a page auto reloads already, and we just need to grab the newest value
     fn refresh_webview(&mut self, id: NanoId, refresh_interval_secs: i32) {
-        info!("Refreshing webview for: {}", id);
+        info!("Refreshing webview for: {}", id.0);
 
         let window_id = self.widget_id_to_window_id[&id];
         let Some(webview) = self.all_windows.get_mut(&window_id) else {
@@ -567,11 +568,11 @@ impl ApplicationHandler<UserEvent> for App {
         let size = self.current_size.clone();
         match userevent {
             UserEvent::RemoveWebView(id) => {
-                info!("Removing webview at index {}", id);
+                info!("Removing webview at index {}", id.0);
                 self.remove_webview(id);
             }
             UserEvent::MoveWebView(id, direction) => {
-                info!("Moving webview at index {} {}", id, direction);
+                info!("Moving webview at index {} {}", id.0, direction);
                 self.move_webview(id, direction);
             }
             UserEvent::ExtractResult(result) => {
@@ -580,7 +581,7 @@ impl ApplicationHandler<UserEvent> for App {
                 // self.update_element_view(result);
             }
             UserEvent::Minimize(id) => {
-                info!("Minimizing webview at index {}", id);
+                info!("Minimizing webview at index {}", id.0);
                 self.minimize_webview(id);
             }
             UserEvent::CreateWidget(widget_options) => {

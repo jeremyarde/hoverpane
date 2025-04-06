@@ -69,7 +69,7 @@ export default function EditWidget() {
 
     // Convert the frontend format to the backend format
     const backendModifier: WidgetModifier = {
-      id: 0, // This will be set by the backend
+      id: 0,
       widget_id: selectedWidget,
       modifier_type: modifierConfig as Modifier,
     };
@@ -216,7 +216,7 @@ export default function EditWidget() {
                       <div className="space-y-2">
                         {widgetModifiers[item.widget_id].map((modifier) => (
                           <div
-                            key={modifier.modifier_id}
+                            key={modifier.id}
                             className="bg-white p-3 rounded border border-gray-200"
                           >
                             {renderModifierDetails(modifier)}
@@ -224,7 +224,7 @@ export default function EditWidget() {
                               onClick={() =>
                                 handleDeleteModifier(
                                   item.widget_id,
-                                  modifier.id
+                                  modifier.id.toString()
                                 )
                               }
                               className="ml-2 text-red-500 hover:text-red-700"
@@ -293,6 +293,7 @@ export default function EditWidget() {
                       ...modifierConfig,
                       type: "scrape",
                       content: {
+                        modifier_id: modifierConfig?.content?.modifier_id || "",
                         selector: e.target.value,
                       },
                     })
@@ -320,6 +321,7 @@ export default function EditWidget() {
                       ...modifierConfig,
                       type: "refresh",
                       content: {
+                        modifier_id: modifierConfig?.content?.modifier_id || "",
                         interval_sec: Number(e.target.value),
                       },
                     })

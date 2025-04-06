@@ -1,12 +1,13 @@
 pub mod api {
-    use nanoid::NanoId;
+    use nanoid::nanoid_gen;
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
     use std::sync::Arc;
     use tokio::sync::Mutex;
+    use widget_types::EventSender;
     use widget_types::{
-        CreateWidgetRequest, EventSender, FileConfiguration, Level, Modifier, ScrapedValue,
-        UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
+        CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
+        WidgetModifier, WidgetType,
     };
 
     // use crate::db::db::ScrapedData;
@@ -116,7 +117,7 @@ pub mod api {
 
         let widget_config = WidgetConfiguration {
             id: 0,
-            widget_id: NanoId::new(),
+            widget_id: widget_types::NanoId(nanoid_gen(8)),
             title: widget_request.title,
             widget_type: if widget_request.url.is_empty() {
                 WidgetType::File(FileConfiguration {
@@ -260,7 +261,7 @@ pub mod api {
 
         let widget_modifier = WidgetModifier {
             id: 0,
-            widget_id: NanoId(widget_id),
+            widget_id: widget_types::NanoId(widget_id),
             modifier_type: match modifier.modifier_type {
                 Modifier::Scrape {
                     modifier_id,

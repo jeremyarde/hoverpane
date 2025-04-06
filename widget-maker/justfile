@@ -2,7 +2,7 @@ release: types
     cargo build --release
 
 types:
-    typeshare ./src --lang=typescript --output-file=../react-ui/src/types.ts
+    typeshare ../widget-types/src --lang=typescript --output-file=../react-ui/src/types.ts
 
 run: types
     RUST_LOG=info cargo run
