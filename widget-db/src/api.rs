@@ -4,7 +4,7 @@ pub mod api {
     use serde_json::{json, Value};
     use std::sync::Arc;
     use tokio::sync::Mutex;
-    use widget_types::EventSender;
+    use widget_types::{ApiAction, EventSender};
     use widget_types::{
         CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
         WidgetModifier, WidgetType,
@@ -62,6 +62,7 @@ pub mod api {
             // .route("/sites", get(get_sites))
             // .route("/elements", get(get_elements))
             // .route("/latest", get(get_latest_values))
+            .route("/widgets/{widget_id}", delete(delete_widget))
             .route("/widgets/{widget_id}/latest", get(get_latest_values))
             .route("/widgets", get(get_widgets).post(create_widget))
             .route(
@@ -105,6 +106,26 @@ pub mod api {
             });
 
             (status, Json(payload)).into_response()
+        }
+    }
+
+    #[axum::debug_handler]
+    pub(crate) async fn delete_widget(
+        State(state): State<ApiState>,
+        Path(widget_id): Path<String>,
+    ) -> impl IntoResponse {
+        info!("Deleting widget {}", widget_id);
+        let res = state
+            .event_sender
+            .send_message(ApiAction::DeleteWidget(widget_id.clone()));
+
+        let mut db = state.db.lock().await;
+        match db.delete_widget(&widget_id) {
+            Ok(_) => StatusCode::NO_CONTENT.into_response(),
+            Err(e) => {
+                error!("Failed to delete widget: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
         }
     }
 
@@ -234,6 +255,10 @@ pub mod api {
             "Deleting modifier {} from widget {}",
             modifier_id, widget_id
         );
+
+        state
+            .event_sender
+            .send_message(ApiAction::DeleteWidget(widget_id));
 
         let db = state.db.lock().await;
         match db.delete_widget_modifier(&modifier_id) {

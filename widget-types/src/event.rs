@@ -8,15 +8,21 @@ pub struct EventSender {
 }
 
 impl EventSender {
-    pub fn send_scrape_result(&self, value: ScrapedValue) -> Result<(), String> {
-        self.inner.send_scrape_result(value)
+    pub fn send_message(&self, message: ApiAction) -> Result<(), String> {
+        self.inner.send_message(message)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ApiAction {
+    DeleteWidget(String),
+    // DeleteWidgetModifier(String, String),
 }
 
 // This trait will be implemented by widget-maker
 #[doc(hidden)]
 pub trait EventSenderImpl: EventSenderImplClone {
-    fn send_scrape_result(&self, value: ScrapedValue) -> Result<(), String>;
+    fn send_message(&self, message: ApiAction) -> Result<(), String>;
 }
 
 pub trait EventSenderImplClone {

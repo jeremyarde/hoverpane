@@ -34,7 +34,7 @@ use tower_http::{
 };
 use typeshare::typeshare;
 use widget_types::{
-    CreateWidgetRequest, EventSender, FileConfiguration, Level, Modifier, ScrapedValue,
+    ApiAction, CreateWidgetRequest, EventSender, FileConfiguration, Level, Modifier, ScrapedValue,
     UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
 };
 use winit::{
@@ -184,16 +184,20 @@ impl App {
     }
 
     fn remove_webview(&mut self, id: NanoId) {
-        todo!("Remove not implemented");
+        info!("Removing webview: {:?}", id);
+        let window_id = self.widget_id_to_window_id[&id];
+        self.all_windows.remove(&window_id);
+        self.widget_id_to_window_id.remove(&id);
+        self.window_id_to_webview_id.remove(&window_id);
     }
 
-    fn move_webview(&mut self, id: NanoId, direction: Direction) {
-        todo!("Actualy implement this");
-    }
+    // fn move_webview(&mut self, id: NanoId, direction: Direction) {
+    //     todo!("Actualy implement this");
+    // }
 
-    fn minimize_webview(&mut self, id: NanoId) {
-        todo!("Minimize not implemented");
-    }
+    // fn minimize_webview(&mut self, id: NanoId) {
+    //     todo!("Minimize not implemented");
+    // }
 
     fn scrape_webview(&self, id: NanoId, element_selector: String) {
         info!("Scraping webview: {:?}", id);
@@ -464,6 +468,7 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
+    ApiAction(ApiAction),
     ModifierEvent(WidgetModifier),
     MenuEvent(muda::MenuEvent),
     TrayIconEvent(tray_icon::TrayIconEvent),
@@ -573,7 +578,7 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::MoveWebView(id, direction) => {
                 info!("Moving webview at index {} {}", id.0, direction);
-                self.move_webview(id, direction);
+                // self.move_webview(id, direction);
             }
             UserEvent::ExtractResult(result) => {
                 info!("Extracted result: {:?}", result);
@@ -582,7 +587,7 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::Minimize(id) => {
                 info!("Minimizing webview at index {}", id.0);
-                self.minimize_webview(id);
+                // self.minimize_webview(id);
             }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
@@ -647,6 +652,16 @@ impl ApplicationHandler<UserEvent> for App {
                         info!("Scraping widget: {:?}", modifier_id);
                         self.scrape_webview(modifier_id, selector);
                     }
+                }
+            }
+            UserEvent::ApiAction(action) => {
+                info!("Api action: {:?}", action);
+                match action {
+                    ApiAction::DeleteWidget(widget_id) => {
+                        self.remove_webview(NanoId(widget_id));
+                    } // ApiAction::DeleteWidgetModifier(widget_id, modifier_id) => {
+                      //     self.remove_modifier(NanoId(widget_id), NanoId(modifier_id));
+                      // }
                 }
             }
             _ => {

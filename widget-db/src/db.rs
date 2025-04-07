@@ -249,6 +249,28 @@ pub mod db {
             rows.collect()
         }
 
+        pub fn delete_widget(&mut self, widget_id: &str) -> SqliteResult<()> {
+            let tx = self.conn.transaction()?;
+
+            // Delete associated scraped data
+            tx.execute("DELETE FROM scraped_data WHERE widget_id = ?", [widget_id])?;
+
+            // Delete associated modifiers
+            tx.execute("DELETE FROM modifiers WHERE widget_id = ?", [widget_id])?;
+
+            // Delete the widget itself
+            let rows_affected =
+                tx.execute("DELETE FROM widgets WHERE widget_id = ?", [widget_id])?;
+
+            if rows_affected == 0 {
+                tx.rollback()?;
+                return Err(rusqlite::Error::QueryReturnedNoRows);
+            }
+
+            tx.commit()?;
+            Ok(())
+        }
+
         pub fn delete_widget_modifier(&self, modifier_id: &str) -> SqliteResult<()> {
             self.conn
                 .execute("DELETE FROM modifiers WHERE id = ?", [modifier_id])?;

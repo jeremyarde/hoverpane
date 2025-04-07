@@ -1,4 +1,5 @@
-use widget_types::{EventSender, EventSenderImpl, ScrapedValue};
+use log::info;
+use widget_types::{ApiAction, EventSender, EventSenderImpl, ScrapedValue};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Clone)]
@@ -19,9 +20,10 @@ impl WinitEventSender {
 }
 
 impl EventSenderImpl for WinitEventSender {
-    fn send_scrape_result(&self, value: ScrapedValue) -> Result<(), String> {
+    fn send_message(&self, message: ApiAction) -> Result<(), String> {
+        info!("Sending message: {:?}", message);
         self.proxy
-            .send_event(super::UserEvent::ExtractResult(value))
+            .send_event(super::UserEvent::ApiAction(message))
             .map_err(|e| e.to_string())
     }
 }

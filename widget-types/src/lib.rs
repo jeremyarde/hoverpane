@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use typeshare::typeshare;
 
 mod event;
+pub use event::ApiAction;
 pub use event::EventSender;
 pub use event::EventSenderImpl;
 

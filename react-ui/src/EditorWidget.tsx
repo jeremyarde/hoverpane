@@ -3,7 +3,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { Modifier, WidgetConfiguration, WidgetModifier } from "./types";
 
 export default function EditWidget() {
-  const [data, setData] = useState<WidgetConfiguration[]>([]);
+  const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfiguration[]>([]);
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modifierType, setModifierType] = useState<"scrape" | "refresh" | null>(
@@ -22,13 +22,10 @@ export default function EditWidget() {
       const response = await fetch("http://127.0.0.1:3000/widgets", {});
       const data = await response.json();
       const widgetDetails = data.map((item: WidgetConfiguration) => ({
-        id: item.widget_id,
-        title: item.title,
-        widget_type: item.widget_type,
-        level: item.level,
+        ...item,
       }));
       console.log("data from fetch", widgetDetails);
-      setData(widgetDetails);
+      setWidgetConfigs(widgetDetails);
     };
     fetchData();
   }, []);
@@ -148,6 +145,7 @@ export default function EditWidget() {
   };
 
   const handleDeleteWidget = async (widget_id: string) => {
+    console.log("Deleting widget", widget_id);
     try {
       const response = await fetch(
         `http://127.0.0.1:3000/widgets/${widget_id}`,
@@ -156,6 +154,23 @@ export default function EditWidget() {
         }
       );
       if (!response.ok) throw new Error("Failed to delete widget");
+
+      // Remove the widget from the local state
+      setWidgetConfigs((prev) => prev.filter((w) => w.widget_id !== widget_id));
+
+      // Remove any associated modifiers from state
+      setWidgetModifiers((prev) => {
+        const newState = { ...prev };
+        delete newState[widget_id];
+        return newState;
+      });
+
+      // Remove from expanded widgets if it was expanded
+      setExpandedWidgets((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(widget_id);
+        return newSet;
+      });
     } catch (error) {
       console.error("Failed to delete widget:", error);
     }
@@ -167,40 +182,44 @@ export default function EditWidget() {
       <div className="h-full">
         <h2 className="text-xl font-bold mb-4">Widget Modifiers</h2>
         <div className="h-[calc(100%-2rem)] overflow-auto">
-          {data.length > 0 ? (
-            data.map((item) => (
+          {widgetConfigs.length > 0 ? (
+            widgetConfigs.map((widget) => (
               <div
-                key={item.widget_id}
+                key={widget.widget_id}
                 className="border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleWidget(item.widget_id)}
+                        onClick={() => toggleWidget(widget.widget_id)}
                         className="text-gray-500 hover:text-gray-700"
                       >
-                        {expandedWidgets.has(item.widget_id) ? (
+                        {expandedWidgets.has(widget.widget_id) ? (
                           <ChevronDownIcon className="h-5 w-5" />
                         ) : (
                           <ChevronRightIcon className="h-5 w-5" />
                         )}
                       </button>
                       <div>
-                        <h3 className="font-semibold">{item.title}</h3>
+                        <h3 className="font-semibold">{widget.title}</h3>
                         <p className="text-sm text-gray-600">
-                          Level: {item.level}
+                          Level: {widget.level}
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => handleAddModifier(item.widget_id)}
+                      onClick={() => handleAddModifier(widget.widget_id)}
                       className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
                     >
                       Add Modifier
                     </button>
                     <button
-                      onClick={() => handleDeleteWidget(item.widget_id)}
+                      onClick={() => {
+                        // console.log("Deleting widget", JSON.stringify(widget));
+                        console.log("Deleting widget", widget.widget_id);
+                        handleDeleteWidget(widget.widget_id);
+                      }}
                       className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition-colors"
                     >
                       Delete
@@ -209,12 +228,12 @@ export default function EditWidget() {
                 </div>
 
                 {/* Expanded Content */}
-                {expandedWidgets.has(item.widget_id) && (
+                {expandedWidgets.has(widget.widget_id) && (
                   <div className="border-t border-gray-200 p-4 bg-gray-50">
                     <h4 className="font-medium mb-2">Active Modifiers</h4>
-                    {widgetModifiers[item.widget_id]?.length > 0 ? (
+                    {widgetModifiers[widget.widget_id]?.length > 0 ? (
                       <div className="space-y-2">
-                        {widgetModifiers[item.widget_id].map((modifier) => (
+                        {widgetModifiers[widget.widget_id].map((modifier) => (
                           <div
                             key={modifier.id}
                             className="bg-white p-3 rounded border border-gray-200"
@@ -223,7 +242,7 @@ export default function EditWidget() {
                             <button
                               onClick={() =>
                                 handleDeleteModifier(
-                                  item.widget_id,
+                                  widget.widget_id,
                                   modifier.id.toString()
                                 )
                               }
