@@ -30,5 +30,6 @@ thiserror = "2.0.12"
 futures = "0.3.31"
 widget-types = { path = "../widget-types" }
 widget-db = { path = "../widget-db" }
+directories = "6.0.0"
 
 [dev-dependencies]

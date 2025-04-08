@@ -6,9 +6,7 @@ pub mod db {
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
-    use widget_types::{
-        Level, NanoId, ScrapedData, ScrapedValue, WidgetConfiguration, WidgetModifier,
-    };
+    use widget_types::{Level, NanoId, ScrapedData, WidgetConfiguration, WidgetModifier};
 
     fn get_db_path() -> PathBuf {
         let proj_dirs = ProjectDirs::from("com", "widget-maker", "widget-maker")
@@ -171,14 +169,14 @@ pub mod db {
             rows.collect()
         }
 
-        pub fn insert_data(&self, insert_data: ScrapedValue) -> SqliteResult<()> {
-            let value = insert_data.value.unwrap_or_default();
+        pub fn insert_data(&self, insert_data: ScrapedData) -> SqliteResult<()> {
+            let value = insert_data.value;
             let error = insert_data.error.unwrap_or_default();
             let timestamp = insert_data.timestamp.to_string();
 
             self.conn.execute(
                 "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?, ?, ?, ?)",
-                [&insert_data.widget_id.0, &value, &error, &timestamp],
+                [&insert_data.widget_id, &value, &error, &timestamp],
             )?;
 
             Ok(())

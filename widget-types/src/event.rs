@@ -1,5 +1,3 @@
-use crate::ScrapedValue;
-
 pub struct EventSender {
     // This will be a wrapper around the actual sender implementation
     // The implementation details will be in widget-maker

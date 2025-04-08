@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 use std::{
     cmp::max,
     collections::HashMap,
+    fs::{File, OpenOptions},
     path::PathBuf,
     sync::Arc,
     thread,
@@ -34,8 +35,8 @@ use tower_http::{
 };
 use typeshare::typeshare;
 use widget_types::{
-    ApiAction, CreateWidgetRequest, EventSender, FileConfiguration, Level, Modifier, ScrapedValue,
-    UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
+    ApiAction, AppSettings, CreateWidgetRequest, EventSender, FileConfiguration, IpcEvent, Level,
+    Modifier, ScrapedData, UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
 };
 use winit::{
     application::ApplicationHandler,
@@ -59,7 +60,7 @@ use objc::*;
 
 const DOCK_ICON: &[u8] = include_bytes!("/Users/jarde/Documents/misc/app-icon2.png");
 
-use tray_icon::{TrayIconBuilder, TrayIconEvent};
+use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use wry::{
     dpi::{LogicalPosition, LogicalSize, Position},
@@ -68,7 +69,7 @@ use wry::{
 
 // mod db;
 
-use image;
+use image::{self, ImageBuffer};
 
 pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 
@@ -86,7 +87,14 @@ struct ViewSize {
     height: u32,
 }
 
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// struct AppConfig {
+//     show_tray_icon: bool,
+// }
+
 struct App {
+    tray_icon: TrayIcon,
+    app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     tray_menu_quit_id: String,
     tray_menu_show_controls_id: String,
     current_size: LogicalSize<u32>,
@@ -94,10 +102,12 @@ struct App {
     current_modifiers: Modifiers,
     proxy: EventLoopProxy<UserEvent>,
     last_resize: Option<Instant>,
-    all_windows: HashMap<WindowId, WidgetView>,
+    all_widgets: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_webview_id: HashMap<WindowId, NanoId>,
     db: widget_db::Database,
+    app_settings: AppSettings,
+    app_settings_path: PathBuf,
 }
 
 struct WidgetView {
@@ -148,7 +158,7 @@ impl App {
         info!("Refreshing webview for: {}", id.0);
 
         let window_id = self.widget_id_to_window_id[&id];
-        let Some(webview) = self.all_windows.get_mut(&window_id) else {
+        let Some(webview) = self.all_widgets.get_mut(&window_id) else {
             error!("Webview not found");
             return;
         };
@@ -188,7 +198,7 @@ impl App {
         info!("Removing webview: {:?}", id);
 
         if let Some(window_id) = self.widget_id_to_window_id.get(&id) {
-            self.all_windows.remove(&window_id);
+            self.all_widgets.remove(&window_id);
             self.window_id_to_webview_id.remove(&window_id);
             self.widget_id_to_window_id.remove(&id);
         } else {
@@ -214,7 +224,7 @@ impl App {
             return;
         };
 
-        let Some(widget_view) = self.all_windows.get(&window_id) else {
+        let Some(widget_view) = self.all_widgets.get(&window_id) else {
             info!("Webview not found");
             return;
         };
@@ -277,14 +287,14 @@ JSON.stringify({
         info!("Scrape completed");
     }
 
-    fn add_scrape_result(&mut self, result: ScrapedValue) {
+    fn add_scrape_result(&mut self, result: ScrapedData) {
         if let Err(e) = self.db.insert_data(result) {
             error!("Failed to insert data: {:?}", e);
         }
     }
 
     fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
-        if let Some(window) = self.all_windows.get_mut(&id) {
+        if let Some(window) = self.all_widgets.get_mut(&id) {
             window.app_webview.webview.set_bounds(Rect {
                 position: LogicalPosition::new(0, 0).into(),
                 size: size.clone().into(),
@@ -412,7 +422,7 @@ JSON.stringify({
                 .insert(widget_config.widget_id.clone(), new_window.id());
             self.window_id_to_webview_id
                 .insert(new_window.id(), widget_config.widget_id.clone());
-            self.all_windows.insert(
+            self.all_widgets.insert(
                 new_window.id(),
                 WidgetView {
                     last_scrape: None,
@@ -434,8 +444,15 @@ JSON.stringify({
         info!("IPC handler received message: {:?}", body);
         let val = serde_json::from_str::<Value>(body).unwrap();
         info!("Value: {:?}", val);
-        let message: ScrapedValue = serde_json::from_value(val["extractresult"].clone()).unwrap();
-        proxy.send_event(UserEvent::ExtractResult(message));
+
+        let user_event = match serde_json::from_value::<IpcEvent>(val) {
+            Ok(event) => event,
+            Err(e) => {
+                error!("Failed to deserialize user event: {:?}", e);
+                return;
+            }
+        };
+        proxy.send_event(UserEvent::IpcEvent(user_event));
     }
 
     fn show_controls(&mut self, event_loop: &ActiveEventLoop) {
@@ -448,12 +465,60 @@ JSON.stringify({
             self.create_widget(event_loop, get_controls_widget_config());
             return;
         };
-        let Some(window) = self.all_windows.get(window_id) else {
+        let Some(window) = self.all_widgets.get(window_id) else {
             info!("Controls widget not found");
             return;
         };
         window.window.focus_window();
     }
+
+    fn update_app_settings(&mut self, settings: AppSettings) {
+        info!("Updating app settings: {:?}", settings);
+        // self.app_settings = settings;
+        // save the settings to the file
+        let settings_json = serde_json::to_string(&settings).unwrap();
+        std::fs::write(self.app_settings_path.clone(), settings_json).unwrap();
+        // update the tray icon
+        // (&self.app_settings.show_tray_icon);
+        if !settings.show_tray_icon {
+            // self.tray_menu_quit_id = None;
+            // self.tray_menu_show_controls_id = None;
+            self.tray_icon.set_visible(false);
+        } else {
+            self.tray_icon.set_visible(true);
+        }
+
+        self.app_settings = settings;
+    }
+}
+
+fn setup_tray_menu(
+    app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    proxy_clone: EventLoopProxy<UserEvent>,
+) -> (String, String, TrayIcon) {
+    let tray_menu = tray_icon::menu::Menu::new();
+    let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
+    let show_controls_item = tray_icon::menu::MenuItem::new("Show controls", true, None);
+    tray_menu.append(&quit_item).unwrap();
+    tray_menu.append(&show_controls_item).unwrap();
+
+    let tray_quit_id = quit_item.id().0.clone();
+    let tray_show_controls_id = show_controls_item.id().0.clone();
+
+    let (width, height) = app_icon.dimensions();
+    let tray_icon = TrayIconBuilder::new()
+        .with_tooltip("Widget Maker")
+        .with_icon(tray_icon::Icon::from_rgba(app_icon.into_raw(), width, height).unwrap())
+        .with_menu(Box::new(tray_menu))
+        .build()
+        .unwrap();
+    let tray_icon_proxy = proxy_clone.clone();
+    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+        info!("Tray icon event: {:?}", event);
+        tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
+    }));
+
+    (tray_quit_id, tray_show_controls_id, tray_icon)
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -485,6 +550,7 @@ impl AppWebView {
 
 #[derive(Debug)]
 enum UserEvent {
+    IpcEvent(IpcEvent),
     ApiAction(ApiAction),
     ModifierEvent(WidgetModifier),
     MenuEvent(muda::MenuEvent),
@@ -495,9 +561,10 @@ enum UserEvent {
     RemoveWebView(NanoId),
     // ShowNewViewForm,
     MoveWebView(NanoId, Direction),
-    ExtractResult(ScrapedValue),
     Minimize(NanoId),
     ToggleElementView(NanoId),
+    ExtractResult(ScrapedData),
+    SaveSettings(AppSettings),
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -522,7 +589,7 @@ impl ApplicationHandler<UserEvent> for App {
         info!(
             "Widgets: {:?}",
             &self
-                .all_windows
+                .all_widgets
                 .iter()
                 .map(|(id, widget)| (id, widget.options.title.clone()))
                 .collect::<Vec<(&WindowId, String)>>()
@@ -543,7 +610,7 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Closing window: {:?}", window_id);
                 let webview_id = self.window_id_to_webview_id.remove(&window_id).unwrap();
                 self.widget_id_to_window_id.remove(&webview_id);
-                self.all_windows.remove(&window_id);
+                self.all_widgets.remove(&window_id);
             }
             WindowEvent::RedrawRequested => {}
             WindowEvent::Resized(size) => {
@@ -555,7 +622,7 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                 }
                 let window = self
-                    .all_windows
+                    .all_widgets
                     .get_mut(&window_id)
                     .expect("Something failed");
                 window.app_webview.webview.set_bounds(Rect {
@@ -597,11 +664,11 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Moving webview at index {} {}", id.0, direction);
                 // self.move_webview(id, direction);
             }
-            UserEvent::ExtractResult(result) => {
-                info!("Extracted result: {:?}", result);
-                self.add_scrape_result(result.clone());
-                // self.update_element_view(result);
-            }
+            // UserEvent::ExtractResult(result) => {
+            //     info!("Extracted result: {:?}", result);
+            //     self.add_scrape_result(result.clone());
+            //     // self.update_element_view(result);
+            // }
             UserEvent::Minimize(id) => {
                 info!("Minimizing webview at index {}", id.0);
                 // self.minimize_webview(id);
@@ -652,7 +719,7 @@ impl ApplicationHandler<UserEvent> for App {
                     info!("Showing controls");
                     self.show_controls(event_loop);
                 } else {
-                    info!("Unhandled Menu event: {:?}", menu_event);
+                    info!("No tray menu show controls id found");
                 }
             }
             UserEvent::ModifierEvent(modifier) => {
@@ -684,6 +751,17 @@ impl ApplicationHandler<UserEvent> for App {
                       // }
                 }
             }
+            UserEvent::IpcEvent(ipc_event) => {
+                info!("Ipc event: {:?}", ipc_event);
+                match ipc_event {
+                    IpcEvent::SaveSettings(app_settings) => {
+                        self.update_app_settings(app_settings);
+                    }
+                    IpcEvent::ExtractResult(scraped_data) => {
+                        self.add_scrape_result(scraped_data);
+                    }
+                }
+            }
             _ => {
                 info!("Unknown event: {:?}", userevent);
             }
@@ -712,7 +790,7 @@ fn setup_menu() -> Menu {
     {
         let app_menu = Submenu::new("App", true);
         let _ = app_menu.append_items(&[
-            &PredefinedMenuItem::about(Some("My App"), None),
+            &PredefinedMenuItem::about(Some("Widget Maker"), None),
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::quit(None),
         ]);
@@ -756,9 +834,34 @@ fn get_controls_widget_config() -> WidgetConfiguration {
         .with_level(Level::Normal)
 }
 
+fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
+    if !settings_filepath.exists() {
+        let app_settings = AppSettings {
+            show_tray_icon: true,
+        };
+        std::fs::create_dir_all(settings_filepath.parent().unwrap()).unwrap();
+        let config_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(settings_filepath.clone())
+            .unwrap();
+        serde_json::to_writer(&config_file, &app_settings).unwrap();
+    }
+    let app_settings =
+        serde_json::from_reader(File::open(settings_filepath.clone()).unwrap()).unwrap();
+    app_settings
+}
+
 fn main() {
     env_logger::init();
     info!("Starting application...");
+
+    // loading app settings from user directory
+    let directory = directories::ProjectDirs::from("com", "jarde", "widget-maker").unwrap();
+    let config_dir = directory.config_dir();
+    let settings_filepath = config_dir.join("settings.json");
+    let app_settings = load_app_settings(settings_filepath);
+    info!("App settings: {:?}", app_settings);
 
     #[cfg(target_os = "macos")]
     {
@@ -785,28 +888,28 @@ fn main() {
 
     let config: Vec<WidgetConfiguration> = vec![
         get_controls_widget_config(),
-        WidgetConfiguration::new()
-            .with_widget_id(NanoId("Test SPY".to_string()))
-            .with_title("Test SPY".to_string())
-            .with_widget_type(WidgetType::Url(UrlConfiguration {
-                url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_widget_id(NanoId("testdata".to_string()))
-            .with_title("Test Data View Widget".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../assets/widget_template.html").to_string(),
-            }))
-            .with_level(Level::Normal),
-        WidgetConfiguration::new()
-            .with_widget_id(NanoId("transparent".to_string()))
-            .with_title("Transparent Widget".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../assets/widget_transparent.html").to_string(),
-            }))
-            .with_transparent(true)
-            .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_widget_id(NanoId("Test SPY".to_string()))
+        //     .with_title("Test SPY".to_string())
+        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
+        //         url: "https://finance.yahoo.com/quote/SPY/".to_string(),
+        //     }))
+        //     .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_widget_id(NanoId("testdata".to_string()))
+        //     .with_title("Test Data View Widget".to_string())
+        //     .with_widget_type(WidgetType::File(FileConfiguration {
+        //         html: include_str!("../assets/widget_template.html").to_string(),
+        //     }))
+        //     .with_level(Level::Normal),
+        // WidgetConfiguration::new()
+        //     .with_widget_id(NanoId("transparent".to_string()))
+        //     .with_title("Transparent Widget".to_string())
+        //     .with_widget_type(WidgetType::File(FileConfiguration {
+        //         html: include_str!("../assets/widget_transparent.html").to_string(),
+        //     }))
+        //     .with_transparent(true)
+        //     .with_level(Level::Normal),
     ];
 
     let modifiers: Vec<WidgetModifier> = vec![WidgetModifier {
@@ -837,41 +940,30 @@ fn main() {
     }));
 
     // setup the icon
-    let img = image::load_from_memory(include_bytes!("/Users/jarde/Documents/misc/app-icon2.png"))
-        .expect("Failed to load icon")
-        .into_rgba8();
+    let img: ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+        image::load_from_memory(include_bytes!("/Users/jarde/Documents/misc/app-icon2.png"))
+            .expect("Failed to load icon")
+            .into_rgba8();
     let (width, height) = img.dimensions();
 
-    let tray_menu = tray_icon::menu::Menu::new();
-    let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
-    let show_controls_item = tray_icon::menu::MenuItem::new("Show controls", true, None);
-    tray_menu.append(&quit_item).unwrap();
-    tray_menu.append(&show_controls_item).unwrap();
-
-    let tray_quit_id = quit_item.id().0.clone();
-    let tray_show_controls_id = show_controls_item.id().0.clone();
-
-    let tray_icon = TrayIconBuilder::new()
-        .with_tooltip("Widget Maker")
-        .with_icon(tray_icon::Icon::from_rgba(img.into_raw(), width, height).unwrap())
-        .with_menu(Box::new(tray_menu))
-        .build()
-        .unwrap();
-    let tray_icon_proxy = proxy_clone.clone();
-    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-        info!("Tray icon event: {:?}", event);
-        tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
-    }));
-
+    let (tray_quit_id, tray_show_controls_id, tray_icon) =
+        setup_tray_menu(img.clone(), event_loop_proxy.clone());
     let app_db = widget_db::Database::new().unwrap();
+    tray_icon.set_visible(app_settings.show_tray_icon);
 
     let mut app = App {
+        tray_icon,
+        app_icon: img,
         db: app_db,
+        app_settings,
+        app_settings_path: config_dir.join("settings.json"),
+        // tray_menu_quit_id2: tray_quit_id.clone(),
+        // tray_menu_show_controls_id2: tray_show_controls_id.clone(),
         tray_menu_quit_id: tray_quit_id,
         tray_menu_show_controls_id: tray_show_controls_id,
         current_size: LogicalSize::new(480, 360),
         current_modifiers: Modifiers::default(),
-        all_windows: HashMap::new(),
+        all_widgets: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
         window_id_to_webview_id: HashMap::new(),
         proxy: event_loop_proxy.clone(),
@@ -908,18 +1000,5 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
-
-    #[test]
-    fn test_serde_deserialize_from_webview() {
-        let body = "{\"extractresult\":{\"error\":null,\"value\":\"562.01\",\"id\":\"Test SPY\",\"widget_id\":\"Test SPY\",\"timestamp\":\"2021-01-01T00:00:00.000Z\"}}";
-        // serde_json::Value::from_str(s)
-        let body_text = body.to_string();
-        let message: ScrapedValue = serde_json::from_str(&body_text).unwrap();
-        assert_eq!(message.widget_id, NanoId("Test SPY".to_string()));
-        assert_eq!(message.value, Some("562.01".to_string()));
-        assert_eq!(message.timestamp, 1614556800000);
-    }
 }

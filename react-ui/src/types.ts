@@ -4,6 +4,10 @@
 
 export type NanoId = string;
 
+export interface AppSettings {
+	show_tray_icon: boolean;
+}
+
 export enum Level {
 	AlwaysOnTop = "alwaysontop",
 	Normal = "normal",
@@ -66,4 +70,8 @@ export interface WidgetModifier {
 	widget_id: NanoId;
 	modifier_type: Modifier;
 }
+
+export type IpcEvent = 
+	| { type: "SaveSettings", content: AppSettings }
+	| { type: "ExtractResult", content: ScrapedData };
 

@@ -4285,6 +4285,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "cocoa",
+ "directories",
  "env_logger",
  "futures",
  "http",

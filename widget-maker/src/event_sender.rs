@@ -1,5 +1,5 @@
 use log::info;
-use widget_types::{ApiAction, EventSender, EventSenderImpl, ScrapedValue};
+use widget_types::{ApiAction, EventSender, EventSenderImpl};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Clone)]

@@ -8,6 +8,20 @@ pub use event::ApiAction;
 pub use event::EventSender;
 pub use event::EventSenderImpl;
 
+#[derive(Debug, Deserialize)]
+#[typeshare]
+#[serde(tag = "type", content = "content")]
+pub enum IpcEvent {
+    SaveSettings(AppSettings),
+    ExtractResult(ScrapedData),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct AppSettings {
+    pub show_tray_icon: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[typeshare]
 pub struct NanoId(pub String);
@@ -19,14 +33,14 @@ pub struct Widget {
     pub description: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ScrapedValue {
-    // pub id: i32,
-    pub widget_id: NanoId,
-    pub value: Option<String>,
-    pub error: Option<String>,
-    pub timestamp: i64,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// pub struct ScrapedValue {
+//     // pub id: i32,
+//     pub widget_id: NanoId,
+//     pub value: Option<String>,
+//     pub error: Option<String>,
+//     pub timestamp: i64,
+// }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase", tag = "type", content = "content")]
