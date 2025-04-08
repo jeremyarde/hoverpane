@@ -88,6 +88,7 @@ struct ViewSize {
 
 struct App {
     tray_menu_quit_id: String,
+    tray_menu_show_controls_id: String,
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
@@ -185,10 +186,14 @@ impl App {
 
     fn remove_webview(&mut self, id: NanoId) {
         info!("Removing webview: {:?}", id);
-        let window_id = self.widget_id_to_window_id[&id];
-        self.all_windows.remove(&window_id);
-        self.widget_id_to_window_id.remove(&id);
-        self.window_id_to_webview_id.remove(&window_id);
+
+        if let Some(window_id) = self.widget_id_to_window_id.get(&id) {
+            self.all_windows.remove(&window_id);
+            self.window_id_to_webview_id.remove(&window_id);
+            self.widget_id_to_window_id.remove(&id);
+        } else {
+            info!("Webview not found");
+        }
     }
 
     // fn move_webview(&mut self, id: NanoId, direction: Direction) {
@@ -423,11 +428,6 @@ JSON.stringify({
                 },
             );
         }
-
-        // self.db
-        //     .lock()
-        //     .unwrap()
-        //     .insert_widget_configuration(vec![widget_config]);
     }
 
     fn ipc_handler(body: &str, proxy: EventLoopProxy<UserEvent>) {
@@ -436,6 +436,23 @@ JSON.stringify({
         info!("Value: {:?}", val);
         let message: ScrapedValue = serde_json::from_value(val["extractresult"].clone()).unwrap();
         proxy.send_event(UserEvent::ExtractResult(message));
+    }
+
+    fn show_controls(&mut self, event_loop: &ActiveEventLoop) {
+        // check if controls widget is available, if yes focus it, otherwise create it
+        let Some(window_id) = self
+            .widget_id_to_window_id
+            .get(&NanoId("controls".to_string()))
+        else {
+            info!("Controls widget not found");
+            self.create_widget(event_loop, get_controls_widget_config());
+            return;
+        };
+        let Some(window) = self.all_windows.get(window_id) else {
+            info!("Controls widget not found");
+            return;
+        };
+        window.window.focus_window();
     }
 }
 
@@ -631,6 +648,9 @@ impl ApplicationHandler<UserEvent> for App {
                 if id.0 == self.tray_menu_quit_id {
                     info!("Quitting application");
                     event_loop.exit();
+                } else if id.0 == self.tray_menu_show_controls_id {
+                    info!("Showing controls");
+                    self.show_controls(event_loop);
                 } else {
                     info!("Unhandled Menu event: {:?}", menu_event);
                 }
@@ -726,6 +746,16 @@ fn setup_menu() -> Menu {
     menu
 }
 
+fn get_controls_widget_config() -> WidgetConfiguration {
+    WidgetConfiguration::new()
+        .with_widget_id(NanoId("controls".to_string()))
+        .with_title("Controls".to_string())
+        .with_widget_type(WidgetType::File(FileConfiguration {
+            html: include_str!("../../react-ui/dist/index.html").to_string(),
+        }))
+        .with_level(Level::Normal)
+}
+
 fn main() {
     env_logger::init();
     info!("Starting application...");
@@ -754,13 +784,7 @@ fn main() {
     // menu.init_for_nsapp();
 
     let config: Vec<WidgetConfiguration> = vec![
-        WidgetConfiguration::new()
-            .with_widget_id(NanoId("controls".to_string()))
-            .with_title("Controls".to_string())
-            .with_widget_type(WidgetType::File(FileConfiguration {
-                html: include_str!("../../react-ui/dist/index.html").to_string(),
-            }))
-            .with_level(Level::Normal),
+        get_controls_widget_config(),
         WidgetConfiguration::new()
             .with_widget_id(NanoId("Test SPY".to_string()))
             .with_title("Test SPY".to_string())
@@ -820,12 +844,15 @@ fn main() {
 
     let tray_menu = tray_icon::menu::Menu::new();
     let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
+    let show_controls_item = tray_icon::menu::MenuItem::new("Show controls", true, None);
     tray_menu.append(&quit_item).unwrap();
+    tray_menu.append(&show_controls_item).unwrap();
 
     let tray_quit_id = quit_item.id().0.clone();
+    let tray_show_controls_id = show_controls_item.id().0.clone();
 
     let tray_icon = TrayIconBuilder::new()
-        .with_tooltip("system-tray - tray icon library!")
+        .with_tooltip("Widget Maker")
         .with_icon(tray_icon::Icon::from_rgba(img.into_raw(), width, height).unwrap())
         .with_menu(Box::new(tray_menu))
         .build()
@@ -841,6 +868,7 @@ fn main() {
     let mut app = App {
         db: app_db,
         tray_menu_quit_id: tray_quit_id,
+        tray_menu_show_controls_id: tray_show_controls_id,
         current_size: LogicalSize::new(480, 360),
         current_modifiers: Modifiers::default(),
         all_windows: HashMap::new(),
