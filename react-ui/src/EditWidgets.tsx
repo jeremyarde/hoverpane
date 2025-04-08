@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { Modifier, WidgetConfiguration, WidgetModifier } from "./types";
 
-export default function EditWidget() {
+export default function EditWidgets() {
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfiguration[]>([]);
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);

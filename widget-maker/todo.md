@@ -13,3 +13,6 @@ todo:
   - always draw on top?
   - notifications
 - add the element view button functionality
+
+April 8th
+- change port to cause minimal conflicts with users computer

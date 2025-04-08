@@ -19,7 +19,7 @@ const defaultValues: CreateWidgetRequest = {
   transparent: false,
 };
 
-export default function WidgetForm() {
+export default function CreateWidgetForm() {
   const [error, setError] = useState<ApiError | null>(null);
   const [widgetType, setWidgetType] = useState<WidgetType>({
     type: "url",
