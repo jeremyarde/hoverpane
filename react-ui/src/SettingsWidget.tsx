@@ -15,11 +15,9 @@ export default function SettingsWidget() {
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    setTimeout(() => {
-      setAppSettings(defaultSettings);
-      setIsLoading(false);
-      setIsDirty(false);
-    }, 500);
+    setAppSettings(defaultSettings);
+    setIsLoading(false);
+    setIsDirty(false);
   }, []);
 
   const handleSettingsChange = useCallback(

@@ -133,7 +133,7 @@ pub mod api {
     pub(crate) async fn create_widget(
         State(state): State<ApiState>,
         Json(widget_request): Json<CreateWidgetRequest>,
-    ) -> impl IntoResponse {
+    ) -> (StatusCode, Json<Value>) {
         info!("Creating widget: {:?}", widget_request);
 
         let widget_config = WidgetConfiguration {
@@ -151,14 +151,21 @@ pub mod api {
             },
             level: widget_request.level,
             transparent: widget_request.transparent,
+            decorations: widget_request.decorations,
         };
 
         let mut db = state.db.lock().await;
-        match db.insert_widget_configuration(vec![widget_config]) {
-            Ok(_) => StatusCode::CREATED.into_response(),
+        match db.insert_widget_configuration(vec![widget_config.clone()]) {
+            Ok(_) => (StatusCode::CREATED, Json(json!(widget_config))),
             Err(e) => {
                 error!("Failed to create widget: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "message": "Failed to create widget",
+                        "origin": "create_widget"
+                    })),
+                )
             }
         }
     }

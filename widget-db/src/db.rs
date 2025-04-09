@@ -1,8 +1,11 @@
 pub mod db {
+    use crate::db_impl::db_impl::DbTable;
+
     use directories::ProjectDirs;
     use log::{debug, error, info};
     // use nanoid::NanoId;
     use rusqlite::{Connection, Result as SqliteResult};
+    use rusqlite_migration::{Migrations, M};
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
@@ -16,44 +19,43 @@ pub mod db {
         data_dir.join("widgets.db")
     }
 
-    pub struct Database {
-        conn: Connection,
+    impl DbTable for WidgetConfiguration {
+        fn get_create_table_sql() -> &'static str {
+            r#"CREATE TABLE IF NOT EXISTS widgets (
+                id INTEGER PRIMARY KEY,
+                widget_id TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                widget_type TEXT NOT NULL,
+                level TEXT NOT NULL,
+                transparent INTEGER NOT NULL,
+                decorations INTEGER NOT NULL
+            )"#
+        }
+
+        fn get_insert_sql() -> &'static str {
+            "INSERT INTO widgets (widget_id, title, widget_type, level, transparent, decorations) VALUES (?, ?, ?, ?, ?, ?)"
+        }
     }
 
-    impl Database {
-        pub fn new() -> SqliteResult<Self> {
-            // let conn = Connection::open_in_memory()?;
-            let conn = Connection::open(
-                "/Users/jarde/Documents/code/web-extension-scraper/widget-db/widgets.db",
-            )?;
-
-            conn.execute(
-                r#"
-                CREATE TABLE IF NOT EXISTS widgets (
-                    id INTEGER PRIMARY KEY,
-                    widget_id TEXT NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    widget_type TEXT NOT NULL,
-                    level TEXT NOT NULL,
-                    transparent INTEGER NOT NULL
-                )
-                "#,
-                [],
-            )?;
-
-            conn.execute(
-                r#"
+    impl DbTable for WidgetModifier {
+        fn get_create_table_sql() -> &'static str {
+            r#"
                 CREATE TABLE IF NOT EXISTS modifiers (
                     id INTEGER PRIMARY KEY,
                     widget_id TEXT NOT NULL,
                     modifier_type TEXT NOT NULL
                 )
-                "#,
-                [],
-            )?;
+                "#
+        }
 
-            conn.execute(
-                r#"
+        fn get_insert_sql() -> &'static str {
+            "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)"
+        }
+    }
+
+    impl DbTable for ScrapedData {
+        fn get_create_table_sql() -> &'static str {
+            r#"
                 CREATE TABLE IF NOT EXISTS scraped_data (
                     id INTEGER PRIMARY KEY,
                     widget_id TEXT NOT NULL,
@@ -61,9 +63,33 @@ pub mod db {
                     error TEXT NOT NULL,
                     timestamp TEXT NOT NULL
                 )
-                "#,
-                [],
+                "#
+        }
+
+        fn get_insert_sql() -> &'static str {
+            "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?, ?, ?, ?)"
+        }
+    }
+
+    pub struct Database {
+        conn: Connection,
+    }
+
+    impl Database {
+        pub fn new() -> SqliteResult<Self> {
+            // let conn = Connection::open_in_memory()?;
+            let mut conn = Connection::open(
+                "/Users/jarde/Documents/code/web-extension-scraper/widget-db/widgets.db",
             )?;
+            conn.pragma_update_and_check(None, "journal_mode", &"WAL", |_| Ok(()))
+                .unwrap();
+
+            let migrations = Migrations::new(vec![
+                M::up(WidgetConfiguration::get_create_table_sql()),
+                M::up(WidgetModifier::get_create_table_sql()),
+                M::up(ScrapedData::get_create_table_sql()),
+            ]);
+            migrations.to_latest(&mut conn).unwrap();
 
             Ok(Self { conn })
         }
@@ -83,6 +109,7 @@ pub mod db {
                         _ => Level::Normal,
                     },
                     transparent: row.get::<_, i32>(5)? != 0,
+                    decorations: row.get::<_, i32>(6)? != 0,
                 })
             })?;
 
@@ -94,9 +121,7 @@ pub mod db {
             configs: Vec<WidgetConfiguration>,
         ) -> SqliteResult<()> {
             let tx = self.conn.transaction()?;
-            let mut stmt = tx.prepare(
-                "INSERT INTO widgets (widget_id, title, widget_type, level, transparent) VALUES (?, ?, ?, ?, ?)",
-            )?;
+            let mut stmt = tx.prepare(WidgetConfiguration::get_insert_sql())?;
 
             for config in configs {
                 let widget_type = serde_json::to_string(&config.widget_type).unwrap();
@@ -107,6 +132,7 @@ pub mod db {
                     &widget_type,
                     &level,
                     &(config.transparent as i32).to_string(),
+                    &(config.decorations as i32).to_string(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => {
@@ -175,7 +201,7 @@ pub mod db {
             let timestamp = insert_data.timestamp.to_string();
 
             self.conn.execute(
-                "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?, ?, ?, ?)",
+                ScrapedData::get_insert_sql(),
                 [&insert_data.widget_id, &value, &error, &timestamp],
             )?;
 
@@ -198,7 +224,7 @@ pub mod db {
         pub fn insert_modifier(&self, modifier: WidgetModifier) -> SqliteResult<()> {
             let modifier_type = serde_json::to_string(&modifier.modifier_type).unwrap();
             self.conn.execute(
-                "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)",
+                WidgetModifier::get_insert_sql(),
                 [&modifier.widget_id.0, &modifier_type],
             )?;
             Ok(())
@@ -207,7 +233,7 @@ pub mod db {
         pub fn insert_widget_modifier(&self, widget_modifier: WidgetModifier) -> SqliteResult<()> {
             let modifier_type = serde_json::to_string(&widget_modifier.modifier_type).unwrap();
             self.conn.execute(
-                "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)",
+                WidgetModifier::get_insert_sql(),
                 [&widget_modifier.widget_id.0, &modifier_type],
             )?;
             Ok(())
@@ -219,8 +245,7 @@ pub mod db {
         ) -> SqliteResult<()> {
             let tx = self.conn.transaction()?;
             {
-                let mut stmt =
-                    tx.prepare("INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)")?;
+                let mut stmt = tx.prepare(WidgetModifier::get_insert_sql())?;
 
                 for widget_modifier in widget_modifiers {
                     let modifier_type =
@@ -318,6 +343,7 @@ pub mod db {
                 }),
                 level: Level::Normal,
                 transparent: false,
+                decorations: false,
             };
             db.insert_widget_configuration(vec![widget_configuration])
                 .unwrap();

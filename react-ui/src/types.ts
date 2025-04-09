@@ -20,6 +20,7 @@ export interface CreateWidgetRequest {
 	title: string;
 	level: Level;
 	transparent: boolean;
+	decorations: boolean;
 }
 
 export interface FileConfiguration {
@@ -53,6 +54,7 @@ export interface WidgetConfiguration {
 	widget_type: WidgetType;
 	level: Level;
 	transparent: boolean;
+	decorations: boolean;
 }
 
 export type Modifier = 

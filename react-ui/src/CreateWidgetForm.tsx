@@ -56,7 +56,7 @@ export default function CreateWidgetForm() {
         setError(null);
         const widget = await res.json();
         console.log("Widget created:", widget);
-        event.currentTarget.reset(); // Reset form on success
+
         setWidgetType({ type: "url", content: { url: "" } }); // Reset type state
       } else {
         const error = await res.json();
@@ -162,7 +162,7 @@ export default function CreateWidgetForm() {
             id="title"
             name="title"
             defaultValue={defaultValues.title}
-            placeholder="My Awesome Widget"
+            placeholder="Widget Title"
             className={inputClass}
             required
           />
@@ -196,6 +196,16 @@ export default function CreateWidgetForm() {
           />
           <label htmlFor="transparent" className="text-xs font-medium">
             Transparent Background
+          </label>
+          <input
+            type="checkbox"
+            id="decorations"
+            name="decorations"
+            defaultChecked={defaultValues.decorations}
+            className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="decorations" className="text-xs font-medium">
+            Decorations
           </label>
         </div>
 

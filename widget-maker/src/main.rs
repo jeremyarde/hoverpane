@@ -63,8 +63,8 @@ const DOCK_ICON: &[u8] = include_bytes!("/Users/jarde/Documents/misc/app-icon2.p
 use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use wry::{
-    dpi::{LogicalPosition, LogicalSize, Position},
-    PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
+    dpi::{LogicalPosition, LogicalSize, PhysicalPosition, Position},
+    PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin, WebViewExtMacOS,
 };
 
 // mod db;
@@ -97,6 +97,7 @@ struct App {
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     tray_menu_quit_id: String,
     tray_menu_show_controls_id: String,
+    tray_menu_hide_titlebar_id: String,
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
@@ -293,15 +294,6 @@ JSON.stringify({
         }
     }
 
-    fn resize_window(&mut self, id: WindowId, size: &LogicalSize<u32>) {
-        if let Some(window) = self.all_widgets.get_mut(&id) {
-            window.app_webview.webview.set_bounds(Rect {
-                position: LogicalPosition::new(0, 0).into(),
-                size: size.clone().into(),
-            });
-        }
-    }
-
     fn create_widget(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -315,13 +307,15 @@ JSON.stringify({
             .with_transparent(widget_config.transparent)
             // .with_blur(true) // barely supported, not really working
             .with_movable_by_window_background(true)
-            .with_fullsize_content_view(true)
-            .with_title_hidden(true)
-            .with_titlebar_buttons_hidden(false)
-            .with_titlebar_hidden(false)
-            .with_title("Watcher")
+            .with_title_hidden(false)
+            // .with_titlebar_buttons_hidden(false)
+            // .with_titlebar_hidden(false)
+            .with_title(&widget_config.title.clone())
+            // .with_decorations(widget_config.decorations)
+            .with_decorations(true)
             .with_has_shadow(false)
-            .with_movable_by_window_background(true)
+            .with_fullsize_content_view(true)
+            .with_titlebar_transparent(false) // if false we can't move the window by dragging the titlebar
             .with_resizable(true);
         let new_window: Window = event_loop
             .create_window(
@@ -340,35 +334,38 @@ JSON.stringify({
 
         let scale_factor = new_window.scale_factor();
 
+        let common_webview_attributes = WebViewBuilder::new()
+            .with_bounds(Rect {
+                position: LogicalPosition::new(0, 0).into(),
+                size: self.current_size.into(),
+            })
+            .with_transparent(widget_config.transparent)
+            .with_ipc_handler({
+                let proxy_clone = self.proxy.clone();
+                move |message| {
+                    App::ipc_handler(message.body(), proxy_clone.clone());
+                }
+            })
+            // .with_traffic_light_inset(PhysicalPosition::new(10, 10))
+            .with_initialization_script(
+                r#"
+                window.WINDOW_ID = "$window_id  ";
+                window.WIDGET_ID = "$widget_id";
+                "#
+                .replace("$window_id", &format!("{:?}", new_window.id()))
+                .replace("$widget_id", &widget_config.widget_id.0)
+                .as_str(),
+            )
+            .with_focused(true);
+
         let webview = match &widget_config.widget_type {
             WidgetType::File(file_config) => {
                 let html = file_config.html.clone();
                 // let html = html.replace("$widget_id", &widget_config.id.0);
                 // let html = html.replace("$window_id", &format!("{:?}", new_window.id()));
 
-                let webview = WebViewBuilder::new()
-                    .with_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: self.current_size.into(),
-                    })
-                    .with_initialization_script(
-                        r#"
-                        window.WINDOW_ID = "$window_id  ";
-                        window.WIDGET_ID = "$widget_id";
-                        "#
-                        .replace("$window_id", &format!("{:?}", new_window.id()))
-                        .replace("$widget_id", &widget_config.widget_id.0)
-                        .as_str(),
-                    )
+                let webview = common_webview_attributes
                     .with_html(html.as_str())
-                    .with_ipc_handler({
-                        let proxy_clone = self.proxy.clone();
-                        move |message| {
-                            App::ipc_handler(message.body(), proxy_clone.clone());
-                        }
-                    })
-                    .with_transparent(widget_config.transparent)
-                    // .with_background_color((100, 255, 150, 0))
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -380,33 +377,8 @@ JSON.stringify({
                     format!("https://{}", url_config.url)
                 };
                 info!("Creating url widget with url: {}", updated_url);
-                let webview = WebViewBuilder::new()
-                    .with_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: self.current_size.into(),
-                    })
-                    .with_traffic_light_inset(wry::dpi::Position::Logical(LogicalPosition::new(
-                        0.0, 0.0,
-                    )))
+                let webview = common_webview_attributes
                     .with_url(updated_url)
-                    .with_ipc_handler({
-                        let proxy_clone = self.proxy.clone();
-                        move |message| {
-                            info!("IPC handler received message: {:?}", message);
-                            App::ipc_handler(message.body(), proxy_clone.clone());
-                        }
-                    })
-                    .with_transparent(widget_config.transparent)
-                    // .with_background_color((100, 255, 150, 0)) // this is not working
-                    .with_initialization_script(
-                        r#"
-                        window.WINDOW_ID = "$window_id  ";
-                        window.WIDGET_ID = "$widget_id";
-                        "#
-                        .replace("$window_id", &format!("{:?}", new_window.id()))
-                        .replace("$widget_id", &widget_config.widget_id.0)
-                        .as_str(),
-                    )
                     .build_as_child(&new_window)
                     .expect("Something failed");
                 Some(webview)
@@ -472,6 +444,12 @@ JSON.stringify({
         window.window.focus_window();
     }
 
+    fn hide_titlebars(&mut self, event_loop: &ActiveEventLoop) {
+        self.all_widgets.iter().for_each(|(_, widget)| {
+            widget.window.set_decorations(false);
+        });
+    }
+
     fn update_app_settings(&mut self, settings: AppSettings) {
         info!("Updating app settings: {:?}", settings);
         // self.app_settings = settings;
@@ -495,16 +473,23 @@ JSON.stringify({
 fn setup_tray_menu(
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     proxy_clone: EventLoopProxy<UserEvent>,
-) -> (String, String, TrayIcon) {
+) -> (String, String, String, TrayIcon) {
     let tray_menu = tray_icon::menu::Menu::new();
     let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
     let show_controls_item = tray_icon::menu::MenuItem::new("Show controls", true, None);
-    tray_menu.append(&quit_item).unwrap();
+    let hide_titlebar_item = tray_icon::menu::MenuItem::new("Hide titlebars", true, None);
+
+    // Append items and the separator correctly
     tray_menu.append(&show_controls_item).unwrap();
+    tray_menu.append(&hide_titlebar_item).unwrap();
+    tray_menu
+        .append(&tray_icon::menu::PredefinedMenuItem::separator())
+        .unwrap();
+    tray_menu.append(&quit_item).unwrap();
 
     let tray_quit_id = quit_item.id().0.clone();
     let tray_show_controls_id = show_controls_item.id().0.clone();
-
+    let tray_hide_titlebar_id = hide_titlebar_item.id().0.clone();
     let (width, height) = app_icon.dimensions();
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("Widget Maker")
@@ -518,7 +503,12 @@ fn setup_tray_menu(
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
-    (tray_quit_id, tray_show_controls_id, tray_icon)
+    (
+        tray_quit_id,
+        tray_show_controls_id,
+        tray_hide_titlebar_id,
+        tray_icon,
+    )
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -648,6 +638,29 @@ impl ApplicationHandler<UserEvent> for App {
             } => {
                 // info!("Cursor moved: {:?}", position);
             }
+            WindowEvent::CursorEntered { device_id } => {
+                info!("Cursor entered: {:?}", device_id);
+                // self.all_widgets
+                //     .iter()
+                //     .filter(|(_, widget)| widget.visible)
+                //     .for_each(|(_, widget)| {
+                //         widget.window.set_decorations(true);
+                //         widget
+                //             .app_webview
+                //             .webview
+                //             .set_traffic_light_inset(PhysicalPosition::new(20, -50));
+                //     });
+            }
+            WindowEvent::CursorLeft { device_id } => {
+                info!("Cursor left: {:?}", device_id);
+                // self.all_widgets
+                //     .iter()
+                //     .filter(|(_, widget)| widget.visible)
+                //     .for_each(|(_, widget)| {
+                //         // widget.window.set_decorations(false);
+                //         // widget.window.set_decorations(false);
+                //     });
+            }
             _ => {
                 info!("Unhandledevent: {:?}", event);
             }
@@ -712,14 +725,23 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Menu event: {:?}", menu_event);
                 let id = menu_event.id();
                 info!("Menu id: {:?}", id);
-                if id.0 == self.tray_menu_quit_id {
-                    info!("Quitting application");
-                    event_loop.exit();
-                } else if id.0 == self.tray_menu_show_controls_id {
-                    info!("Showing controls");
-                    self.show_controls(event_loop);
-                } else {
-                    info!("No tray menu show controls id found");
+
+                match id.0.as_str() {
+                    val if val == self.tray_menu_quit_id => {
+                        info!("Quitting application");
+                        event_loop.exit();
+                    }
+                    val if val == self.tray_menu_show_controls_id => {
+                        info!("Showing controls");
+                        self.show_controls(event_loop);
+                    }
+                    val if val == self.tray_menu_hide_titlebar_id => {
+                        info!("Hiding titlebars");
+                        self.hide_titlebars(event_loop);
+                    }
+                    _ => {
+                        info!("No tray menu show controls id found");
+                    }
                 }
             }
             UserEvent::ModifierEvent(modifier) => {
@@ -946,7 +968,7 @@ fn main() {
             .into_rgba8();
     let (width, height) = img.dimensions();
 
-    let (tray_quit_id, tray_show_controls_id, tray_icon) =
+    let (tray_quit_id, tray_show_controls_id, tray_hide_titlebar_id, tray_icon) =
         setup_tray_menu(img.clone(), event_loop_proxy.clone());
     let app_db = widget_db::Database::new().unwrap();
     tray_icon.set_visible(app_settings.show_tray_icon);
@@ -961,6 +983,7 @@ fn main() {
         // tray_menu_show_controls_id2: tray_show_controls_id.clone(),
         tray_menu_quit_id: tray_quit_id,
         tray_menu_show_controls_id: tray_show_controls_id,
+        tray_menu_hide_titlebar_id: tray_hide_titlebar_id,
         current_size: LogicalSize::new(480, 360),
         current_modifiers: Modifiers::default(),
         all_widgets: HashMap::new(),

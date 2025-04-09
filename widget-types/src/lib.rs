@@ -108,6 +108,7 @@ pub struct WidgetConfiguration {
     pub widget_type: WidgetType,
     pub level: Level,
     pub transparent: bool,
+    pub decorations: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -118,6 +119,7 @@ pub struct CreateWidgetRequest {
     pub title: String,
     pub level: Level,
     pub transparent: bool,
+    pub decorations: bool,
 }
 
 impl WidgetConfiguration {
@@ -131,6 +133,7 @@ impl WidgetConfiguration {
             }),
             level: Level::Normal,
             transparent: false,
+            decorations: false,
         }
     }
 
@@ -156,6 +159,11 @@ impl WidgetConfiguration {
 
     pub fn with_widget_id(mut self, id: NanoId) -> Self {
         self.widget_id = id;
+        self
+    }
+
+    pub fn with_decorations(mut self, decorations: bool) -> Self {
+        self.decorations = decorations;
         self
     }
 }
