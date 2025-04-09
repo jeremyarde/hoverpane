@@ -92,7 +92,7 @@ const IconRefresh = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth={2}
-      d="M4 4v5h5M20 20v-5h-5M4 4l5 5M20 20l-5-5M4 4h16v16H4z"
+      d="M4 4v5h5M20 20v-5h-5M4 4l5 5M20 20l-5-5M4 4h16v16H4V4z"
     />
   </svg>
 );
@@ -109,6 +109,53 @@ const IconCheck = () => (
       strokeLinejoin="round"
       strokeWidth={2}
       d="M5 13l4 4L19 7"
+    />
+  </svg>
+);
+
+// New Icons
+const IconMinimalist = () => (
+  <svg
+    className="w-8 h-8 text-indigo-600"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="M3 6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6z"
+    />
+  </svg>
+);
+
+const IconPin = () => (
+  <svg
+    className="w-8 h-8 text-sky-600"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="M12 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3z"
+    />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="M12 11v8m-3-3h6"
+    />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="M12 2a9 9 0 00-9 9c0 4.97 4.03 9 9 9s9-4.03 9-9a9 9 0 00-9-9z"
     />
   </svg>
 );
@@ -183,9 +230,7 @@ const App: React.FC = () => {
             Widget Maker
           </h1>
           <p className="text-lg md:text-xl text-slate-700 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Turn websites or your own code into handy desktop widgets. Get the
-            info you need, right when you need it, without touching your
-            browser.
+            Turn any website into a widget right on your desktop within seconds
           </p>
           <a
             href="#download"
@@ -200,73 +245,56 @@ const App: React.FC = () => {
       <section id="features" className="py-20 md:py-28 bg-slate-50 px-4">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-center text-slate-800 mb-12 md:mb-16">
-            Everything You Need
+            Key Features
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
-            {/* Feature 1 */}
+            {/* Features */}
             <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <div className="bg-indigo-100 rounded-full p-4 inline-block mb-4">
-                <IconBolt />
+                <IconMinimalist />
               </div>
               <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Live Web Content
+                Minimalist Design
               </h3>
               <p className="text-slate-500 leading-relaxed">
-                Snag just the important bits (prices, weather, news) from any
-                website. See updates live on your desktop, ditch the tab
-                clutter.
+                Remove all the clutter of your browser and get right to the
+                important stuff. No size limits, no status bars, no toolbars.
               </p>
             </div>
-            {/* Feature 2 */}
-            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-emerald-100 rounded-full p-4 inline-block mb-4">
-                <IconCode />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Custom HTML Widgets
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Know HTML, CSS, and JavaScript? Build whatever you need –
-                dashboards, quick tools, data displays, and more.
-              </p>
-            </div>
-            {/* Feature 3 */}
-            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-rose-100 rounded-full p-4 inline-block mb-4">
-                <IconCog />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Control the Details
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Set auto-refresh timers so data stays fresh. Use CSS selectors
-                to pinpoint exactly what you want from web widgets.
-              </p>
-            </div>
-            {/* Feature 4 */}
             <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <div className="bg-sky-100 rounded-full p-4 inline-block mb-4">
-                <IconEye />
+                <IconPin />
               </div>
               <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Look and Feel
+                Always On Top
               </h3>
               <p className="text-slate-500 leading-relaxed">
-                Make widgets see-through to blend in. Choose if they float on
-                top, stay put, or hide behind other windows.
+                Keep your widget always on top of other windows, no more
+                fighting your window manager for screen space.
               </p>
             </div>
-            {/* Feature 5 */}
             <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <div className="bg-amber-100 rounded-full p-4 inline-block mb-4">
                 <IconRefresh />
               </div>
               <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Lightweight & Fast
+                Auto Refresh
               </h3>
               <p className="text-slate-500 leading-relaxed">
-                Built efficiently with Rust. Runs light on resources, unlike
-                heavier browser-based tools.
+                Automatically refresh your widget with a configurable timer. No
+                more manually refreshing websites to get the latest information.
+              </p>
+            </div>
+            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+              <div className="bg-emerald-100 rounded-full p-4 inline-block mb-4">
+                <IconCode />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-700 mb-2">
+                Custom Widgets
+              </h3>
+              <p className="text-slate-500 leading-relaxed">
+                Know HTML, CSS, and JavaScript? Load your own HTML code and make
+                it a widget.
               </p>
             </div>
           </div>
@@ -279,9 +307,6 @@ const App: React.FC = () => {
             Easy Setup
           </h2>
           <div className="grid md:grid-cols-3 gap-8 md:gap-12 relative">
-            {/* Dashed line connector (visual only) */}
-            <div className="hidden md:block absolute top-1/2 left-0 w-full h-px border-t-2 border-dashed border-indigo-200 -translate-y-1/2"></div>
-
             {/* Step 1 */}
             <div className="relative z-10">
               <div className="bg-indigo-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-xl font-bold mx-auto mb-4 shadow-lg">
@@ -300,10 +325,11 @@ const App: React.FC = () => {
                 2
               </div>
               <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                Tweak (If You Want)
+                Add modifiers
               </h3>
               <p className="text-slate-500 leading-relaxed">
-                Set how often it refreshes or target specific web content.
+                Set how often it refreshes, or scrape specific web content from
+                a website.
               </p>
             </div>
             {/* Step 3 */}
@@ -312,10 +338,10 @@ const App: React.FC = () => {
                 3
               </div>
               <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                Launch It
+                Done
               </h3>
               <p className="text-slate-500 leading-relaxed">
-                That's it! Your widget is ready on your desktop.
+                That's it! Your widget is ready and on your desktop.
               </p>
             </div>
           </div>
@@ -325,7 +351,7 @@ const App: React.FC = () => {
       <section id="use-cases" className="py-20 md:py-28 bg-slate-50 px-4">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-center text-slate-800 mb-12 md:mb-16">
-            What Will You Build?
+            Need Ideas?
           </h2>
           <div className="grid md:grid-cols-2 gap-8">
             {/* Use Case 1 */}
@@ -336,11 +362,10 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  Finance
+                  Stock Prices
                 </h3>
                 <p className="text-slate-500 leading-relaxed">
-                  Keep an eye on stocks, crypto, or exchange rates without
-                  needing a full browser window.
+                  Keep an eye on stocks prices with your favorite website.
                 </p>
               </div>
             </div>
@@ -351,11 +376,10 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  News
+                  Weather
                 </h3>
                 <p className="text-slate-500 leading-relaxed">
-                  See the latest headlines from your favorite sources, updated
-                  automatically.
+                  See the latest weather conditions.
                 </p>
               </div>
             </div>
@@ -366,10 +390,10 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  Weather
+                  Calendar
                 </h3>
                 <p className="text-slate-500 leading-relaxed">
-                  Get the current conditions or forecast right on your desktop.
+                  Show and use your calendar just like in your browser.
                 </p>
               </div>
             </div>
@@ -384,7 +408,22 @@ const App: React.FC = () => {
                 </h3>
                 <p className="text-slate-500 leading-relaxed">
                   Build quick tools, display data from APIs, monitor system
-                  stats – the possibilities are open.
+                  stats, or anything else you want.
+                </p>
+              </div>
+            </div>
+            {/* Use Case 5 */}
+            <div className="bg-white rounded-xl p-6 flex items-start space-x-4 border border-slate-100 shadow-sm">
+              <div className="mt-1 flex-shrink-0 w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
+                <span className="text-rose-600 text-xl">🛠️</span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-700 mb-1">
+                  AI Assistants
+                </h3>
+                <p className="text-slate-500 leading-relaxed">
+                  Give ChatGPT a permanent home on you desktop, no more losing
+                  it in a browser tab.
                 </p>
               </div>
             </div>
@@ -410,13 +449,13 @@ const App: React.FC = () => {
               </p>
               <ul className="space-y-2 text-left mb-8 text-slate-600">
                 <li className="flex items-center">
-                  <IconCheck /> Up to 3 active widgets
+                  <IconCheck /> Up to 2 active widgets
                 </li>
                 <li className="flex items-center">
                   <IconCheck /> Basic modifiers (Refresh)
                 </li>
                 <li className="flex items-center">
-                  <IconCheck /> Community support
+                  <IconCheck /> Priority support
                 </li>
               </ul>
               <a
@@ -429,9 +468,9 @@ const App: React.FC = () => {
 
             {/* Pro Tier */}
             <div className="border-2 border-indigo-500 rounded-xl p-6 md:p-8 flex flex-col relative bg-white shadow-lg">
-              <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+              {/* <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">
                 Most Popular
-              </span>
+              </span> */}
               <h3 className="text-xl font-semibold mb-2 text-indigo-600">
                 Pro
               </h3>
@@ -452,20 +491,14 @@ const App: React.FC = () => {
                   <IconCheck /> All modifiers (Scrape, etc.)
                 </li>
                 <li className="flex items-center">
-                  <IconCheck /> Advanced options
-                </li>
-                <li className="flex items-center">
                   <IconCheck /> Priority support
-                </li>
-                <li className="flex items-center">
-                  <IconCheck /> Lifetime updates
                 </li>
               </ul>
               <a
                 href="#"
                 className="mt-auto w-full block text-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
               >
-                Go Pro (Placeholder)
+                Go Pro
               </a>
             </div>
           </div>

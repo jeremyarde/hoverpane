@@ -81,6 +81,8 @@ use widget_types::NanoId;
 mod event_sender;
 pub use event_sender::WinitEventSender;
 
+const MAX_WIDGETS: usize = 2;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
     width: u32,
@@ -300,6 +302,24 @@ JSON.stringify({
         widget_config: WidgetConfiguration,
         // size: LogicalSize<u32>,
     ) {
+        // Check the widget limit, excluding the 'controls' widget
+        let current_widget_count = self
+            .all_widgets
+            .values()
+            .filter(|w| w.nano_id != NanoId("controls".to_string()))
+            .count();
+
+        if current_widget_count >= MAX_WIDGETS
+            && widget_config.widget_id != NanoId("controls".to_string())
+        {
+            warn!(
+                "Widget limit ({}) reached. Cannot create new widget: {}",
+                MAX_WIDGETS, widget_config.title
+            );
+            // Optionally, send a message back to the UI or notify the user
+            return;
+        }
+
         // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         // event_loop.set_allows_automatic_window_tabbing(enabled);
         let window_attributes = Window::default_attributes()

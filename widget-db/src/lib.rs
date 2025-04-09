@@ -4,7 +4,6 @@ mod db_impl;
 
 use std::{path::PathBuf, sync::Arc};
 
-use api::api::ApiClient;
 use directories::ProjectDirs;
 use tokio::sync::Mutex;
 

@@ -40,7 +40,7 @@ pub mod api {
 
     use axum::extract::State;
 
-    pub struct ApiClient {}
+    // pub struct ApiClient {}
 
     pub async fn run_api(db: Arc<Mutex<crate::db::db::Database>>, event_sender: EventSender) {
         let state = ApiState {
