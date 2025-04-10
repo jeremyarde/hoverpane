@@ -72,7 +72,7 @@ use wry::{
 use image::{self, ImageBuffer};
 
 pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
-
+pub const DEFAULT_SCRAPE_INTERVAL: u64 = 10;
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
 use nanoid::nanoid_gen;
@@ -100,6 +100,7 @@ struct App {
     tray_menu_quit_id: String,
     tray_menu_show_controls_id: String,
     tray_menu_hide_titlebar_id: String,
+    tray_menu_show_titlebar_id: String,
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
@@ -217,12 +218,12 @@ impl App {
     //     todo!("Minimize not implemented");
     // }
 
-    fn scrape_webview(&self, id: NanoId, element_selector: String) {
-        info!("Scraping webview: {:?}", id);
+    fn scrape_webview(&self, widget_id: NanoId, element_selector: String) {
+        info!("Scraping webview: {:?}", widget_id);
         info!("Widget id to window id: {:?}", self.widget_id_to_window_id);
         info!("window to webview id: {:?}", self.window_id_to_webview_id);
 
-        let Some(window_id) = self.widget_id_to_window_id.get(&id) else {
+        let Some(window_id) = self.widget_id_to_window_id.get(&widget_id) else {
             info!("Webview not found");
             return;
         };
@@ -240,12 +241,13 @@ const element = document.querySelector("$selector");
 if (!element) {
 window.ipc.postMessage(
   JSON.stringify({
-    extractresult: {
-      error: "Element not found",
-      value: null,
-      widget_id: "$widget_id",
-      timestamp: Date.now(),
-    }
+    type: "extractresult",
+    content: {
+        error: "Element not found",
+        value: null,
+        widget_id: "$widget_id",
+        timestamp: Date.now().toString(),
+  }
   })
 );
 }
@@ -254,22 +256,24 @@ const scrape_value = element.getAttribute("aria-label") || element.textContent.t
 
 window.ipc.postMessage(
 JSON.stringify({
-  extractresult: {
+  type: "extractresult",
+  content: {
     error: null,
     value: scrape_value,
     widget_id: "$widget_id",
-    timestamp: Date.now(),
+    timestamp: Date.now().toString(),
   }
 })
 );
 } catch (e) {
 window.ipc.postMessage(
 JSON.stringify({
-  extractresult: {
+  type: "extractresult",
+  content: {
   error: JSON.stringify(e.message),
   value: null,
   widget_id: "$widget_id",
-  timestamp: Date.now(),
+  timestamp: Date.now().toString(),
 }
 })
 );
@@ -440,7 +444,7 @@ JSON.stringify({
         let user_event = match serde_json::from_value::<IpcEvent>(val) {
             Ok(event) => event,
             Err(e) => {
-                error!("Failed to deserialize user event: {:?}", e);
+                error!("Failed to deserialize ipc event: {:?}", e);
                 return;
             }
         };
@@ -470,6 +474,12 @@ JSON.stringify({
         });
     }
 
+    fn show_titlebars(&mut self, event_loop: &ActiveEventLoop) {
+        self.all_widgets.iter().for_each(|(_, widget)| {
+            widget.window.set_decorations(true);
+        });
+    }
+
     fn update_app_settings(&mut self, settings: AppSettings) {
         info!("Updating app settings: {:?}", settings);
         // self.app_settings = settings;
@@ -493,15 +503,17 @@ JSON.stringify({
 fn setup_tray_menu(
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     proxy_clone: EventLoopProxy<UserEvent>,
-) -> (String, String, String, TrayIcon) {
+) -> (String, String, String, String, TrayIcon) {
     let tray_menu = tray_icon::menu::Menu::new();
     let quit_item = tray_icon::menu::MenuItem::new("Quit Widget Maker", true, None);
     let show_controls_item = tray_icon::menu::MenuItem::new("Show controls", true, None);
     let hide_titlebar_item = tray_icon::menu::MenuItem::new("Hide titlebars", true, None);
+    let show_titlebar_item = tray_icon::menu::MenuItem::new("Show titlebars", true, None);
 
     // Append items and the separator correctly
     tray_menu.append(&show_controls_item).unwrap();
     tray_menu.append(&hide_titlebar_item).unwrap();
+    tray_menu.append(&show_titlebar_item).unwrap();
     tray_menu
         .append(&tray_icon::menu::PredefinedMenuItem::separator())
         .unwrap();
@@ -510,6 +522,8 @@ fn setup_tray_menu(
     let tray_quit_id = quit_item.id().0.clone();
     let tray_show_controls_id = show_controls_item.id().0.clone();
     let tray_hide_titlebar_id = hide_titlebar_item.id().0.clone();
+    let tray_show_titlebar_id = show_titlebar_item.id().0.clone();
+
     let (width, height) = app_icon.dimensions();
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("Widget Maker")
@@ -527,6 +541,7 @@ fn setup_tray_menu(
         tray_quit_id,
         tray_show_controls_id,
         tray_hide_titlebar_id,
+        tray_show_titlebar_id,
         tray_icon,
     )
 }
@@ -660,26 +675,9 @@ impl ApplicationHandler<UserEvent> for App {
             }
             WindowEvent::CursorEntered { device_id } => {
                 info!("Cursor entered: {:?}", device_id);
-                // self.all_widgets
-                //     .iter()
-                //     .filter(|(_, widget)| widget.visible)
-                //     .for_each(|(_, widget)| {
-                //         widget.window.set_decorations(true);
-                //         widget
-                //             .app_webview
-                //             .webview
-                //             .set_traffic_light_inset(PhysicalPosition::new(20, -50));
-                //     });
             }
             WindowEvent::CursorLeft { device_id } => {
                 info!("Cursor left: {:?}", device_id);
-                // self.all_widgets
-                //     .iter()
-                //     .filter(|(_, widget)| widget.visible)
-                //     .for_each(|(_, widget)| {
-                //         // widget.window.set_decorations(false);
-                //         // widget.window.set_decorations(false);
-                //     });
             }
             _ => {
                 info!("Unhandledevent: {:?}", event);
@@ -710,13 +708,13 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Creating new widget: {:?}", widget_options);
 
                 let widget_config = WidgetConfiguration::new()
-                    .with_widget_type(if widget_options.url.is_empty() {
-                        WidgetType::File(FileConfiguration {
-                            html: widget_options.html,
+                    .with_widget_type(if widget_options.url.is_some() {
+                        WidgetType::Url(UrlConfiguration {
+                            url: widget_options.url.unwrap(),
                         })
                     } else {
-                        WidgetType::Url(UrlConfiguration {
-                            url: widget_options.url,
+                        WidgetType::File(FileConfiguration {
+                            html: widget_options.html.unwrap(),
                         })
                     })
                     .with_transparent(widget_options.transparent)
@@ -759,6 +757,10 @@ impl ApplicationHandler<UserEvent> for App {
                         info!("Hiding titlebars");
                         self.hide_titlebars(event_loop);
                     }
+                    val if val == self.tray_menu_show_titlebar_id => {
+                        info!("Showing titlebars");
+                        self.show_titlebars(event_loop);
+                    }
                     _ => {
                         info!("No tray menu show controls id found");
                     }
@@ -778,8 +780,8 @@ impl ApplicationHandler<UserEvent> for App {
                         modifier_id,
                         selector,
                     } => {
-                        info!("Scraping widget: {:?}", modifier_id);
-                        self.scrape_webview(modifier_id, selector);
+                        info!("Scraping widget: {:?}", modifier.widget_id);
+                        self.scrape_webview(modifier.widget_id, selector);
                     }
                 }
             }
@@ -954,22 +956,23 @@ fn main() {
         //     .with_level(Level::Normal),
     ];
 
-    let modifiers: Vec<WidgetModifier> = vec![WidgetModifier {
-        id: 1,
-        widget_id: NanoId("Test SPY".to_string()),
-        modifier_type: Modifier::Scrape {
-            modifier_id: NanoId("scrape1".to_string()),
-            selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
-        },
-    },
-    WidgetModifier {
-        id: 2,
-        widget_id: NanoId("testdata".to_string()),
-        modifier_type: Modifier::Refresh {
-                modifier_id: NanoId("refresh1".to_string()),
-                interval_sec: 5,
-            },
-        },
+    let modifiers: Vec<WidgetModifier> = vec![
+        // WidgetModifier {
+        //     id: 1,
+        //     widget_id: NanoId("Test SPY".to_string()),
+        //     modifier_type: Modifier::Scrape {
+        //         modifier_id: NanoId("scrape1".to_string()),
+        //         selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
+        //     },
+        // },
+        // WidgetModifier {
+        //     id: 2,
+        //     widget_id: NanoId("testdata".to_string()),
+        //     modifier_type: Modifier::Refresh {
+        //         modifier_id: NanoId("refresh1".to_string()),
+        //         interval_sec: 5,
+        //     },
+        // },
     ];
 
     info!("Debug Config: {:?}", config.len());
@@ -988,8 +991,13 @@ fn main() {
             .into_rgba8();
     let (width, height) = img.dimensions();
 
-    let (tray_quit_id, tray_show_controls_id, tray_hide_titlebar_id, tray_icon) =
-        setup_tray_menu(img.clone(), event_loop_proxy.clone());
+    let (
+        tray_quit_id,
+        tray_show_controls_id,
+        tray_hide_titlebar_id,
+        tray_show_titlebar_id,
+        tray_icon,
+    ) = setup_tray_menu(img.clone(), event_loop_proxy.clone());
     let app_db = widget_db::Database::new().unwrap();
     tray_icon.set_visible(app_settings.show_tray_icon);
 
@@ -1004,6 +1012,7 @@ fn main() {
         tray_menu_quit_id: tray_quit_id,
         tray_menu_show_controls_id: tray_show_controls_id,
         tray_menu_hide_titlebar_id: tray_hide_titlebar_id,
+        tray_menu_show_titlebar_id: tray_show_titlebar_id,
         current_size: LogicalSize::new(480, 360),
         current_modifiers: Modifiers::default(),
         all_widgets: HashMap::new(),
@@ -1013,6 +1022,8 @@ fn main() {
         last_resize: None,
         menu,
     };
+
+    let modifier_thread_proxy = event_loop_proxy.clone();
 
     let event_sender = WinitEventSender::new(event_loop_proxy.clone());
     let rt = Runtime::new().unwrap();
@@ -1038,6 +1049,59 @@ fn main() {
         });
     });
 
+    thread::spawn(move || loop {
+        let modifier_db_access = widget_db::Database::new().unwrap();
+        let mut last_refresh_dict = HashMap::new();
+        let mut last_scrape_dict = HashMap::new();
+
+        loop {
+            let widget_modifiers = modifier_db_access.get_all_widget_modifiers();
+            let Ok(widget_modifiers) = widget_modifiers else {
+                error!(
+                    "Error getting widget modifiers: {:?}",
+                    widget_modifiers.err().unwrap()
+                );
+                continue;
+            };
+            for modifier in widget_modifiers {
+                // info!("Modifier: {:?}", modifier);
+                let modifier_clone = modifier.clone();
+                match modifier.modifier_type {
+                    Modifier::Refresh {
+                        modifier_id,
+                        interval_sec,
+                    } => {
+                        // info!("Refresh modifier: {:?}", modifier_id);
+                        let last_update = last_refresh_dict
+                            .entry(modifier_id.clone())
+                            .or_insert(Instant::now());
+
+                        if last_update.elapsed().as_secs() >= interval_sec as u64 {
+                            info!("Refreshing widget: {:?}", modifier_id);
+                            // last_update = Instant::now();
+                            last_refresh_dict.insert(modifier_id.clone(), Instant::now());
+                        }
+                    }
+                    Modifier::Scrape {
+                        modifier_id,
+                        selector,
+                    } => {
+                        info!("Scrape modifier: {:?}", modifier_id);
+                        let last_update = last_scrape_dict
+                            .entry(modifier_id.clone())
+                            .or_insert(Instant::now());
+                        if last_update.elapsed().as_secs() >= DEFAULT_SCRAPE_INTERVAL {
+                            info!("Scraping widget: {:?}", modifier_id);
+                            modifier_thread_proxy
+                                .send_event(UserEvent::ModifierEvent(modifier_clone));
+                            last_scrape_dict.insert(modifier_id.clone(), Instant::now());
+                        }
+                    }
+                }
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
     event_loop.run_app(&mut app).expect("Something failed");
 }
 

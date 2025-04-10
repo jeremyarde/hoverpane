@@ -140,13 +140,13 @@ pub mod api {
             id: 0,
             widget_id: widget_types::NanoId(nanoid_gen(8)),
             title: widget_request.title,
-            widget_type: if widget_request.url.is_empty() {
+            widget_type: if widget_request.html.is_some() {
                 WidgetType::File(FileConfiguration {
-                    html: widget_request.html,
+                    html: widget_request.html.unwrap(),
                 })
             } else {
                 WidgetType::Url(UrlConfiguration {
-                    url: widget_request.url,
+                    url: widget_request.url.unwrap(),
                 })
             },
             level: widget_request.level,
@@ -244,7 +244,7 @@ pub mod api {
         info!("Getting modifiers for widget {}", widget_id);
 
         let db = state.db.lock().await;
-        match db.get_widget_modifiers(&widget_id) {
+        match db.get_widget_modifier(&widget_id) {
             Ok(modifiers) => Json(modifiers).into_response(),
             Err(e) => {
                 error!("Failed to get modifiers: {:?}", e);
@@ -267,7 +267,7 @@ pub mod api {
             .event_sender
             .send_message(ApiAction::DeleteWidget(widget_id));
 
-        let db = state.db.lock().await;
+        let mut db = state.db.lock().await;
         match db.delete_widget_modifier(&modifier_id) {
             Ok(_) => StatusCode::NO_CONTENT.into_response(),
             Err(e) => {

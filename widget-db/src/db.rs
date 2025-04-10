@@ -43,7 +43,7 @@ pub mod db {
                 CREATE TABLE IF NOT EXISTS modifiers (
                     id INTEGER PRIMARY KEY,
                     widget_id TEXT NOT NULL,
-                    modifier_type TEXT NOT NULL
+                    modifier_type TEXT NOT NULL UNIQUE
                 )
                 "#
         }
@@ -137,16 +137,7 @@ pub mod db {
                     Ok(_) => (),
                     Err(e) => {
                         if e.to_string().contains("UNIQUE constraint failed") {
-                            error!("Widget with ID {} already exists", config.widget_id.0);
-                            drop(stmt); // Drop the statement before rolling back
-                            tx.rollback()?;
-                            return Err(rusqlite::Error::SqliteFailure(
-                                rusqlite::ffi::Error::new(19), // SQLITE_CONSTRAINT
-                                Some(format!(
-                                    "Widget with ID {} already exists",
-                                    config.widget_id.0
-                                )),
-                            ));
+                            error!("Widget with ID '{}' already exists", config.widget_id.0);
                         } else {
                             return Err(e);
                         }
@@ -257,11 +248,24 @@ pub mod db {
             Ok(())
         }
 
-        pub fn get_widget_modifiers(&self, widget_id: &str) -> SqliteResult<Vec<WidgetModifier>> {
+        pub fn get_widget_modifier(&self, widget_id: &str) -> SqliteResult<Vec<WidgetModifier>> {
             let mut stmt = self
                 .conn
                 .prepare("SELECT * FROM modifiers WHERE widget_id = ?")?;
             let rows = stmt.query_map([widget_id], |row| {
+                Ok(WidgetModifier {
+                    id: row.get(0)?,
+                    widget_id: NanoId(row.get(1)?),
+                    modifier_type: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                })
+            })?;
+
+            rows.collect()
+        }
+
+        pub fn get_all_widget_modifiers(&self) -> SqliteResult<Vec<WidgetModifier>> {
+            let mut stmt = self.conn.prepare("SELECT * FROM modifiers")?;
+            let rows = stmt.query_map([], |row| {
                 Ok(WidgetModifier {
                     id: row.get(0)?,
                     widget_id: NanoId(row.get(1)?),

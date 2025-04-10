@@ -10,7 +10,7 @@ pub use event::EventSenderImpl;
 
 #[derive(Debug, Deserialize)]
 #[typeshare]
-#[serde(tag = "type", content = "content")]
+#[serde(tag = "type", content = "content", rename_all = "lowercase")]
 pub enum IpcEvent {
     SaveSettings(AppSettings),
     ExtractResult(ScrapedData),
@@ -114,12 +114,13 @@ pub struct WidgetConfiguration {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
 pub struct CreateWidgetRequest {
-    pub url: String,
-    pub html: String,
+    pub url: Option<String>,
+    pub html: Option<String>,
     pub title: String,
     pub level: Level,
     pub transparent: bool,
     pub decorations: bool,
+    pub modifiers: Vec<Modifier>,
 }
 
 impl WidgetConfiguration {

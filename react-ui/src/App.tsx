@@ -40,7 +40,7 @@ const App = () => {
       <div className="flex flex-col min-w-[400px]">
         <div className="flex flex-row">
           <button
-            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
+            className={`flex-1 relative px-4 py-0.5 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
               displayedWidget === "create"
                 ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
                 : "bg-white hover:bg-gray-100"
@@ -50,7 +50,7 @@ const App = () => {
             Create
           </button>
           <button
-            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
+            className={`flex-1 relative px-4 py-0.5 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
               displayedWidget === "edit"
                 ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
                 : "bg-white hover:bg-gray-100"
@@ -60,7 +60,7 @@ const App = () => {
             Edit
           </button>
           <button
-            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
+            className={`flex-1 relative px-4 py-0.5 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
               displayedWidget === "data"
                 ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
                 : "bg-white hover:bg-gray-100"
@@ -70,7 +70,7 @@ const App = () => {
             Data
           </button>
           <button
-            className={`flex-1 relative px-4 py-2 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
+            className={`flex-1 relative px-4 py-0.5 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
               displayedWidget === "settings"
                 ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
                 : "bg-white hover:bg-gray-100"

@@ -14,13 +14,24 @@ export enum Level {
 	AlwaysOnBottom = "alwaysonbottom",
 }
 
+export type Modifier = 
+	| { type: "scrape", content: {
+	modifier_id: NanoId;
+	selector: string;
+}}
+	| { type: "refresh", content: {
+	modifier_id: NanoId;
+	interval_sec: number;
+}};
+
 export interface CreateWidgetRequest {
-	url: string;
-	html: string;
+	url?: string;
+	html?: string;
 	title: string;
 	level: Level;
 	transparent: boolean;
 	decorations: boolean;
+	modifiers: Modifier[];
 }
 
 export interface FileConfiguration {
@@ -57,16 +68,6 @@ export interface WidgetConfiguration {
 	decorations: boolean;
 }
 
-export type Modifier = 
-	| { type: "scrape", content: {
-	modifier_id: NanoId;
-	selector: string;
-}}
-	| { type: "refresh", content: {
-	modifier_id: NanoId;
-	interval_sec: number;
-}};
-
 export interface WidgetModifier {
 	id: number;
 	widget_id: NanoId;
@@ -74,6 +75,6 @@ export interface WidgetModifier {
 }
 
 export type IpcEvent = 
-	| { type: "SaveSettings", content: AppSettings }
-	| { type: "ExtractResult", content: ScrapedData };
+	| { type: "savesettings", content: AppSettings }
+	| { type: "extractresult", content: ScrapedData };
 

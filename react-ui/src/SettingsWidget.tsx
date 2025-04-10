@@ -37,7 +37,7 @@ export default function SettingsWidget() {
     console.log("Saving settings:", appSettings);
     try {
       const ipc_event: IpcEvent = {
-        type: "SaveSettings",
+        type: "savesettings",
         content: appSettings,
       };
       window.ipc.postMessage(JSON.stringify(ipc_event));

@@ -30,3 +30,16 @@ widget-db = { path = "../widget-db" }
 directories = "6.0.0"
 
 [dev-dependencies]
+
+[package.metadata.packager]
+before-packaging-command = "cargo build --release"
+identifier = "com.jarde.widget-maker"
+name = "Widget Maker"
+icons = [
+    "build_assets/app-icon2.png",
+    "build_assets/WidgetMaker.icns",
+]
+resources = [
+"build_assets",
+]
+macos = {info-plist-path = "build_assets/Info.plist"}
