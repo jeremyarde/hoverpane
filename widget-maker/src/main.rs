@@ -188,8 +188,8 @@ impl App {
         info!("Removing webview: {:?}", id);
 
         if let Some(window_id) = self.widget_id_to_window_id.get(&id) {
-            self.all_widgets.remove(&window_id);
-            self.window_id_to_webview_id.remove(&window_id);
+            self.all_widgets.remove(window_id);
+            self.window_id_to_webview_id.remove(window_id);
             self.widget_id_to_window_id.remove(&id);
         } else {
             info!("Webview not found");
@@ -214,7 +214,7 @@ impl App {
             return;
         };
 
-        let Some(widget_view) = self.all_widgets.get(&window_id) else {
+        let Some(widget_view) = self.all_widgets.get(window_id) else {
             info!("Webview not found");
             return;
         };
@@ -319,7 +319,7 @@ JSON.stringify({
             .with_title_hidden(false)
             // .with_titlebar_buttons_hidden(false)
             // .with_titlebar_hidden(false)
-            .with_title(&widget_config.title.clone())
+            .with_title(widget_config.title.clone())
             // .with_decorations(widget_config.decorations)
             .with_decorations(true)
             .with_has_shadow(false)
@@ -330,7 +330,7 @@ JSON.stringify({
             .create_window(
                 window_attributes
                     .clone()
-                    .with_title(&widget_config.title.clone())
+                    .with_title(widget_config.title.clone())
                     .with_window_level(match widget_config.level {
                         Level::AlwaysOnTop => WindowLevel::AlwaysOnTop,
                         Level::Normal => WindowLevel::Normal,
@@ -410,7 +410,7 @@ JSON.stringify({
                 WidgetView {
                     last_scrape: None,
                     last_refresh: None,
-                    app_webview: AppWebView { webview: webview },
+                    app_webview: AppWebView { webview },
                     window: new_window,
                     nano_id: widget_config.widget_id.clone(),
                     visible: true,
@@ -640,7 +640,7 @@ impl ApplicationHandler<UserEvent> for App {
                     .expect("Something failed");
                 window.app_webview.webview.set_bounds(Rect {
                     position: LogicalPosition::new(0, 0).into(),
-                    size: size.clone().into(),
+                    size: size.into(),
                 });
                 // Debounce resize events to improve performance
                 self.last_resize = Some(now);
@@ -673,7 +673,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
     fn user_event(&mut self, event_loop: &ActiveEventLoop, userevent: UserEvent) {
-        let size = self.current_size.clone();
+        let size = self.current_size;
         match userevent {
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id.0);
@@ -722,10 +722,8 @@ impl ApplicationHandler<UserEvent> for App {
                 }
                 self.create_widget(event_loop, widget_config.clone());
             }
-            UserEvent::TrayIconEvent(trayevent) => match trayevent {
-                _ => {
-                    info!("Unhandled Tray icon event: {:?}", trayevent);
-                }
+            UserEvent::TrayIconEvent(trayevent) => {
+                info!("Unhandled Tray icon event: {:?}", trayevent);
             },
             UserEvent::MenuEvent(menu_event) => {
                 info!("Menu event: {:?}", menu_event);
@@ -887,9 +885,8 @@ fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
             .unwrap();
         serde_json::to_writer(&config_file, &app_settings).unwrap();
     }
-    let app_settings =
-        serde_json::from_reader(File::open(settings_filepath.clone()).unwrap()).unwrap();
-    app_settings
+    
+    serde_json::from_reader(File::open(settings_filepath.clone()).unwrap()).unwrap()
 }
 
 fn main() {
@@ -1107,5 +1104,5 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 }
