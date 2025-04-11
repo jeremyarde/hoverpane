@@ -52,6 +52,10 @@
         border-radius: 4px;
       }
 
+      .error {
+        color: #ff4444;
+      }
+
       @media (prefers-color-scheme: dark) {
         body {
           color: #fff;
@@ -63,48 +67,78 @@
         .refresh-count {
           color: #999;
         }
+        .error {
+          color: #ff6666;
+        }
       }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="value-container">
-        <div class="value" id="value">Waiting for data...</div>
+        <div class="value" id="value">Connecting to API...</div>
         <div class="timestamp" id="timestamp"></div>
         <div class="refresh-count" id="refresh-count">0</div>
       </div>
     </div>
 
     <script>
-      //   const state = {
-      //     value: "",
-      //     timestamp: null,
-      //     refreshCount: 0,
-      //   };
+      const state = {
+        value: "",
+        timestamp: null,
+        refreshCount: 0,
+        baseUrl: "http://127.0.0.1:3111",
+        error: null,
+      };
 
-      //   function updateDisplay() {
-      //     document.getElementById("value").textContent =
-      //       state.value || "Waiting for data...";
-      //     document.getElementById("timestamp").textContent = state.timestamp
-      //       ? new Date(state.timestamp).toLocaleTimeString()
-      //       : "";
-      //     document.getElementById("refresh-count").textContent =
-      //       state.refreshCount;
-      //   }
+      function updateDisplay() {
+        const valueElement = document.getElementById("value");
+        if (state.error) {
+          valueElement.textContent = state.error;
+          valueElement.classList.add("error");
+        } else {
+          valueElement.textContent = state.value || "Waiting for data...";
+          valueElement.classList.remove("error");
+        }
 
-      //   // Listen for messages from the parent window
-      //   window.addEventListener("message", (event) => {
-      //     const data = JSON.parse(event.data);
-      //     if (data.scrapeResult) {
-      //       state.value = data.scrapeResult.value;
-      //       state.timestamp = data.scrapeResult.timestamp;
-      //       state.refreshCount++;
-      //       updateDisplay();
-      //     }
-      //   });
+        document.getElementById("timestamp").textContent = state.timestamp
+          ? new Date(parseInt(state.timestamp)).toLocaleTimeString()
+          : "";
+        document.getElementById("refresh-count").textContent =
+          state.refreshCount;
+      }
 
-      // Initial render
-      //   updateDisplay();
+      async function fetchLatestData() {
+        try {
+          const response = await fetch(`${state.baseUrl}/values`);
+          if (!response.ok) {
+            throw new Error("Failed to fetch data");
+          }
+
+          const data = await response.json();
+          if (data && data.length > 0) {
+            // Get the most recent value
+            const latestData = data[data.length - 1];
+            state.value = latestData.value;
+            state.timestamp = latestData.timestamp;
+            state.error = latestData.error || null;
+            state.refreshCount++;
+          }
+        } catch (error) {
+          state.error = `Error: ${error.message}`;
+          // If we got a connection error, reset the baseUrl to trigger port discovery
+          if (error.message.includes("Failed to fetch")) {
+            state.baseUrl = null;
+          }
+        }
+        updateDisplay();
+      }
+
+      // Initial fetch
+      fetchLatestData();
+
+      // Set up periodic fetching every 10 seconds
+      setInterval(fetchLatestData, 10000);
     </script>
   </body>
 </html>

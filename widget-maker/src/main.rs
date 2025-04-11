@@ -779,20 +779,21 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::ModifierEvent(modifier) => {
                 info!("Modifier event: {:?}", modifier);
+                let widget_id = modifier.widget_id.clone();
                 match modifier.modifier_type {
                     Modifier::Refresh {
                         modifier_id,
                         interval_sec,
                     } => {
-                        info!("Refreshing widget: {:?}", modifier_id);
-                        self.refresh_webview(modifier_id, interval_sec);
+                        info!("User event: Refreshing widget: {:?}", widget_id);
+                        self.refresh_webview(widget_id, interval_sec);
                     }
                     Modifier::Scrape {
                         modifier_id,
                         selector,
                     } => {
-                        info!("Scraping widget: {:?}", modifier.widget_id);
-                        self.scrape_webview(modifier.widget_id, selector);
+                        info!("User event: Scraping widget: {:?}", widget_id);
+                        self.scrape_webview(widget_id, selector);
                     }
                 }
             }
@@ -1084,6 +1085,7 @@ fn main() {
             for modifier in widget_modifiers {
                 // info!("Modifier: {:?}", modifier);
                 let modifier_clone = modifier.clone();
+                let widget_id = modifier.widget_id.clone();
                 match modifier.modifier_type {
                     Modifier::Refresh {
                         modifier_id,
@@ -1091,13 +1093,13 @@ fn main() {
                     } => {
                         // info!("Refresh modifier: {:?}", modifier_id);
                         let last_update = last_refresh_dict
-                            .entry(modifier_id.clone())
+                            .entry(widget_id.clone())
                             .or_insert(Instant::now());
 
                         if last_update.elapsed().as_secs() >= interval_sec as u64 {
-                            info!("Refreshing widget: {:?}", modifier_id);
+                            info!("Refreshing widget: {:?}", widget_id);
                             // last_update = Instant::now();
-                            last_refresh_dict.insert(modifier_id.clone(), Instant::now());
+                            last_refresh_dict.insert(widget_id.clone(), Instant::now());
                         }
                     }
                     Modifier::Scrape {
@@ -1109,18 +1111,18 @@ fn main() {
                             modifier_id, selector
                         );
                         let last_update = last_scrape_dict
-                            .entry(modifier_id.clone())
+                            .entry(widget_id.clone())
                             .or_insert(Instant::now());
                         if last_update.elapsed().as_secs() >= DEFAULT_SCRAPE_INTERVAL {
-                            info!("Scraping widget: {:?}", modifier_id);
+                            info!("Scraping widget: {:?}", widget_id);
                             modifier_thread_proxy
                                 .send_event(UserEvent::ModifierEvent(modifier_clone));
-                            last_scrape_dict.insert(modifier_id.clone(), Instant::now());
+                            last_scrape_dict.insert(widget_id.clone(), Instant::now());
                         }
                     }
                 }
             }
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(10));
         }
     });
     event_loop.run_app(&mut app).expect("Something failed");
