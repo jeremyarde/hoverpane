@@ -1,26 +1,15 @@
-use axum::{
-    extract::ConnectInfo,
-    http::StatusCode,
-    response::Response,
-    routing::{delete, get, get_service, post},
-    Router,
-};
 
 // mod api;
 
 // use db::db::Database;
-use env_logger::fmt::Timestamp;
-use http::HeaderValue;
-use jiff;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use muda::{
-    accelerator::{Accelerator, Modifiers},
-    Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
+    accelerator::Modifiers,
+    Menu, PredefinedMenuItem, Submenu,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    cmp::max,
     collections::HashMap,
     fs::{File, OpenOptions},
     path::PathBuf,
@@ -28,36 +17,26 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, sync::Mutex, time::sleep};
-use tower_http::{
-    cors::{AllowOrigin, CorsLayer},
-    services::ServeFile,
-};
-use typeshare::typeshare;
+use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
-    ApiAction, AppSettings, CreateWidgetRequest, EventSender, FileConfiguration, IpcEvent, Level,
+    ApiAction, AppSettings, CreateWidgetRequest, FileConfiguration, IpcEvent, Level,
     Modifier, ScrapedData, UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
     API_PORT,
 };
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop, EventLoopBuilder, EventLoopProxy},
-    keyboard::{KeyCode, ModifiersKeyState, PhysicalKey},
+    event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
     platform::macos::{
-        ActiveEventLoopExtMacOS, EventLoopBuilderExtMacOS, WindowAttributesExtMacOS, WindowExtMacOS,
+        EventLoopBuilderExtMacOS, WindowAttributesExtMacOS,
     },
-    window::{Icon, Window, WindowId, WindowLevel},
+    window::{Window, WindowId, WindowLevel},
 };
 
 use cocoa::base::nil;
-use cocoa::base::{id, Nil};
-use cocoa::foundation::{NSPoint, NSRect, NSSize, NSString, NSUInteger};
+use cocoa::foundation::NSString;
 use cocoa::{appkit::*, foundation::NSData};
 
-use objc::declare::ClassDecl;
-use objc::runtime::{object_getClass, Object, Sel, NO, YES};
-use objc::*;
 
 const DOCK_ICON: &[u8] = include_bytes!(
     "/Users/jarde/Documents/code/web-extension-scraper/widget-maker/build_assets/icon.png"
@@ -66,11 +45,10 @@ const TRAY_ICON: &[u8] = include_bytes!(
     "/Users/jarde/Documents/code/web-extension-scraper/widget-maker/build_assets/tray-icon.png"
 );
 
-use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use wry::{
-    dpi::{LogicalPosition, LogicalSize, PhysicalPosition, Position},
-    PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin, WebViewExtMacOS,
+    dpi::{LogicalPosition, LogicalSize}, Rect, WebView, WebViewBuilder, WebViewExtMacOS,
 };
 
 // mod db;
@@ -83,7 +61,6 @@ pub const SIZE_X: u32 = 480;
 pub const SIZE_Y: u32 = 550;
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
-use nanoid::nanoid_gen;
 use widget_types::NanoId;
 
 mod event_sender;
