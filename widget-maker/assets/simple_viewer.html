@@ -6,7 +6,7 @@
     <script>
       function fetchData() {
         setInterval(() => {
-          fetch("http://127.0.0.1:3000/latest")
+          fetch(`http://127.0.0.1:3111/latest`)
             .then((response) => response.json())
             .then((data) => {
               const viewer = document.getElementById("viewer");

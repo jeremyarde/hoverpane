@@ -9,7 +9,7 @@ export default function DataWidget() {
 
   const fetchValues = async () => {
     try {
-      const response = await fetch("http://localhost:3000/values");
+      const response = await fetch(`http://localhost:3111/values`);
       if (!response.ok) {
         throw new Error("Failed to fetch values");
       }

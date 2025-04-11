@@ -1,5 +1,5 @@
 pub mod db {
-    use crate::db_impl::db_impl::DbTable;
+    use crate::{api::api::delete_widget, db_impl::db_impl::DbTable};
 
     use directories::ProjectDirs;
     use log::{debug, error, info};
@@ -114,6 +114,42 @@ pub mod db {
             })?;
 
             rows.collect()
+        }
+        pub fn upsert_widget_configuration(
+            &mut self,
+            config: WidgetConfiguration,
+        ) -> SqliteResult<()> {
+            let tx = self.conn.transaction()?;
+
+            // Delete existing widget if it exists
+            tx.execute(
+                "DELETE FROM widgets WHERE widget_id = ?",
+                [&config.widget_id.0],
+            )?;
+
+            // Delete associated modifiers
+            tx.execute(
+                "DELETE FROM modifiers WHERE widget_id = ?",
+                [&config.widget_id.0],
+            )?;
+
+            // Insert the new configuration
+            let widget_type = serde_json::to_string(&config.widget_type).unwrap();
+            let level = serde_json::to_string(&config.level).unwrap();
+            tx.execute(
+                WidgetConfiguration::get_insert_sql(),
+                [
+                    &config.widget_id.0,
+                    &config.title,
+                    &widget_type,
+                    &level,
+                    &(config.transparent as i32).to_string(),
+                    &(config.decorations as i32).to_string(),
+                ],
+            )?;
+
+            tx.commit()?;
+            Ok(())
         }
 
         pub fn insert_widget_configuration(

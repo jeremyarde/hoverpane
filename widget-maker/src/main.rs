@@ -37,6 +37,7 @@ use typeshare::typeshare;
 use widget_types::{
     ApiAction, AppSettings, CreateWidgetRequest, EventSender, FileConfiguration, IpcEvent, Level,
     Modifier, ScrapedData, UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType,
+    API_PORT,
 };
 use winit::{
     application::ApplicationHandler,
@@ -58,7 +59,12 @@ use objc::declare::ClassDecl;
 use objc::runtime::{object_getClass, Object, Sel, NO, YES};
 use objc::*;
 
-const DOCK_ICON: &[u8] = include_bytes!("/Users/jarde/Documents/misc/app-icon2.png");
+const DOCK_ICON: &[u8] = include_bytes!(
+    "/Users/jarde/Documents/code/web-extension-scraper/widget-maker/build_assets/icon.png"
+);
+const TRAY_ICON: &[u8] = include_bytes!(
+    "/Users/jarde/Documents/code/web-extension-scraper/widget-maker/build_assets/tray-icon.png"
+);
 
 use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -73,6 +79,8 @@ use image::{self, ImageBuffer};
 
 pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 pub const DEFAULT_SCRAPE_INTERVAL: u64 = 10;
+pub const SIZE_X: u32 = 480;
+pub const SIZE_Y: u32 = 550;
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
 use nanoid::nanoid_gen;
@@ -81,7 +89,8 @@ use widget_types::NanoId;
 mod event_sender;
 pub use event_sender::WinitEventSender;
 
-const MAX_WIDGETS: usize = 2;
+// conditionally set the max widgets based on the environment variable
+const MAX_WIDGETS: usize = 10;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
@@ -284,7 +293,8 @@ JSON.stringify({
 
         let script_content = script_content
             .replace("$selector", &element_selector)
-            .replace("$widget_id", &widget_view.nano_id.0.clone());
+            .replace("$widget_id", &widget_view.nano_id.0.clone())
+            .replace("$PORT", &API_PORT.to_string());
 
         let result = widget_view
             .app_webview
@@ -324,8 +334,6 @@ JSON.stringify({
             return;
         }
 
-        // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
-        // event_loop.set_allows_automatic_window_tabbing(enabled);
         let window_attributes = Window::default_attributes()
             .with_inner_size(self.current_size)
             .with_transparent(widget_config.transparent)
@@ -375,9 +383,11 @@ JSON.stringify({
                 r#"
                 window.WINDOW_ID = "$window_id  ";
                 window.WIDGET_ID = "$widget_id";
+                window.PORT = "$PORT";
                 "#
                 .replace("$window_id", &format!("{:?}", new_window.id()))
                 .replace("$widget_id", &widget_config.widget_id.0)
+                .replace("$PORT", &API_PORT.to_string())
                 .as_str(),
             )
             .with_focused(true);
@@ -636,6 +646,7 @@ impl ApplicationHandler<UserEvent> for App {
                 let webview_id = self.window_id_to_webview_id.remove(&window_id).unwrap();
                 self.widget_id_to_window_id.remove(&webview_id);
                 self.all_widgets.remove(&window_id);
+                self.db.delete_widget(webview_id.0.to_string().as_str());
             }
             WindowEvent::RedrawRequested => {}
             WindowEvent::Resized(size) => {
@@ -788,6 +799,11 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::ApiAction(action) => {
                 info!("Api action: {:?}", action);
                 match action {
+                    ApiAction::CreateWidget(widget_request) => {
+                        info!("Creating widget: {:?}", widget_request);
+
+                        self.create_widget(event_loop, widget_request);
+                    }
                     ApiAction::DeleteWidget(widget_id) => {
                         self.remove_webview(NanoId(widget_id));
                     } // ApiAction::DeleteWidgetModifier(widget_id, modifier_id) => {
@@ -873,7 +889,9 @@ fn get_controls_widget_config() -> WidgetConfiguration {
         .with_widget_id(NanoId("controls".to_string()))
         .with_title("Controls".to_string())
         .with_widget_type(WidgetType::File(FileConfiguration {
-            html: include_str!("../../react-ui/dist/index.html").to_string(),
+            html: include_str!("../../react-ui/dist/index.html")
+                .to_string()
+                .replace("$PORT", &API_PORT.to_string()),
         }))
         .with_level(Level::Normal)
 }
@@ -985,10 +1003,9 @@ fn main() {
     }));
 
     // setup the icon
-    let img: ImageBuffer<image::Rgba<u8>, Vec<u8>> =
-        image::load_from_memory(include_bytes!("/Users/jarde/Documents/misc/app-icon2.png"))
-            .expect("Failed to load icon")
-            .into_rgba8();
+    let img: ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::load_from_memory(TRAY_ICON)
+        .expect("Failed to load icon")
+        .into_rgba8();
     let (width, height) = img.dimensions();
 
     let (
@@ -1013,7 +1030,7 @@ fn main() {
         tray_menu_show_controls_id: tray_show_controls_id,
         tray_menu_hide_titlebar_id: tray_hide_titlebar_id,
         tray_menu_show_titlebar_id: tray_show_titlebar_id,
-        current_size: LogicalSize::new(480, 360),
+        current_size: LogicalSize::new(SIZE_X, SIZE_Y),
         current_modifiers: Modifiers::default(),
         all_widgets: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
@@ -1031,7 +1048,8 @@ fn main() {
         // Execute the future, blocking the current thread until completion
         rt.block_on(async {
             let mut api_db = widget_db::Database::new().unwrap();
-            let res = api_db.insert_widget_configuration(config);
+            // put the new controls widget into the db
+            let res = api_db.upsert_widget_configuration(config[0].clone());
             match res {
                 Ok(_) => info!("Inserted widget configurations"),
                 Err(e) => error!("Error inserting widget configurations: {:?}", e),
@@ -1086,7 +1104,10 @@ fn main() {
                         modifier_id,
                         selector,
                     } => {
-                        info!("Scrape modifier: {:?}", modifier_id);
+                        info!(
+                            "Scrape modifier: {:?}, selector: {:?}",
+                            modifier_id, selector
+                        );
                         let last_update = last_scrape_dict
                             .entry(modifier_id.clone())
                             .or_insert(Instant::now());

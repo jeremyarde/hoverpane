@@ -4,7 +4,7 @@ pub mod api {
     use serde_json::{json, Value};
     use std::sync::Arc;
     use tokio::sync::Mutex;
-    use widget_types::{ApiAction, EventSender};
+    use widget_types::{ApiAction, EventSender, API_PORT};
     use widget_types::{
         CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
         WidgetModifier, WidgetType,
@@ -76,7 +76,7 @@ pub mod api {
             .layer(cors_layer)
             .with_state(state);
 
-        let addr = format!("{}:{}", "127.0.0.1", 3000);
+        let addr = format!("{}:{}", "127.0.0.1", API_PORT);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
         println!("API listening on http://{}", addr);
         axum::serve(listener, router).await.unwrap();
@@ -136,15 +136,19 @@ pub mod api {
     ) -> (StatusCode, Json<Value>) {
         info!("Creating widget: {:?}", widget_request);
 
-        let widget_config = WidgetConfiguration {
+        let widget_config: WidgetConfiguration = WidgetConfiguration {
             id: 0,
             widget_id: widget_types::NanoId(nanoid_gen(8)),
             title: widget_request.title,
-            widget_type: if widget_request.html.is_some() {
+            widget_type: if widget_request.html.is_some()
+                && !widget_request.html.clone().unwrap().is_empty()
+            {
+                info!("Creating file widget");
                 WidgetType::File(FileConfiguration {
                     html: widget_request.html.unwrap(),
                 })
             } else {
+                info!("Creating url widget");
                 WidgetType::Url(UrlConfiguration {
                     url: widget_request.url.unwrap(),
                 })
@@ -154,15 +158,45 @@ pub mod api {
             decorations: widget_request.decorations,
         };
 
+        state
+            .event_sender
+            .send_message(ApiAction::CreateWidget(widget_config.clone()));
+
         let mut db = state.db.lock().await;
         match db.insert_widget_configuration(vec![widget_config.clone()]) {
-            Ok(_) => (StatusCode::CREATED, Json(json!(widget_config))),
+            Ok(_) => {
+                info!("Widget created: {:?}", widget_config);
+            }
             Err(e) => {
                 error!("Failed to create widget: {:?}", e);
-                (
+                return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({
                         "message": "Failed to create widget",
+                        "origin": "create_widget"
+                    })),
+                );
+            }
+        }
+
+        match db.insert_widget_modifiers(
+            widget_request
+                .modifiers
+                .iter()
+                .map(|m| WidgetModifier {
+                    id: 0,
+                    widget_id: widget_config.widget_id.clone(),
+                    modifier_type: m.clone(),
+                })
+                .collect(),
+        ) {
+            Ok(_) => (StatusCode::CREATED, Json(json!(widget_config))),
+            Err(e) => {
+                error!("Failed to create widget modifiers: {:?}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "message": "Failed to create widget modifiers",
                         "origin": "create_widget"
                     })),
                 )

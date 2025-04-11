@@ -17,7 +17,7 @@
     <key>CFBundleExecutable</key>
     <string>widget-maker</string>
     <key>CFBundleIconFile</key>
-    <string>WidgetMaker.icns</string>
+    <string>icons.icns</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
     <key>LSUIElement</key>

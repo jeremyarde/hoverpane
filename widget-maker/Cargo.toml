@@ -36,8 +36,8 @@ before-packaging-command = "cargo build --release"
 identifier = "com.jarde.widget-maker"
 name = "Widget Maker"
 icons = [
-    "build_assets/app-icon2.png",
-    "build_assets/WidgetMaker.icns",
+    "build_assets/icon.png",
+    "build_assets/icons.icns",
 ]
 resources = [
 "build_assets",

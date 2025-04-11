@@ -19,7 +19,7 @@ export default function EditWidgets() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const response = await fetch("http://127.0.0.1:3000/widgets", {});
+      const response = await fetch(`http://127.0.0.1:3111/widgets`, {});
       const data = await response.json();
       const widgetDetails = data.map((item: WidgetConfiguration) => ({
         ...item,
@@ -40,7 +40,7 @@ export default function EditWidgets() {
       if (!widgetModifiers[widgetId]) {
         try {
           const response = await fetch(
-            `http://127.0.0.1:3000/widgets/${widgetId}/modifiers`
+            `http://127.0.0.1:3111/widgets/${widgetId}/modifiers`
           );
           if (!response.ok) throw new Error("Failed to fetch modifiers");
           const modifiers = await response.json();
@@ -73,7 +73,7 @@ export default function EditWidgets() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:3000/widgets/${selectedWidget}/modifiers`,
+        `http://127.0.0.1:3111/widgets/${selectedWidget}/modifiers`,
         {
           method: "POST",
           headers: {
@@ -87,7 +87,7 @@ export default function EditWidgets() {
 
       // Refresh modifiers for this widget
       const modifiersResponse = await fetch(
-        `http://127.0.0.1:3000/widgets/${selectedWidget}/modifiers`
+        `http://127.0.0.1:3111/widgets/${selectedWidget}/modifiers`
       );
       const updatedModifiers = await modifiersResponse.json();
       setWidgetModifiers((prev) => ({
@@ -108,7 +108,7 @@ export default function EditWidgets() {
   const handleDeleteModifier = async (widgetId: string, modifierId: string) => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:3000/widgets/${widgetId}/modifiers/${modifierId}`,
+        `http://127.0.0.1:3111/widgets/${widgetId}/modifiers/${modifierId}`,
         {
           method: "DELETE",
         }
@@ -118,7 +118,7 @@ export default function EditWidgets() {
 
       // Refresh modifiers for this widget
       const modifiersResponse = await fetch(
-        `http://127.0.0.1:3000/widgets/${widgetId}/modifiers`
+        `http://127.0.0.1:3111/widgets/${widgetId}/modifiers`
       );
       const updatedModifiers = await modifiersResponse.json();
       setWidgetModifiers((prev) => ({
@@ -148,7 +148,7 @@ export default function EditWidgets() {
     console.log("Deleting widget", widget_id);
     try {
       const response = await fetch(
-        `http://127.0.0.1:3000/widgets/${widget_id}`,
+        `http://127.0.0.1:3111/widgets/${widget_id}`,
         {
           method: "DELETE",
         }

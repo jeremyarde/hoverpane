@@ -50,7 +50,7 @@
 
       async function fetchLatestValue() {
         try {
-          const fetchUrl = `http://localhost:3000/widgets/${widgetId}/latest`;
+          const fetchUrl = `http://localhost:3111/widgets/${widgetId}/latest`;
           console.log("Fetching from:", fetchUrl);
           const response = await fetch(fetchUrl);
           if (!response.ok) {

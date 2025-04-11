@@ -1,14 +1,13 @@
-release: types
+release: types frontend
     cargo build --release
 
 types:
     typeshare ../widget-types/src --lang=typescript --output-file=../react-ui/src/types.ts
 
 frontend:
-    cd ../react-ui
-    npm run build
+    cd ../react-ui && npm run build
 
-run: types
+run: types frontend
     RUST_LOG=info cargo run
 
 clean:
@@ -19,16 +18,16 @@ clean:
     rm -f icon.icns
 
 icons:
-    sips -z 16 16     build_assets/app-icon2.png --out build_assets/icons/icon_16x16.png
-    sips -z 32 32     build_assets/app-icon2.png --out build_assets/icons/icon_16x16@2x.png
-    sips -z 32 32     build_assets/app-icon2.png --out build_assets/icons/icon_32x32.png
-    sips -z 64 64     build_assets/app-icon2.png --out build_assets/icons/icon_32x32@2x.png
-    sips -z 128 128   build_assets/app-icon2.png --out build_assets/icons/icon_128x128.png
-    sips -z 256 256   build_assets/app-icon2.png --out build_assets/icons/icon_128x128@2x.png
-    sips -z 256 256   build_assets/app-icon2.png --out build_assets/icons/icon_256x256.png
-    sips -z 512 512   build_assets/app-icon2.png --out build_assets/icons/icon_256x256@2x.png
-    sips -z 512 512   build_assets/app-icon2.png --out build_assets/icons/icon_512x512.png
-    iconutil -c icns build_assets/WidgetMaker.iconset
+    sips -z 16 16     build_assets/icon.png --out build_assets/icons.iconset/icon_16x16.png
+    sips -z 32 32     build_assets/icon.png --out build_assets/icons.iconset/icon_16x16@2x.png
+    sips -z 32 32     build_assets/icon.png --out build_assets/icons.iconset/icon_32x32.png
+    sips -z 64 64     build_assets/icon.png --out build_assets/icons.iconset/icon_32x32@2x.png
+    sips -z 128 128   build_assets/icon.png --out build_assets/icons.iconset/icon_128x128.png
+    sips -z 256 256   build_assets/icon.png --out build_assets/icons.iconset/icon_128x128@2x.png
+    sips -z 256 256   build_assets/icon.png --out build_assets/icons.iconset/icon_256x256.png
+    sips -z 512 512   build_assets/icon.png --out build_assets/icons.iconset/icon_256x256@2x.png
+    sips -z 512 512   build_assets/icon.png --out build_assets/icons.iconset/icon_512x512.png
+    iconutil -c icns build_assets/icons.iconset
 
 app: clean release icons
     mkdir -p widget-maker.app/Contents/MacOS

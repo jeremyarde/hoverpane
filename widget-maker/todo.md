@@ -16,3 +16,7 @@ todo:
 
 April 8th
 - change port to cause minimal conflicts with users computer
+
+April 10th
+- default/premade widgets
+- easier way to track/get element data

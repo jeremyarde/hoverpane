@@ -211,7 +211,7 @@ export default function CreateWidgetForm() {
     console.log("Form submitted:", data);
 
     try {
-      const res = await fetch("http://127.0.0.1:3000/widgets", {
+      const res = await fetch(`http://127.0.0.1:3111/widgets`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -224,8 +224,6 @@ export default function CreateWidgetForm() {
         const widget = await res.json();
         console.log("Widget created:", widget);
 
-        // Reset form
-        event.currentTarget.reset();
         setWidgetType({ type: "url", content: { url: "" } });
         setSelectedLevel(Level.Normal);
         setShowModifiers(false);
@@ -247,7 +245,7 @@ export default function CreateWidgetForm() {
   };
 
   const handleReset = (event: React.FormEvent<HTMLFormElement>) => {
-    event.currentTarget.reset();
+    event.preventDefault();
     setError(null);
     setWidgetType({ type: "url", content: { url: "" } });
     setSelectedLevel(Level.Normal);

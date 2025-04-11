@@ -8,6 +8,8 @@ pub use event::ApiAction;
 pub use event::EventSender;
 pub use event::EventSenderImpl;
 
+pub const API_PORT: u16 = 3111;
+
 #[derive(Debug, Deserialize)]
 #[typeshare]
 #[serde(tag = "type", content = "content", rename_all = "lowercase")]

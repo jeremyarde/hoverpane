@@ -1,3 +1,5 @@
+use crate::WidgetConfiguration;
+
 pub struct EventSender {
     // This will be a wrapper around the actual sender implementation
     // The implementation details will be in widget-maker
@@ -11,9 +13,10 @@ impl EventSender {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ApiAction {
     DeleteWidget(String),
+    CreateWidget(WidgetConfiguration),
     // DeleteWidgetModifier(String, String),
 }
 

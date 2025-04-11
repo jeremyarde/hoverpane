@@ -28,6 +28,7 @@ declare global {
     };
     WIDGET_ID: string;
     WINDOW_ID: string;
+    PORT: string;
   }
 }
 
