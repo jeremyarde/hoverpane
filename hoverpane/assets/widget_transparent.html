@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weather Widget</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+      }
+
+      body {
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .weather-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 20px;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+
+      .temperature {
+        font-size: 48px;
+        font-weight: 600;
+        color: #ffffff;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        white-space: nowrap;
+      }
+
+      .description {
+        font-size: 18px;
+        color: #ffffff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        text-transform: capitalize;
+        text-align: center;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .location {
+        font-size: 14px;
+        color: #ffffff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        opacity: 0.8;
+        white-space: nowrap;
+      }
+
+      .weather-icon {
+        width: 64px;
+        height: 64px;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+      }
+
+      .update {
+        animation: pulse 0.3s ease;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="weather-container">
+      <div id="temperature" class="temperature">--°</div>
+      <div id="description" class="description">Loading...</div>
+      <div id="location" class="location">--</div>
+    </div>
+
+    <script>
+      // Default coordinates for San Francisco
+      const LATITUDE = 37.7749;
+      const LONGITUDE = -122.4194;
+      const UPDATE_INTERVAL = 300000; // 5 minutes
+
+      async function fetchWeather() {
+        try {
+          // First, get the grid point for the location
+          const gridResponse = await fetch(
+            `https://api.weather.gov/points/${LATITUDE},${LONGITUDE}`,
+            {
+              headers: {
+                "User-Agent": "test@jeremyarde.com",
+              },
+            }
+          );
+
+          if (!gridResponse.ok) {
+            throw new Error("Failed to fetch grid point");
+          }
+
+          const gridData = await gridResponse.json();
+
+          // Then, get the forecast for that grid point
+          const forecastResponse = await fetch(gridData.properties.forecast, {
+            headers: {
+              "User-Agent": "test@jeremyarde.com",
+            },
+          });
+
+          if (!forecastResponse.ok) {
+            throw new Error("Failed to fetch forecast");
+          }
+
+          const forecastData = await forecastResponse.json();
+          const currentForecast = forecastData.properties.periods[0];
+
+          // Update the display
+          document.getElementById(
+            "temperature"
+          ).textContent = `${currentForecast.temperature}°`;
+          document.getElementById("description").textContent =
+            currentForecast.shortForecast;
+          document.getElementById("location").textContent =
+            gridData.properties.relativeLocation.properties.city;
+
+          // Add update animation
+          const elements = document.querySelectorAll(".weather-container > *");
+          elements.forEach((el) => el.classList.add("update"));
+          setTimeout(() => {
+            elements.forEach((el) => el.classList.remove("update"));
+          }, 300);
+        } catch (error) {
+          console.error("Error fetching weather:", error);
+          document.getElementById("temperature").textContent = "--°";
+          document.getElementById("description").textContent =
+            "Error loading weather";
+          document.getElementById("location").textContent = "--";
+        }
+      }
+
+      // Fetch weather immediately and then every 5 minutes
+      fetchWeather();
+      setInterval(fetchWeather, UPDATE_INTERVAL);
+    </script>
+  </body>
+</html>

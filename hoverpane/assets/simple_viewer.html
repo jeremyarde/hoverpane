@@ -1,0 +1,20 @@
+<html>
+  <body>
+    <h1>Hello, world!</h1>
+    <div id="viewer"></div>
+    <button onclick="fetchData()">Fetch Data</button>
+    <script>
+      function fetchData() {
+        setInterval(() => {
+          fetch(`http://127.0.0.1:3111/latest`)
+            .then((response) => response.json())
+            .then((data) => {
+              const viewer = document.getElementById("viewer");
+              viewer.innerHTML = JSON.stringify(data);
+            });
+        }, 2000);
+      }
+      fetchData();
+    </script>
+  </body>
+</html>

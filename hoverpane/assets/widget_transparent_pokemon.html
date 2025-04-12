@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pokémon Widget</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+      }
+
+      body {
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .pokemon-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        max-width: 100%;
+        box-sizing: border-box;
+        background-color: rgba(0, 0, 0, 0.3);
+        border-radius: 12px;
+        backdrop-filter: blur(4px);
+      }
+
+      .pokemon-name {
+        font-size: 24px;
+        font-weight: 600;
+        color: #ffffff;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        text-transform: capitalize;
+        white-space: nowrap;
+      }
+
+      .pokemon-id {
+        font-size: 14px;
+        color: #ffffff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        opacity: 0.8;
+      }
+
+      .pokemon-sprite {
+        width: 96px;
+        height: 96px;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+      }
+
+      .pokemon-types {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .type-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        text-transform: capitalize;
+      }
+
+      .update {
+        animation: pulse 0.3s ease;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="pokemon-container">
+      <img id="pokemon-sprite" class="pokemon-sprite" src="" alt="Pokémon" />
+      <div id="pokemon-name" class="pokemon-name">Loading...</div>
+      <div id="pokemon-id" class="pokemon-id">#---</div>
+      <div id="pokemon-types" class="pokemon-types"></div>
+    </div>
+
+    <script>
+      // const UPDATE_INTERVAL = 300000; // 5 minutes
+      const TOTAL_POKEMON = 1025; // Total number of Pokémon in the API
+
+      // Type colors mapping
+      const typeColors = {
+        normal: "#A8A878",
+        fire: "#F08030",
+        water: "#6890F0",
+        electric: "#F8D030",
+        grass: "#78C850",
+        ice: "#98D8D8",
+        fighting: "#C03028",
+        poison: "#A040A0",
+        ground: "#E0C068",
+        flying: "#A890F0",
+        psychic: "#F85888",
+        bug: "#A8B820",
+        rock: "#B8A038",
+        ghost: "#705898",
+        dragon: "#7038F8",
+        dark: "#705848",
+        steel: "#B8B8D0",
+        fairy: "#EE99AC",
+      };
+
+      function getRandomPokemonId() {
+        return Math.floor(Math.random() * TOTAL_POKEMON) + 1;
+      }
+
+      async function fetchPokemon() {
+        try {
+          const pokemonId = getRandomPokemonId();
+          const response = await fetch(
+            `https://pokeapi.co/api/v2/pokemon/${pokemonId}/`
+          );
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch Pokémon");
+          }
+
+          const pokemonData = await response.json();
+
+          // Update the display
+          document.getElementById("pokemon-sprite").src =
+            pokemonData.sprites.front_default;
+          document.getElementById("pokemon-name").textContent =
+            pokemonData.name;
+          document.getElementById("pokemon-id").textContent = `#${pokemonData.id
+            .toString()
+            .padStart(3, "0")}`;
+
+          // Update types
+          const typesContainer = document.getElementById("pokemon-types");
+          typesContainer.innerHTML = "";
+          pokemonData.types.forEach((type) => {
+            const typeElement = document.createElement("div");
+            typeElement.className = "type-badge";
+            typeElement.textContent = type.type.name;
+            typeElement.style.backgroundColor = typeColors[type.type.name];
+            typesContainer.appendChild(typeElement);
+          });
+
+          // Add update animation
+          const elements = document.querySelectorAll(".pokemon-container > *");
+          elements.forEach((el) => el.classList.add("update"));
+          setTimeout(() => {
+            elements.forEach((el) => el.classList.remove("update"));
+          }, 300);
+        } catch (error) {
+          console.error("Error fetching Pokémon:", error);
+          document.getElementById("pokemon-name").textContent =
+            "Error loading Pokémon";
+          document.getElementById("pokemon-id").textContent = "#---";
+          document.getElementById("pokemon-sprite").src = "";
+          document.getElementById("pokemon-types").innerHTML = "";
+        }
+      }
+
+      // Fetch Pokémon immediately and then every 5 minutes
+      fetchPokemon();
+      // setInterval(fetchPokemon, UPDATE_INTERVAL);
+    </script>
+  </body>
+</html>

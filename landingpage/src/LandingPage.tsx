@@ -1,3 +1,6 @@
+import React from "react";
+import "./styles.css";
+
 // Placeholder Icons (replace with actual icons or component library)
 // const IconBolt = () => (
 //   <svg
@@ -20,7 +23,7 @@ const paidEarlyAccessLink =
 
 const IconCode = () => (
   <svg
-    className="w-8 h-8 text-emerald-600"
+    className="w-8 h-8 text-teal-400"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -30,8 +33,8 @@ const IconCode = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="2"
-      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-    ></path>
+      d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+    />
   </svg>
 );
 // const IconCog = () => (
@@ -80,7 +83,7 @@ const IconCode = () => (
 // );
 const IconRefresh = () => (
   <svg
-    className="w-8 h-8 text-amber-600"
+    className="w-8 h-8 text-amber-300"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -90,13 +93,13 @@ const IconRefresh = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth={2}
-      d="M4 4v5h5M20 20v-5h-5M4 4l5 5M20 20l-5-5M4 4h16v16H4V4z"
+      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
     />
   </svg>
 );
 const IconCheck = () => (
   <svg
-    className="w-5 h-5 text-emerald-500 mr-2 flex-shrink-0"
+    className="w-5 h-5 text-teal-400 mr-2 flex-shrink-0"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -114,7 +117,7 @@ const IconCheck = () => (
 // New Icons
 const IconMinimalist = () => (
   <svg
-    className="w-8 h-8 text-indigo-600"
+    className="w-8 h-8 text-indigo-300"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -124,14 +127,14 @@ const IconMinimalist = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="2"
-      d="M3 6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6z"
+      d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
     />
   </svg>
 );
 
 const IconPin = () => (
   <svg
-    className="w-8 h-8 text-sky-600"
+    className="w-8 h-8 text-sky-300"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -141,370 +144,282 @@ const IconPin = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="2"
-      d="M12 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M12 11v8m-3-3h6"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M12 2a9 9 0 00-9 9c0 4.97 4.03 9 9 9s9-4.03 9-9a9 9 0 00-9-9z"
+      d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
     />
   </svg>
 );
 
 const LandingPage: React.FC = () => {
   return (
-    <div className="bg-slate-50 text-slate-800 font-sans">
+    <div>
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-sm border-b border-slate-200/75">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex justify-between items-center h-16">
-            <span className="text-2xl font-bold text-indigo-600">
-              Widget Maker
-            </span>
-            <div className="hidden md:flex space-x-6 items-center">
-              <a
-                href="#features"
-                className="text-slate-600 hover:text-indigo-600 transition duration-300"
-              >
-                Features
-              </a>
-              <a
-                href="#how-it-works"
-                className="text-slate-600 hover:text-indigo-600 transition duration-300"
-              >
-                How It Works
-              </a>
-              <a
-                href="#use-cases"
-                className="text-slate-600 hover:text-indigo-600 transition duration-300"
-              >
-                Ideas
-              </a>
-              <a
-                href="#pricing"
-                className="text-slate-600 hover:text-indigo-600 transition duration-300"
-              >
-                Pricing
-              </a>
-              <a
-                href={paidEarlyAccessLink}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                Download
-              </a>
-            </div>
-            {/* TODO: Add mobile menu button here */}
+      <nav className="navbar">
+        <div className="container navbar-content">
+          <span className="logo">HoverPane</span>
+          <div className="nav-links">
+            <a href="#features" className="nav-link">
+              Features
+            </a>
+            <a href="#how-it-works" className="nav-link">
+              How It Works
+            </a>
+            <a href="#use-cases" className="nav-link">
+              Ideas
+            </a>
+            <a href="#pricing" className="nav-link">
+              Pricing
+            </a>
+            <a href={paidEarlyAccessLink} className="download-button">
+              Download
+            </a>
           </div>
         </div>
       </nav>
+
       {/* Hero Section */}
-      <header className="relative bg-indigo-100 py-24 md:py-36 text-center px-4 overflow-hidden">
-        {/* Absolutely positioned background shapes - No Circles or Rotations */}
-        <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-64 h-48 bg-indigo-200 rounded-xl opacity-30"></div>{" "}
-        {/* Rectangle */}
-        <div className="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/4 w-80 h-64 bg-sky-200 rounded-xl opacity-20"></div>{" "}
-        {/* Rectangle */}
-        <div className="absolute top-1/4 right-10 w-20 h-20 bg-indigo-300 rounded-lg opacity-40"></div>{" "}
-        {/* Square */}
-        <div className="absolute bottom-10 left-10 w-32 h-32 bg-sky-300 rounded-xl opacity-30"></div>{" "}
-        {/* Square */}
-        {/* Added Shapes */}
-        <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-24 h-48 bg-indigo-200 rounded-lg opacity-20"></div>{" "}
-        {/* Tall Rectangle */}
-        <div className="absolute bottom-1/4 right-1/3 w-40 h-40 bg-sky-200 rounded-xl opacity-30"></div>{" "}
-        {/* Square */}
-        <div className="absolute top-10 right-1/3 w-16 h-16 bg-indigo-300 rounded-md opacity-35"></div>{" "}
-        {/* Small Square */}
-        {/* Content container with higher z-index */}
-        <div className="relative z-10">
-          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 mb-4">
-            Widget Maker
-          </h1>
-          <p className="text-lg md:text-xl text-slate-700 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Turn any website into a widget right on your desktop within seconds
+      <header className="hero">
+        <div className="hero-shape hero-shape-1"></div>
+        <div className="hero-shape hero-shape-2"></div>
+        <div className="hero-content">
+          <h1 className="hero-title">HoverPane</h1>
+          <p className="hero-subtitle">
+            Transform any website into a sleek desktop widget in seconds. Keep
+            your favorite content always visible and easily accessible.
           </p>
-          <a
-            href={paidEarlyAccessLink}
-            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            Download
+          <a href={paidEarlyAccessLink} className="hero-button">
+            Get Started
           </a>
+          <div className="demo-video-container">
+            <video className="demo-video" autoPlay loop muted playsInline>
+              <source src="/tools-demo.webm" type="video/webm" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
         </div>
       </header>
 
-      {/* Detailed Features Section */}
-      <section id="features" className="py-20 md:py-28 bg-slate-50 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center text-slate-800 mb-12 md:mb-16">
-            Key Features
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
-            {/* Features */}
-            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-indigo-100 rounded-full p-4 inline-block mb-4">
+      {/* Features Section */}
+      <section id="features" className="features">
+        <div className="container">
+          <h2 className="section-title">Why Choose HoverPane</h2>
+          <div className="features-grid">
+            <div className="feature-card">
+              <div className="feature-icon minimalist">
                 <IconMinimalist />
               </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Minimalist Design
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Remove all the clutter of your browser and get right to the
-                important stuff. No size limits, no status bars, no toolbars.
+              <h3 className="feature-title">Clean & Focused</h3>
+              <p className="feature-description">
+                Experience your content without distractions. No ads, no
+                toolbars, just what matters to you.
               </p>
             </div>
-            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-sky-100 rounded-full p-4 inline-block mb-4">
+            <div className="feature-card">
+              <div className="feature-icon pin">
                 <IconPin />
               </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Always On Top
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Keep your widget always on top of other windows, no more
-                fighting your window manager for screen space.
+              <h3 className="feature-title">Always Visible</h3>
+              <p className="feature-description">
+                Keep important information at your fingertips. Your widgets stay
+                on top of other windows, exactly where you need them.
               </p>
             </div>
-            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-amber-100 rounded-full p-4 inline-block mb-4">
+            <div className="feature-card">
+              <div className="feature-icon refresh">
                 <IconRefresh />
               </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Auto Refresh
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Automatically refresh your widget with a configurable timer. No
-                more manually refreshing websites to get the latest information.
+              <h3 className="feature-title">Stay Updated</h3>
+              <p className="feature-description">
+                Never miss an update. Set custom refresh intervals to keep your
+                information current.
               </p>
             </div>
-            <div className="feature-item text-center p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-emerald-100 rounded-full p-4 inline-block mb-4">
+            <div className="feature-card">
+              <div className="feature-icon code">
                 <IconCode />
               </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                Custom Widgets
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Know HTML, CSS, and JavaScript? Load your own HTML code and make
-                it a widget.
+              <h3 className="feature-title">Customizable</h3>
+              <p className="feature-description">
+                Create your perfect widget. Use any website or build your own
+                with HTML, CSS, and JavaScript.
               </p>
             </div>
           </div>
         </div>
       </section>
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-20 md:py-28 bg-white px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-slate-800 mb-12 md:mb-16">
-            Easy Setup
-          </h2>
-          <div className="grid md:grid-cols-3 gap-8 md:gap-12 relative">
-            {/* Step 1 */}
-            <div className="relative z-10">
-              <div className="bg-indigo-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-xl font-bold mx-auto mb-4 shadow-lg">
-                1
-              </div>
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                Pick Your Source
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Give it a website address or your own HTML code.
-              </p>
-            </div>
-            {/* Step 2 */}
-            <div className="relative z-10">
-              <div className="bg-indigo-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-xl font-bold mx-auto mb-4 shadow-lg">
-                2
-              </div>
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                Add modifiers
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                Set how often it refreshes, or scrape specific web content from
-                a website.
-              </p>
-            </div>
-            {/* Step 3 */}
-            <div className="relative z-10">
-              <div className="bg-indigo-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-xl font-bold mx-auto mb-4 shadow-lg">
-                3
-              </div>
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                Done
-              </h3>
-              <p className="text-slate-500 leading-relaxed">
-                That's it! Your widget is ready and on your desktop.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-      {/* Use Cases Section */}
-      <section id="use-cases" className="py-20 md:py-28 bg-slate-50 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center text-slate-800 mb-12 md:mb-16">
-            Need Ideas?
-          </h2>
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Use Case 1 */}
-            <div className="bg-white rounded-xl p-6 flex items-start space-x-4 border border-slate-100 shadow-sm">
-              {/* Icon placeholder */}
-              <div className="mt-1 flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                <span className="text-indigo-600 text-xl">📈</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  Stock Prices
-                </h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Keep an eye on stocks prices with your favorite website.
-                </p>
-              </div>
-            </div>
-            {/* Use Case 2 */}
-            <div className="bg-white rounded-xl p-6 flex items-start space-x-4 border border-slate-100 shadow-sm">
-              <div className="mt-1 flex-shrink-0 w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                <span className="text-emerald-600 text-xl">📰</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  Weather
-                </h3>
-                <p className="text-slate-500 leading-relaxed">
-                  See the latest weather conditions.
-                </p>
-              </div>
-            </div>
-            {/* Use Case 3 */}
-            <div className="bg-white rounded-xl p-6 flex items-start space-x-4 border border-slate-100 shadow-sm">
-              <div className="mt-1 flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                <span className="text-amber-600 text-xl">☁️</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  Calendar
-                </h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Show and use your calendar just like in your browser.
-                </p>
-              </div>
-            </div>
-            {/* Use Case 4 */}
-            <div className="bg-white rounded-xl p-6 flex items-start space-x-4 border border-slate-100 shadow-sm">
-              <div className="mt-1 flex-shrink-0 w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
-                <span className="text-rose-600 text-xl">🛠️</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  Custom Tools
-                </h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Build quick tools, display data from APIs, monitor system
-                  stats, or anything else you want.
-                </p>
-              </div>
-            </div>
-            {/* Use Case 5 */}
-            <div className="bg-white rounded-xl p-6 flex items-start space-x-4 border border-slate-100 shadow-sm">
-              <div className="mt-1 flex-shrink-0 w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
-                <span className="text-rose-600 text-xl">🛠️</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  AI Assistants
-                </h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Give ChatGPT a permanent home on you desktop, no more losing
-                  it in a browser tab.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      {/* Pricing Section */}
-      <section id="pricing" className="py-20 md:py-28 bg-white px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-slate-800 mb-4">Pricing</h2>
-          <p className="text-slate-600 mb-12 md:mb-16 max-w-xl mx-auto leading-relaxed">
-            Simple and straightforward. Try it free, then upgrade if you need
-            more.
-          </p>
 
-          <div className="grid md:grid-cols-1 gap-8 max-w-2xl mx-auto">
-            {/* Pro Tier */}
-            <div className="border-2 border-indigo-500 rounded-xl p-6 md:p-8 flex flex-col relative bg-white shadow-lg">
-              {/* <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                  Most Popular
-                </span> */}
-              <h3 className="text-xl font-semibold mb-2 text-indigo-600">
-                Early Access
-              </h3>
-              <p className="text-4xl font-bold mb-4">
-                $10{" "}
-                <span className="text-lg font-normal text-slate-500">
-                  / one-time
-                </span>
+      {/* How It Works Section */}
+      <section id="how-it-works" className="how-it-works">
+        <div className="container">
+          <h2 className="section-title">Simple Setup</h2>
+          <div className="steps-grid">
+            <div className="step">
+              <div className="step-number">1</div>
+              <h3 className="step-title">Choose Your Source</h3>
+              <p className="step-description">
+                Enter a website URL or paste your custom HTML code.
               </p>
-              <p className="text-slate-500 mb-6 flex-grow">
-                Get early access to Widget Maker and help shape its future.
+            </div>
+            <div className="step">
+              <div className="step-number">2</div>
+              <h3 className="step-title">Customize</h3>
+              <p className="step-description">
+                Set refresh rates, adjust size, and configure other settings to
+                match your needs.
               </p>
-              <ul className="space-y-4 text-left mb-8 text-slate-600 w-full max-w-sm mx-auto">
-                <li className="flex items-center">
-                  <IconCheck />
-                  <span>Create up to 2 widgets</span>
-                </li>
-                <li className="flex items-center">
-                  <IconCheck />
-                  <span>All widget modifiers (Auto-refresh, Scraping)</span>
-                </li>
-                <li className="flex items-center">
-                  <IconCheck />
-                  <span>Priority support & feature requests</span>
-                </li>
-                <li className="flex items-center">
-                  <IconCheck />
-                  <span>Free updates during early access</span>
-                </li>
-              </ul>
-              <a
-                href="#"
-                className="mt-auto w-full block text-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                Get Early Access
-              </a>
+            </div>
+            <div className="step">
+              <div className="step-number">3</div>
+              <h3 className="step-title">Enjoy</h3>
+              <p className="step-description">
+                Your widget is ready! Place it anywhere on your desktop and
+                start using it right away.
+              </p>
             </div>
           </div>
         </div>
       </section>
-      {/* Download Section (Footer) */}
-      <footer
-        id="download"
-        className="bg-slate-800 text-slate-300 py-16 md:py-20 text-center px-4"
-      >
-        <h2 className="text-3xl font-bold text-white mb-4">
-          Try Widget Maker Now
-        </h2>
-        <p className="text-lg text-slate-400 max-w-xl mx-auto mb-8 leading-relaxed">
-          It's free to get started. See how you can bring useful info right to
-          your desktop.
-        </p>
-        <a
-          href={paidEarlyAccessLink}
-          className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ring-offset-slate-800"
-        >
-          Download for macOS
-        </a>
-        {/* Add links for other OS if applicable */}
-        <p className="text-xs text-slate-500 mt-12">
-          © {new Date().getFullYear()} Widget Maker. All rights reserved.
-        </p>
+
+      {/* Use Cases Section */}
+      <section id="use-cases" className="use-cases">
+        <div className="container">
+          <h2 className="section-title">Endless Possibilities</h2>
+
+          <div className="use-cases-grid">
+            <div className="use-case-card">
+              <div className="use-case-icon">
+                <span>📈</span>
+              </div>
+              <div className="use-case-content">
+                <h3 className="use-case-title">Market Watch</h3>
+                <p className="use-case-description">
+                  Monitor stocks, crypto, or market trends in real-time.
+                </p>
+              </div>
+            </div>
+            <div className="use-case-card">
+              <div className="use-case-icon">
+                <span>🌤️</span>
+              </div>
+              <div className="use-case-content">
+                <h3 className="use-case-title">Weather Updates</h3>
+                <p className="use-case-description">
+                  Keep an eye on current conditions and forecasts.
+                </p>
+              </div>
+            </div>
+            <div className="use-case-card">
+              <div className="use-case-icon">
+                <span>📅</span>
+              </div>
+              <div className="use-case-content">
+                <h3 className="use-case-title">Calendar View</h3>
+                <p className="use-case-description">
+                  Access your schedule without opening your browser.
+                </p>
+              </div>
+            </div>
+            <div className="use-case-card">
+              <div className="use-case-icon">
+                <span>⚡</span>
+              </div>
+              <div className="use-case-content">
+                <h3 className="use-case-title">Quick Tools</h3>
+                <p className="use-case-description">
+                  Build custom utilities, API dashboards, or system monitors.
+                </p>
+              </div>
+            </div>
+            <div className="use-case-card">
+              <div className="use-case-icon">
+                <span>🤖</span>
+              </div>
+              <div className="use-case-content">
+                <h3 className="use-case-title">AI Assistant</h3>
+                <p className="use-case-description">
+                  Keep your favorite AI chat always accessible on your desktop.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="container">
+        <h2 className="section-title">Customize your desktop</h2>
+        <div className="demo-video-container">
+          <video className="demo-video" autoPlay loop muted playsInline>
+            <source src="/hoverpane-demo.webm" type="video/webm" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="pricing">
+        <div className="container">
+          <h2 className="section-title">Simple Pricing</h2>
+          <p className="pricing-description">
+            Start free, upgrade when you're ready. Early access supporters get
+            special benefits.
+          </p>
+          <div className="pricing-card">
+            <h3 className="pricing-title">Early Access</h3>
+            <p className="pricing-price">
+              $10 <span className="pricing-period">/ one-time</span>
+            </p>
+            <p className="pricing-description">
+              Join our early community and help shape the future of HoverPane.
+            </p>
+            <ul className="pricing-features">
+              <li className="pricing-feature">
+                <IconCheck />
+                <span>Create up to 2 widgets</span>
+              </li>
+              <li className="pricing-feature">
+                <IconCheck />
+                <span>All widget features unlocked</span>
+              </li>
+              <li className="pricing-feature">
+                <IconCheck />
+                <span>Priority support & feature requests</span>
+              </li>
+              <li className="pricing-feature">
+                <IconCheck />
+                <span>Free updates during early access</span>
+              </li>
+            </ul>
+            <a href={paidEarlyAccessLink} className="hero-button">
+              Join Early Access
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="footer">
+        <div className="container">
+          <h2 className="footer-title">Ready to Get Started?</h2>
+          <p className="footer-description">
+            Transform your desktop experience today. Try HoverPane for free.
+          </p>
+          <a href={paidEarlyAccessLink} className="footer-button">
+            Download for macOS
+          </a>
+          <p className="made-by">
+            Made by{" "}
+            <a
+              href="https://jeremyarde.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="made-by-link"
+            >
+              Jeremy
+            </a>
+            <p className="made-by-email">jere.arde@gmail.com</p>
+          </p>
+          <p className="copyright">
+            © {new Date().getFullYear()} HoverPane. All rights reserved.
+          </p>
+        </div>
       </footer>
     </div>
   );

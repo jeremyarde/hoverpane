@@ -12,7 +12,7 @@ pub mod db {
     use widget_types::{Level, NanoId, ScrapedData, WidgetConfiguration, WidgetModifier};
 
     fn get_db_path() -> PathBuf {
-        let proj_dirs = ProjectDirs::from("com", "widget-maker", "widget-maker")
+        let proj_dirs = ProjectDirs::from("com", "hoverpane", "hoverpane")
             .expect("Failed to get project directories");
         let data_dir = proj_dirs.data_dir();
         fs::create_dir_all(data_dir).expect("Failed to create data directory");

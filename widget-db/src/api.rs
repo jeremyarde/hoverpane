@@ -21,8 +21,8 @@ pub mod api {
     use axum::Json;
 
     use axum::Router;
-    use log::error;
     use log::info;
+    use log::{debug, error};
     use tower_http::cors::AllowOrigin;
     use tower_http::cors::CorsLayer;
     // use typeshare::typeshare;
@@ -134,7 +134,8 @@ pub mod api {
         State(state): State<ApiState>,
         Json(widget_request): Json<CreateWidgetRequest>,
     ) -> (StatusCode, Json<Value>) {
-        info!("Creating widget: {:?}", widget_request);
+        info!("Creating widget: {:?}", widget_request.title);
+        debug!("Creating widget: {:?}", widget_request);
 
         let widget_config: WidgetConfiguration = WidgetConfiguration {
             id: 0,

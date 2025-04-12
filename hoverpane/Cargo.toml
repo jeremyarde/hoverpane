@@ -1,0 +1,45 @@
+[package]
+name = "hoverpane"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+wry = { version = "0.50.4", features = ["protocol", "transparent", "os-webview"] }
+winit = "0.30.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.10"
+jiff = { version = "0.2.4", features = ["serde"] }
+nanoid = { path = "../../nanoid" }
+tokio = { version = "1.44.1", features = ["full"] }
+axum = { version = "0.8.1", features = ["macros"] }
+tower-http = { version = "0.6.2", features = ["cors", "fs"] }
+http = "1.3.1"
+objc = "0.2.7"
+muda = "0.16.1"
+image = "0.24"
+tray-icon = "0.20.0"
+cocoa = "0.26.0"
+typeshare = "1.0.4"
+axum-extra = "0.10.1"
+thiserror = "2.0.12"
+futures = "0.3.31"
+widget-types = { path = "../widget-types" }
+widget-db = { path = "../widget-db" }
+directories = "6.0.0"
+
+[dev-dependencies]
+
+[package.metadata.packager]
+before-packaging-command = "cargo build --release"
+identifier = "com.jarde.hoverpane"
+name = "HoverPane"
+icons = [
+    "build_assets/icon.png",
+    "build_assets/icons.icns",
+]
+resources = [
+"build_assets",
+]
+macos = {info-plist-path = "build_assets/Info.plist"}

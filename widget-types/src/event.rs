@@ -2,7 +2,7 @@ use crate::WidgetConfiguration;
 
 pub struct EventSender {
     // This will be a wrapper around the actual sender implementation
-    // The implementation details will be in widget-maker
+    // The implementation details will be in hoverpane
     #[doc(hidden)]
     pub inner: Box<dyn EventSenderImpl + Send + Sync>,
 }
@@ -20,7 +20,7 @@ pub enum ApiAction {
     // DeleteWidgetModifier(String, String),
 }
 
-// This trait will be implemented by widget-maker
+// This trait will be implemented by hoverpane
 #[doc(hidden)]
 pub trait EventSenderImpl: EventSenderImplClone {
     fn send_message(&self, message: ApiAction) -> Result<(), String>;

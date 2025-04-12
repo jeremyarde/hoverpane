@@ -2,3 +2,4 @@
 test-ui/todo.md
 target/debug/*
 target/
+.env

@@ -22,7 +22,7 @@ pub use db::db::Database;
 
 //     // dotenvy::dotenv().ok();
 
-//     // let proj_dirs = ProjectDirs::from("com", "widget-maker", "widget-maker")
+//     // let proj_dirs = ProjectDirs::from("com", "hoverpane", "hoverpane")
 //     //     .expect("Failed to get project directories");
 //     // let data_dir = proj_dirs.data_dir();
 //     // println!("Data directory: {}", data_dir.to_str().unwrap());
