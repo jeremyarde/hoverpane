@@ -1,0 +1,14 @@
+{
+  "products": {
+    "free-early-access": {
+      "benefit_id": "642389ee-9b2a-419b-92dd-ca7b92c2ca49",
+      "file_id": "276075ff-96b1-42eb-9ecf-0a1ffeca85f0",
+      "benefit_description": "Widget Maker (Free - Early Access)"
+    },
+    "paid-early-access": {
+      "benefit_id": "d527750c-6b6b-495c-9ddf-697096cb54df",
+      "file_id": "ecfe1234-693e-4cae-99c2-1d2c596b3a35",
+      "benefit_description": "Widget Maker (Early Access)"
+    }
+  }
+}

@@ -38,6 +38,14 @@ export interface FileConfiguration {
 	html: string;
 }
 
+export interface MonitorPosition {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	monitor_index: number;
+}
+
 export interface ScrapedData {
 	widget_id: string;
 	value: string;
@@ -66,6 +74,8 @@ export interface WidgetConfiguration {
 	level: Level;
 	transparent: boolean;
 	decorations: boolean;
+	is_open: boolean;
+	position: MonitorPosition;
 }
 
 export interface WidgetModifier {
@@ -73,6 +83,14 @@ export interface WidgetModifier {
 	widget_id: NanoId;
 	modifier_type: Modifier;
 }
+
+export type ApiAction = 
+	| { type: "deletewidget", content: string }
+	| { type: "createwidget", content: WidgetConfiguration }
+	| { type: "togglewidgetvisibility", content: {
+	widget_id: string;
+	visible: boolean;
+}};
 
 export type IpcEvent = 
 	| { type: "savesettings", content: AppSettings }

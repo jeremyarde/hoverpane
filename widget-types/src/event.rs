@@ -1,4 +1,7 @@
-use crate::WidgetConfiguration;
+use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
+
+use crate::{ApiAction, WidgetConfiguration};
 
 pub struct EventSender {
     // This will be a wrapper around the actual sender implementation
@@ -11,13 +14,6 @@ impl EventSender {
     pub fn send_message(&self, message: ApiAction) -> Result<(), String> {
         self.inner.send_message(message)
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ApiAction {
-    DeleteWidget(String),
-    CreateWidget(WidgetConfiguration),
-    // DeleteWidgetModifier(String, String),
 }
 
 // This trait will be implemented by hoverpane

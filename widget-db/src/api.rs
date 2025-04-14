@@ -4,7 +4,7 @@ pub mod api {
     use serde_json::{json, Value};
     use std::sync::Arc;
     use tokio::sync::Mutex;
-    use widget_types::{ApiAction, EventSender, API_PORT};
+    use widget_types::{ApiAction, EventSender, MonitorPosition, API_PORT};
     use widget_types::{
         CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
         WidgetModifier, WidgetType,
@@ -62,7 +62,10 @@ pub mod api {
             // .route("/sites", get(get_sites))
             // .route("/elements", get(get_elements))
             // .route("/latest", get(get_latest_values))
-            .route("/widgets/{widget_id}", delete(delete_widget))
+            .route(
+                "/widgets/{widget_id}",
+                delete(delete_widget).post(widget_rpc_handler),
+            )
             .route("/widgets/{widget_id}/latest", get(get_latest_values))
             .route("/widgets", get(get_widgets).post(create_widget))
             .route(
@@ -130,6 +133,16 @@ pub mod api {
     }
 
     #[axum::debug_handler]
+    pub(crate) async fn widget_rpc_handler(
+        State(state): State<ApiState>,
+        Path(widget_id): Path<String>,
+        Json(rpc_request): Json<ApiAction>,
+    ) -> impl IntoResponse {
+        info!("Widget RPC handler called for widget {}", widget_id);
+        state.event_sender.send_message(rpc_request);
+    }
+
+    #[axum::debug_handler]
     pub(crate) async fn create_widget(
         State(state): State<ApiState>,
         Json(widget_request): Json<CreateWidgetRequest>,
@@ -157,6 +170,14 @@ pub mod api {
             level: widget_request.level,
             transparent: widget_request.transparent,
             decorations: widget_request.decorations,
+            is_open: true,
+            position: MonitorPosition {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+                monitor_index: 0,
+            },
         };
 
         state

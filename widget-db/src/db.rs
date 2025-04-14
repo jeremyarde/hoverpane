@@ -4,12 +4,15 @@ pub mod db {
     use directories::ProjectDirs;
     use log::{debug, error, info};
     // use nanoid::NanoId;
-    use rusqlite::{Connection, Result as SqliteResult};
+    use rusqlite::{types::FromSql, Connection, Result as SqliteResult, ToSql};
     use rusqlite_migration::{Migrations, M};
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
-    use widget_types::{Level, NanoId, ScrapedData, WidgetConfiguration, WidgetModifier};
+    use widget_types::{
+        Level, MonitorPosition, NanoId, ScrapedData, WidgetConfiguration, WidgetModifier,
+        DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+    };
 
     fn get_db_path() -> PathBuf {
         let proj_dirs = ProjectDirs::from("com", "hoverpane", "hoverpane")
@@ -28,12 +31,14 @@ pub mod db {
                 widget_type TEXT NOT NULL,
                 level TEXT NOT NULL,
                 transparent INTEGER NOT NULL,
-                decorations INTEGER NOT NULL
+                decorations INTEGER NOT NULL,
+                is_open INTEGER NOT NULL,
+                position TEXT NOT NULL
             )"#
         }
 
         fn get_insert_sql() -> &'static str {
-            "INSERT INTO widgets (widget_id, title, widget_type, level, transparent, decorations) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO widgets (widget_id, title, widget_type, level, transparent, decorations, is_open, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         }
     }
 
@@ -76,11 +81,15 @@ pub mod db {
     }
 
     impl Database {
-        pub fn new() -> SqliteResult<Self> {
+        pub fn from(in_memory: bool) -> SqliteResult<Self> {
             // let conn = Connection::open_in_memory()?;
-            let mut conn = Connection::open(
-                "/Users/jarde/Documents/code/web-extension-scraper/widget-db/widgets.db",
-            )?;
+            let mut conn = if in_memory {
+                Connection::open_in_memory()?
+            } else {
+                Connection::open(
+                    "/Users/jarde/Documents/code/web-extension-scraper/widget-db/widgets.db",
+                )?
+            };
             conn.pragma_update_and_check(None, "journal_mode", &"WAL", |_| Ok(()))
                 .unwrap();
 
@@ -110,6 +119,8 @@ pub mod db {
                     },
                     transparent: row.get::<_, i32>(5)? != 0,
                     decorations: row.get::<_, i32>(6)? != 0,
+                    is_open: row.get::<_, i32>(7)? != 0,
+                    position: serde_json::from_str(&row.get::<_, String>(8)?).unwrap(),
                 })
             })?;
 
@@ -136,6 +147,7 @@ pub mod db {
             // Insert the new configuration
             let widget_type = serde_json::to_string(&config.widget_type).unwrap();
             let level = serde_json::to_string(&config.level).unwrap();
+            let position_json = serde_json::to_string(&config.position).unwrap();
             tx.execute(
                 WidgetConfiguration::get_insert_sql(),
                 [
@@ -145,6 +157,8 @@ pub mod db {
                     &level,
                     &(config.transparent as i32).to_string(),
                     &(config.decorations as i32).to_string(),
+                    &(config.is_open as i32).to_string(),
+                    &position_json,
                 ],
             )?;
 
@@ -162,6 +176,7 @@ pub mod db {
             for config in configs {
                 let widget_type = serde_json::to_string(&config.widget_type).unwrap();
                 let level = serde_json::to_string(&config.level).unwrap();
+                let position_json = serde_json::to_string(&config.position).unwrap();
                 match stmt.execute([
                     &config.widget_id.0,
                     &config.title,
@@ -169,6 +184,8 @@ pub mod db {
                     &level,
                     &(config.transparent as i32).to_string(),
                     &(config.decorations as i32).to_string(),
+                    &(config.is_open as i32).to_string(),
+                    &position_json,
                 ]) {
                     Ok(_) => (),
                     Err(e) => {
@@ -339,6 +356,46 @@ pub mod db {
                 .execute("DELETE FROM modifiers WHERE id = ?", [modifier_id])?;
             Ok(())
         }
+
+        pub fn update_widget_open_state(&self, widget_id: NanoId, is_open: bool) {
+            let is_open_int = is_open as i32;
+            self.conn
+                .execute(
+                    "UPDATE widgets SET is_open = ? WHERE widget_id = ?",
+                    [is_open_int.to_string(), widget_id.0],
+                )
+                .unwrap();
+        }
+
+        pub fn update_widget_position(
+            &self,
+            widget_id: &str,
+            new_position: &MonitorPosition,
+        ) -> SqliteResult<()> {
+            let position_json = serde_json::to_string(new_position).unwrap();
+            self.conn.execute(
+                "UPDATE widgets SET position = ? WHERE widget_id = ?",
+                [position_json, widget_id.to_string()],
+            )?;
+            Ok(())
+        }
+
+        pub fn update_widget_position_property(
+            &self,
+            widget_id: &str,
+            property: &str,
+            value: &str,
+        ) -> SqliteResult<()> {
+            self.conn.execute(
+                "UPDATE widgets SET position = json_set(position, ?, ?) WHERE widget_id = ?",
+                [
+                    format!("$.{}", property),
+                    value.to_string(),
+                    widget_id.to_string(),
+                ],
+            )?;
+            Ok(())
+        }
     }
 
     #[cfg(test)]
@@ -348,7 +405,7 @@ pub mod db {
 
         #[test]
         fn test_modifier_roundtrip() {
-            let db = Database::new().unwrap();
+            let db = Database::from(true).unwrap();
             let modifier = WidgetModifier {
                 id: 1,
                 widget_id: NanoId(String::from("1")),
@@ -373,7 +430,7 @@ pub mod db {
 
         #[test]
         fn test_widget_configuration_roundtrip() {
-            let mut db = Database::new().unwrap();
+            let mut db = Database::from(true).unwrap();
             let widget_configuration = WidgetConfiguration {
                 id: 0,
                 widget_id: NanoId(String::from("1")),
@@ -384,6 +441,14 @@ pub mod db {
                 level: Level::Normal,
                 transparent: false,
                 decorations: false,
+                is_open: true,
+                position: MonitorPosition {
+                    x: 100,
+                    y: 100,
+                    width: 100,
+                    height: 100,
+                    monitor_index: 0,
+                },
             };
             db.insert_widget_configuration(vec![widget_configuration])
                 .unwrap();

@@ -1,7 +1,12 @@
 [package]
 name = "hoverpane"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
+
+[features]
+default = ["basic"]
+basic = []
+pro = ["basic"]
 
 [dependencies]
 wry = { version = "0.50.4", features = ["protocol", "transparent", "os-webview"] }

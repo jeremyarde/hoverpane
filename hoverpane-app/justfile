@@ -36,3 +36,12 @@ icons:
 
 final: release
     cargo packager --release
+
+final-pro: release
+    cargo packager --release -- --features pro
+
+final-basic: release
+    cargo packager --release -- --features basic
+
+final-all: final-pro final-basic
+    echo "Built both versions of the app"

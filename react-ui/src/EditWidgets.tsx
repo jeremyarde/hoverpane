@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { Modifier, WidgetConfiguration, WidgetModifier } from "./types";
+import {
+  ApiAction,
+  Modifier,
+  WidgetConfiguration,
+  WidgetModifier,
+} from "./types";
 
 export default function EditWidgets() {
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfiguration[]>([]);
@@ -176,6 +181,32 @@ export default function EditWidgets() {
     }
   };
 
+  const handleHideWidget = async (widget_id: string) => {
+    console.log("Hiding widget", widget_id);
+    const hideAction: ApiAction = {
+      type: "togglewidgetvisibility",
+      content: {
+        widget_id: widget_id,
+        visible: false,
+      },
+    };
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:3111/widgets/${widget_id}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(hideAction),
+        }
+      );
+      if (!response.ok) throw new Error("Failed to hide widget");
+    } catch (error) {
+      console.error("Failed to hide widget:", error);
+    }
+  };
+
   return (
     <div className="p-4 h-full">
       {/* Widget List */}
@@ -223,6 +254,16 @@ export default function EditWidgets() {
                       className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition-colors"
                     >
                       Delete
+                    </button>
+                    <button
+                      onClick={() => {
+                        // console.log("Deleting widget", JSON.stringify(widget));
+                        console.log("Deleting widget", widget.widget_id);
+                        handleHideWidget(widget.widget_id);
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition-colors"
+                    >
+                      Hide
                     </button>
                   </div>
                 </div>

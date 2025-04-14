@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use typeshare::typeshare;
 
 mod event;
-pub use event::ApiAction;
 pub use event::EventSender;
 pub use event::EventSenderImpl;
 
 pub const API_PORT: u16 = 3111;
+pub const DEFAULT_WIDGET_WIDTH: u32 = 480;
+pub const DEFAULT_WIDGET_HEIGHT: u32 = 550;
 
 #[derive(Debug, Deserialize)]
 #[typeshare]
@@ -43,6 +44,17 @@ pub struct Widget {
 //     pub error: Option<String>,
 //     pub timestamp: i64,
 // }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "type", content = "content")]
+#[typeshare]
+
+pub enum ApiAction {
+    DeleteWidget(String),
+    CreateWidget(WidgetConfiguration),
+    ToggleWidgetVisibility { widget_id: String, visible: bool },
+    // DeleteWidgetModifier(String, String),
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase", tag = "type", content = "content")]
@@ -102,6 +114,16 @@ pub struct FileConfiguration {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
+pub struct MonitorPosition {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub monitor_index: i32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
 pub struct WidgetConfiguration {
     #[serde(skip)]
     pub id: i64,
@@ -111,6 +133,8 @@ pub struct WidgetConfiguration {
     pub level: Level,
     pub transparent: bool,
     pub decorations: bool,
+    pub is_open: bool,
+    pub position: MonitorPosition,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -137,6 +161,14 @@ impl WidgetConfiguration {
             level: Level::Normal,
             transparent: false,
             decorations: false,
+            is_open: false,
+            position: MonitorPosition {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+                monitor_index: 0,
+            },
         }
     }
 
@@ -167,6 +199,16 @@ impl WidgetConfiguration {
 
     pub fn with_decorations(mut self, decorations: bool) -> Self {
         self.decorations = decorations;
+        self
+    }
+
+    pub fn with_open(mut self, open: bool) -> Self {
+        self.is_open = open;
+        self
+    }
+
+    pub fn with_position(mut self, position: MonitorPosition) -> Self {
+        self.position = position;
         self
     }
 }

@@ -16,7 +16,8 @@ use std::{
 use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
     ApiAction, AppSettings, CreateWidgetRequest, FileConfiguration, IpcEvent, Level, Modifier,
-    ScrapedData, UrlConfiguration, WidgetConfiguration, WidgetModifier, WidgetType, API_PORT,
+    MonitorPosition, ScrapedData, UrlConfiguration, WidgetConfiguration, WidgetModifier,
+    WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
 };
 use winit::{
     application::ApplicationHandler,
@@ -31,10 +32,10 @@ use cocoa::foundation::NSString;
 use cocoa::{appkit::*, foundation::NSData};
 
 const DOCK_ICON: &[u8] = include_bytes!(
-    "/Users/jarde/Documents/code/web-extension-scraper/hoverpane/build_assets/icon.png"
+    "/Users/jarde/Documents/code/web-extension-scraper/hoverpane-app/build_assets/icon.png"
 );
 const TRAY_ICON: &[u8] = include_bytes!(
-    "/Users/jarde/Documents/code/web-extension-scraper/hoverpane/build_assets/tray-icon.png"
+    "/Users/jarde/Documents/code/web-extension-scraper/hoverpane-app/build_assets/tray-icon.png"
 );
 
 use tray_icon::{TrayIcon, TrayIconBuilder};
@@ -50,8 +51,6 @@ use image::{self, ImageBuffer};
 
 pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 pub const DEFAULT_SCRAPE_INTERVAL: u64 = 5;
-pub const SIZE_X: u32 = 480;
-pub const SIZE_Y: u32 = 550;
 pub const TABBING_IDENTIFIER: &str = "New View"; // empty = no tabs, two separate windows are created
 
 use widget_types::NanoId;
@@ -60,7 +59,11 @@ mod event_sender;
 pub use event_sender::WinitEventSender;
 
 // conditionally set the max widgets based on the environment variable
-const MAX_WIDGETS: usize = 10;
+#[cfg(feature = "pro")]
+const MAX_WIDGETS: usize = 20;
+
+#[cfg(not(feature = "pro"))]
+const MAX_WIDGETS: usize = 3;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
@@ -87,7 +90,7 @@ struct App {
     last_resize: Option<Instant>,
     all_widgets: HashMap<WindowId, WidgetView>,
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
-    window_id_to_webview_id: HashMap<WindowId, NanoId>,
+    window_id_to_widget_id: HashMap<WindowId, NanoId>,
     db: widget_db::Database,
     app_settings: AppSettings,
     app_settings_path: PathBuf,
@@ -180,7 +183,7 @@ impl App {
 
         if let Some(window_id) = self.widget_id_to_window_id.get(&id) {
             self.all_widgets.remove(window_id);
-            self.window_id_to_webview_id.remove(window_id);
+            self.window_id_to_widget_id.remove(window_id);
             self.widget_id_to_window_id.remove(&id);
         } else {
             info!("Webview not found");
@@ -190,7 +193,7 @@ impl App {
     fn scrape_webview(&self, widget_id: NanoId, element_selector: String) {
         info!("Scraping webview: {:?}", widget_id);
         info!("Widget id to window id: {:?}", self.widget_id_to_window_id);
-        info!("window to webview id: {:?}", self.window_id_to_webview_id);
+        info!("window to webview id: {:?}", self.window_id_to_widget_id);
 
         let Some(window_id) = self.widget_id_to_window_id.get(&widget_id) else {
             info!("Webview not found");
@@ -294,8 +297,24 @@ JSON.stringify({
             return;
         }
 
+        // check if widget is visible or not
+        if !widget_config.is_open {
+            info!("Widget is not visible, skipping creation");
+            return;
+        }
+
+        let log_position = LogicalPosition::new(
+            widget_config.position.x as f64,
+            widget_config.position.y as f64,
+        );
+
+        let size = LogicalSize::new(
+            widget_config.position.width as f64,
+            widget_config.position.height as f64,
+        );
         let window_attributes = Window::default_attributes()
-            .with_inner_size(self.current_size)
+            .with_position(log_position)
+            .with_inner_size(size)
             .with_transparent(widget_config.transparent)
             // .with_blur(true) // barely supported, not really working
             .with_movable_by_window_background(true)
@@ -387,7 +406,7 @@ JSON.stringify({
         if let Some(webview) = webview {
             self.widget_id_to_window_id
                 .insert(widget_config.widget_id.clone(), new_window.id());
-            self.window_id_to_webview_id
+            self.window_id_to_widget_id
                 .insert(new_window.id(), widget_config.widget_id.clone());
             self.all_widgets.insert(
                 new_window.id(),
@@ -433,7 +452,7 @@ JSON.stringify({
             return;
         };
         let Some(window) = self.all_widgets.get(window_id) else {
-            info!("Controls widget not found");
+            info!("Controls widget not found in widgets");
             return;
         };
         window.window.focus_window();
@@ -468,6 +487,12 @@ JSON.stringify({
         }
 
         self.app_settings = settings;
+    }
+
+    fn toggle_visibility(&mut self, widget_id: String, visible: bool) {
+        if let Some(window_id) = self.widget_id_to_window_id.get(&NanoId(widget_id)) {
+            self.all_widgets.get_mut(window_id).unwrap().visible = visible;
+        }
     }
 }
 
@@ -604,10 +629,10 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             WindowEvent::CloseRequested => {
                 info!("Closing window: {:?}", window_id);
-                let webview_id = self.window_id_to_webview_id.remove(&window_id).unwrap();
-                self.widget_id_to_window_id.remove(&webview_id);
+                let widget_id = self.window_id_to_widget_id.remove(&window_id).unwrap();
+                self.widget_id_to_window_id.remove(&widget_id);
                 self.all_widgets.remove(&window_id);
-                self.db.delete_widget(webview_id.0.to_string().as_str());
+                self.db.update_widget_open_state(widget_id, false);
             }
             WindowEvent::RedrawRequested => {}
             WindowEvent::Resized(size) => {
@@ -766,9 +791,10 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                     ApiAction::DeleteWidget(widget_id) => {
                         self.remove_webview(NanoId(widget_id));
-                    } // ApiAction::DeleteWidgetModifier(widget_id, modifier_id) => {
-                      //     self.remove_modifier(NanoId(widget_id), NanoId(modifier_id));
-                      // }
+                    }
+                    ApiAction::ToggleWidgetVisibility { widget_id, visible } => {
+                        self.toggle_visibility(widget_id, visible);
+                    }
                 }
             }
             UserEvent::IpcEvent(ipc_event) => {
@@ -853,6 +879,14 @@ fn get_controls_widget_config() -> WidgetConfiguration {
                 .to_string()
                 .replace("$PORT", &API_PORT.to_string()),
         }))
+        .with_position(MonitorPosition {
+            x: 200,
+            y: 200,
+            width: DEFAULT_WIDGET_WIDTH as i32,
+            height: DEFAULT_WIDGET_HEIGHT as i32,
+            monitor_index: 0,
+        })
+        .with_open(true)
         .with_level(Level::Normal)
 }
 
@@ -883,6 +917,9 @@ fn main() {
     let settings_filepath = config_dir.join("settings.json");
     let app_settings = load_app_settings(settings_filepath);
     info!("App settings: {:?}", app_settings);
+
+    // load db, run migrations, etc
+    let app_db = widget_db::Database::from(false).unwrap();
 
     #[cfg(target_os = "macos")]
     {
@@ -974,7 +1011,6 @@ fn main() {
         tray_show_titlebar_id,
         tray_icon,
     ) = setup_tray_menu(img.clone(), event_loop_proxy.clone());
-    let app_db = widget_db::Database::new().unwrap();
     tray_icon.set_visible(app_settings.show_tray_icon);
 
     let mut app = App {
@@ -989,11 +1025,11 @@ fn main() {
         tray_menu_show_controls_id: tray_show_controls_id,
         tray_menu_hide_titlebar_id: tray_hide_titlebar_id,
         tray_menu_show_titlebar_id: tray_show_titlebar_id,
-        current_size: LogicalSize::new(SIZE_X, SIZE_Y),
+        current_size: LogicalSize::new(DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_HEIGHT),
         current_modifiers: Modifiers::default(),
         all_widgets: HashMap::new(),
         widget_id_to_window_id: HashMap::new(),
-        window_id_to_webview_id: HashMap::new(),
+        window_id_to_widget_id: HashMap::new(),
         proxy: event_loop_proxy.clone(),
         last_resize: None,
         menu,
@@ -1006,7 +1042,7 @@ fn main() {
     thread::spawn(move || {
         // Execute the future, blocking the current thread until completion
         rt.block_on(async {
-            let mut api_db = widget_db::Database::new().unwrap();
+            let mut api_db = widget_db::Database::from(false).unwrap();
             // put the new controls widget into the db
             let res = api_db.upsert_widget_configuration(config[0].clone());
             match res {
@@ -1027,21 +1063,29 @@ fn main() {
     });
 
     thread::spawn(move || loop {
-        let modifier_db_access = widget_db::Database::new().unwrap();
+        let modifier_db_access = widget_db::Database::from(false).unwrap();
         let mut last_refresh_dict = HashMap::new();
         let mut last_scrape_dict = HashMap::new();
 
         loop {
             let widget_modifiers = modifier_db_access.get_all_widget_modifiers();
-            let Ok(widget_modifiers) = widget_modifiers else {
-                error!(
-                    "Error getting widget modifiers: {:?}",
-                    widget_modifiers.err().unwrap()
-                );
-                continue;
+            let modifiers = match widget_modifiers {
+                Ok(modifiers) => modifiers,
+                Err(e) => {
+                    error!("Error getting widget modifiers: {:?}", e);
+                    vec![]
+                }
             };
-            info!("Found {} widget modifiers", widget_modifiers.len());
-            for modifier in widget_modifiers {
+
+            // let Ok(widget_modifiers) = widget_modifiers else {
+            //     error!(
+            //         "Error getting widget modifiers: {:?}",
+            //         widget_modifiers.err().unwrap()
+            //     );
+            //     panic!("Error getting widget modifiers");
+            // };
+            info!("Found {} widget modifiers", modifiers.len());
+            for modifier in modifiers {
                 // info!("Modifier: {:?}", modifier);
                 let modifier_clone = modifier.clone();
                 let widget_id = modifier.widget_id.clone();

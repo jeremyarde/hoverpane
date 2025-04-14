@@ -1,10 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "hoverpane",
+    "hoverpane-app",
     "widget-db",
-    "widget-types"
-, "widget-util"]
+    "widget-types",
+    "widget-util"
+]
+
 
 [workspace.dependencies]
 tokio = { version = "1.44.1", features = ["full"] }

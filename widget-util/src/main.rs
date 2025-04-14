@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use reqwest::blocking;
+use serde;
+
+mod polar;
+// use polar::Root;
+use serde_json::{json, Value};
 
 fn main() {
-    let client = blocking::Client::new();
-    let url = "https://api.polar.sh/v1/benefits/1";
-    let response = client.get(url).send();
-    let body = response.unwrap().text().unwrap();
-    println!("{}", body);
+    dotenvy::dotenv().ok();
+    let token = dotenvy::var("POLAR_BENEFIT_TOKEN").unwrap();
 }
