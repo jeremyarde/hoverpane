@@ -120,7 +120,7 @@ pub mod db {
                     transparent: row.get::<_, i32>(5)? != 0,
                     decorations: row.get::<_, i32>(6)? != 0,
                     is_open: row.get::<_, i32>(7)? != 0,
-                    position: serde_json::from_str(&row.get::<_, String>(8)?).unwrap(),
+                    bounds: serde_json::from_str(&row.get::<_, String>(8)?).unwrap(),
                 })
             })?;
 
@@ -147,7 +147,7 @@ pub mod db {
             // Insert the new configuration
             let widget_type = serde_json::to_string(&config.widget_type).unwrap();
             let level = serde_json::to_string(&config.level).unwrap();
-            let position_json = serde_json::to_string(&config.position).unwrap();
+            let position_json = serde_json::to_string(&config.bounds).unwrap();
             tx.execute(
                 WidgetConfiguration::get_insert_sql(),
                 [
@@ -176,7 +176,7 @@ pub mod db {
             for config in configs {
                 let widget_type = serde_json::to_string(&config.widget_type).unwrap();
                 let level = serde_json::to_string(&config.level).unwrap();
-                let position_json = serde_json::to_string(&config.position).unwrap();
+                let position_json = serde_json::to_string(&config.bounds).unwrap();
                 match stmt.execute([
                     &config.widget_id.0,
                     &config.title,
@@ -396,12 +396,25 @@ pub mod db {
             )?;
             Ok(())
         }
+
+        pub fn update_widget_bounds(
+            &self,
+            widget_id: String,
+            bounds: widget_types::WidgetBounds,
+        ) -> SqliteResult<()> {
+            let position_json = serde_json::to_string(&bounds).unwrap();
+            self.conn.execute(
+                "UPDATE widgets SET position = ? WHERE widget_id = ?",
+                [position_json, widget_id.to_string()],
+            )?;
+            Ok(())
+        }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
-        use widget_types::{Modifier, UrlConfiguration, WidgetType};
+        use widget_types::{Modifier, UrlConfiguration, WidgetBounds, WidgetType};
 
         #[test]
         fn test_modifier_roundtrip() {
@@ -442,12 +455,11 @@ pub mod db {
                 transparent: false,
                 decorations: false,
                 is_open: true,
-                position: MonitorPosition {
+                bounds: WidgetBounds {
                     x: 100,
                     y: 100,
                     width: 100,
                     height: 100,
-                    monitor_index: 0,
                 },
             };
             db.insert_widget_configuration(vec![widget_configuration])

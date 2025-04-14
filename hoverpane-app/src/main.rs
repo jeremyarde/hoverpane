@@ -16,8 +16,8 @@ use std::{
 use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
     ApiAction, AppSettings, CreateWidgetRequest, FileConfiguration, IpcEvent, Level, Modifier,
-    MonitorPosition, ScrapedData, UrlConfiguration, WidgetConfiguration, WidgetModifier,
-    WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+    MonitorPosition, ScrapedData, UrlConfiguration, WidgetBounds, WidgetConfiguration,
+    WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
 };
 use winit::{
     application::ApplicationHandler,
@@ -303,14 +303,12 @@ JSON.stringify({
             return;
         }
 
-        let log_position = LogicalPosition::new(
-            widget_config.position.x as f64,
-            widget_config.position.y as f64,
-        );
+        let log_position =
+            LogicalPosition::new(widget_config.bounds.x as f64, widget_config.bounds.y as f64);
 
         let size = LogicalSize::new(
-            widget_config.position.width as f64,
-            widget_config.position.height as f64,
+            widget_config.bounds.width as f64,
+            widget_config.bounds.height as f64,
         );
         let window_attributes = Window::default_attributes()
             .with_position(log_position)
@@ -490,8 +488,27 @@ JSON.stringify({
     }
 
     fn toggle_visibility(&mut self, widget_id: String, visible: bool) {
-        if let Some(window_id) = self.widget_id_to_window_id.get(&NanoId(widget_id)) {
-            self.all_widgets.get_mut(window_id).unwrap().visible = visible;
+        if let Some(window_id) = self.widget_id_to_window_id.get(&NanoId(widget_id.clone())) {
+            let widget = self.all_widgets.get_mut(window_id).unwrap();
+            widget.visible = visible;
+            widget.window.set_visible(visible);
+        } else {
+            info!("Widget {:?} not found", widget_id);
+        }
+    }
+
+    fn update_widget_bounds(&mut self, widget_id: String, bounds: WidgetBounds) {
+        if let Some(window_id) = self.widget_id_to_window_id.get(&NanoId(widget_id.clone())) {
+            let widget = self.all_widgets.get_mut(window_id).unwrap();
+            widget
+                .window
+                .request_inner_size(LogicalSize::new(bounds.width, bounds.height));
+            widget
+                .window
+                .set_outer_position(LogicalPosition::new(bounds.x, bounds.y));
+            self.db.update_widget_bounds(widget_id, bounds);
+        } else {
+            info!("Widget {:?} not found", widget_id);
         }
     }
 }
@@ -795,6 +812,9 @@ impl ApplicationHandler<UserEvent> for App {
                     ApiAction::ToggleWidgetVisibility { widget_id, visible } => {
                         self.toggle_visibility(widget_id, visible);
                     }
+                    ApiAction::UpdateWidgetBounds { widget_id, bounds } => {
+                        self.update_widget_bounds(widget_id, bounds);
+                    }
                 }
             }
             UserEvent::IpcEvent(ipc_event) => {
@@ -879,12 +899,11 @@ fn get_controls_widget_config() -> WidgetConfiguration {
                 .to_string()
                 .replace("$PORT", &API_PORT.to_string()),
         }))
-        .with_position(MonitorPosition {
+        .with_bounds(WidgetBounds {
             x: 200,
             y: 200,
-            width: DEFAULT_WIDGET_WIDTH as i32,
-            height: DEFAULT_WIDGET_HEIGHT as i32,
-            monitor_index: 0,
+            width: DEFAULT_WIDGET_WIDTH as u32,
+            height: DEFAULT_WIDGET_HEIGHT as u32,
         })
         .with_open(true)
         .with_level(Level::Normal)

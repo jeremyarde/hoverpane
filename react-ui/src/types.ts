@@ -63,6 +63,13 @@ export interface Widget {
 	description: string;
 }
 
+export interface WidgetBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 export type WidgetType = 
 	| { type: "file", content: FileConfiguration }
 	| { type: "url", content: UrlConfiguration };
@@ -75,7 +82,7 @@ export interface WidgetConfiguration {
 	transparent: boolean;
 	decorations: boolean;
 	is_open: boolean;
-	position: MonitorPosition;
+	bounds: WidgetBounds;
 }
 
 export interface WidgetModifier {
@@ -90,6 +97,10 @@ export type ApiAction =
 	| { type: "togglewidgetvisibility", content: {
 	widget_id: string;
 	visible: boolean;
+}}
+	| { type: "updatewidgetbounds", content: {
+	widget_id: string;
+	bounds: WidgetBounds;
 }};
 
 export type IpcEvent = 

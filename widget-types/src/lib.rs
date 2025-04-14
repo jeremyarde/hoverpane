@@ -52,8 +52,24 @@ pub struct Widget {
 pub enum ApiAction {
     DeleteWidget(String),
     CreateWidget(WidgetConfiguration),
-    ToggleWidgetVisibility { widget_id: String, visible: bool },
+    ToggleWidgetVisibility {
+        widget_id: String,
+        visible: bool,
+    },
+    UpdateWidgetBounds {
+        widget_id: String,
+        bounds: WidgetBounds,
+    },
     // DeleteWidgetModifier(String, String),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct WidgetBounds {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -134,7 +150,7 @@ pub struct WidgetConfiguration {
     pub transparent: bool,
     pub decorations: bool,
     pub is_open: bool,
-    pub position: MonitorPosition,
+    pub bounds: WidgetBounds,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -162,12 +178,11 @@ impl WidgetConfiguration {
             transparent: false,
             decorations: false,
             is_open: false,
-            position: MonitorPosition {
+            bounds: WidgetBounds {
                 x: 0,
                 y: 0,
                 width: 0,
                 height: 0,
-                monitor_index: 0,
             },
         }
     }
@@ -207,8 +222,8 @@ impl WidgetConfiguration {
         self
     }
 
-    pub fn with_position(mut self, position: MonitorPosition) -> Self {
-        self.position = position;
+    pub fn with_bounds(mut self, bounds: WidgetBounds) -> Self {
+        self.bounds = bounds;
         self
     }
 }

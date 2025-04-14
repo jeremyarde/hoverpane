@@ -4,7 +4,7 @@ pub mod api {
     use serde_json::{json, Value};
     use std::sync::Arc;
     use tokio::sync::Mutex;
-    use widget_types::{ApiAction, EventSender, MonitorPosition, API_PORT};
+    use widget_types::{ApiAction, EventSender, MonitorPosition, WidgetBounds, API_PORT};
     use widget_types::{
         CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
         WidgetModifier, WidgetType,
@@ -171,12 +171,11 @@ pub mod api {
             transparent: widget_request.transparent,
             decorations: widget_request.decorations,
             is_open: true,
-            position: MonitorPosition {
+            bounds: WidgetBounds {
                 x: 0,
                 y: 0,
                 width: 0,
                 height: 0,
-                monitor_index: 0,
             },
         };
 

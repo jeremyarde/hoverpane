@@ -3,6 +3,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import {
   ApiAction,
   Modifier,
+  WidgetBounds,
   WidgetConfiguration,
   WidgetModifier,
 } from "./types";
@@ -207,6 +208,35 @@ export default function EditWidgets() {
     }
   };
 
+  const handleUpdateWidgetBounds = async (
+    widget_id: string,
+    bounds: WidgetBounds
+  ) => {
+    console.log("Updating widget bounds", widget_id, bounds);
+    const updateAction: ApiAction = {
+      type: "updatewidgetbounds",
+      content: {
+        widget_id: widget_id,
+        bounds: bounds,
+      },
+    };
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:3111/widgets/${widget_id}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updateAction),
+        }
+      );
+      if (!response.ok) throw new Error("Failed to update widget bounds");
+    } catch (error) {
+      console.error("Failed to update widget bounds:", error);
+    }
+  };
+
   return (
     <div className="p-4 h-full">
       {/* Widget List */}
@@ -264,6 +294,19 @@ export default function EditWidgets() {
                       className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition-colors"
                     >
                       Hide
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleUpdateWidgetBounds(widget.widget_id, {
+                          x: 100,
+                          y: 100,
+                          width: 800,
+                          height: 600,
+                        });
+                      }}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
+                    >
+                      Update Bounds
                     </button>
                   </div>
                 </div>
