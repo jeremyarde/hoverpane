@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.98"
 # rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main" }
 rmcp = { version = "0.1", features = ["server"] }
+tokio.workspace = true
+tracing-subscriber = "0.3.19"
