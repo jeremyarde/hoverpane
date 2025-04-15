@@ -1,0 +1,8 @@
+[package]
+name = "mcp-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main" }
+rmcp = { version = "0.1", features = ["server"] }

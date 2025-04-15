@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "hoverpane-app",
+    "hoverpane-app", "mcp-server",
     "widget-db",
     "widget-types",
     "widget-util"

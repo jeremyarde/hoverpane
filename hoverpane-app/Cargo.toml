@@ -1,6 +1,6 @@
 [package]
 name = "hoverpane"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [features]
@@ -34,10 +34,20 @@ widget-types = { path = "../widget-types" }
 widget-db = { path = "../widget-db" }
 directories = "6.0.0"
 
-[dev-dependencies]
+
+# [[bin]]
+# name = "hoverpane-basic"
+# path = "src/main.rs"
+# required-features = ["basic"]
+
+# [[bin]]
+# name = "hoverpane"
+# path = "src/main.rs"
+# required-features = ["pro"]
+
 
 [package.metadata.packager]
-before-packaging-command = "cargo build --release"
+before-packaging-command = "cargo build --release --features pro"
 identifier = "com.jarde.hoverpane"
 name = "HoverPane"
 icons = [

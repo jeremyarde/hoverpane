@@ -20,3 +20,6 @@ April 8th
 April 10th
 - default/premade widgets
 - easier way to track/get element data
+
+- add some default widgets/widget library for common functions
+- add global hotkey support, to pull up specific windows when you want them?
