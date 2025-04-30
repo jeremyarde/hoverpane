@@ -1,6 +1,6 @@
 [package]
 name = "hoverpane"
-version = "0.4.0"
+version = "0.6.0"
 edition = "2021"
 
 [features]
@@ -33,6 +33,7 @@ futures = "0.3.31"
 widget-types = { path = "../widget-types" }
 widget-db = { path = "../widget-db" }
 directories = "6.0.0"
+# chrono = "0.4"
 
 
 # [[bin]]
@@ -58,3 +59,6 @@ resources = [
 "build_assets",
 ]
 macos = {info-plist-path = "build_assets/Info.plist"}
+
+
+

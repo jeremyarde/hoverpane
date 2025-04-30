@@ -1,14 +1,16 @@
 // mod api;
 
+use env_logger::Builder;
 // use db::db::Database;
-use log::{error, info, warn};
+use log::{error, info, warn, LevelFilter};
 use muda::{accelerator::Modifiers, Menu, PredefinedMenuItem, Submenu};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
+    fmt::Debug,
     fs::{File, OpenOptions},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     thread,
     time::{Duration, Instant},
@@ -926,14 +928,55 @@ fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
     serde_json::from_reader(File::open(settings_filepath.clone()).unwrap()).unwrap()
 }
 
+fn setup_logging(config_dir: &Path) {
+    let log_file = config_dir.join("hoverpane.log");
+
+    // Create the log file if it doesn't exist
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)
+        .expect("Failed to create log file");
+
+    // Configure the logger
+    let mut logger = Builder::new();
+    logger
+        .format(|buf, record| {
+            use std::io::Write;
+            writeln!(
+                buf,
+                "{} [{}] - {}",
+                jiff::Timestamp::now().to_string(),
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, LevelFilter::Info)
+        // Log to both file and stdout
+        .target(env_logger::Target::Pipe(Box::new(file)))
+        .target(env_logger::Target::Stdout);
+
+    // Try to initialize the logger, but don't panic if it's already initialized
+    if let Err(e) = logger.try_init() {
+        warn!("Logger already initialized: {}", e);
+    }
+
+    info!("Logging to file: {:?}", log_file);
+    info!("Logging to console");
+}
+
 fn main() {
-    env_logger::init();
+    // env_logger::init();
     info!("Starting application...");
 
     // loading app settings from user directory
     let directory = directories::ProjectDirs::from("com", "jarde", "hoverpane").unwrap();
     let config_dir = directory.config_dir();
     let settings_filepath = config_dir.join("settings.json");
+
+    // Setup logging before anything else
+    setup_logging(&config_dir);
+
     let app_settings = load_app_settings(settings_filepath);
     info!("App settings: {:?}", app_settings);
 

@@ -1,3 +1,6 @@
+set dotenv-load
+
+
 release: types frontend
     cargo build --release
 
@@ -35,5 +38,5 @@ icons:
 
 
 final: release
-    cargo packager --release
+    cargo packager --release --formats app
 

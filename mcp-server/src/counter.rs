@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use rmcp::{
-    const_string, model::*, schemars, service::RequestContext, tool, Error as McpError, RoleServer,
-    ServerHandler,
+    Error as McpError, RoleServer, ServerHandler, const_string, model::*, schemars,
+    service::RequestContext, tool,
 };
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::Mutex;
 
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct StructRequest {
     pub a: i32,
     pub b: i32,
@@ -99,7 +100,7 @@ impl ServerHandler for Counter {
 
     async fn list_resources(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: PaginatedRequestParam,
         _: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, McpError> {
         Ok(ListResourcesResult {
@@ -140,7 +141,7 @@ impl ServerHandler for Counter {
 
     async fn list_prompts(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: PaginatedRequestParam,
         _: RequestContext<RoleServer>,
     ) -> Result<ListPromptsResult, McpError> {
         Ok(ListPromptsResult {
@@ -186,7 +187,7 @@ impl ServerHandler for Counter {
 
     async fn list_resource_templates(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: PaginatedRequestParam,
         _: RequestContext<RoleServer>,
     ) -> Result<ListResourceTemplatesResult, McpError> {
         Ok(ListResourceTemplatesResult {
