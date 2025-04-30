@@ -4,7 +4,10 @@ pub mod api {
     use serde_json::{json, Value};
     use std::sync::Arc;
     use tokio::sync::Mutex;
-    use widget_types::{ApiAction, EventSender, MonitorPosition, WidgetBounds, API_PORT};
+    use widget_types::{
+        ApiAction, EventSender, MonitorPosition, WidgetBounds, API_PORT, DEFAULT_WIDGET_HEIGHT,
+        DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
+    };
     use widget_types::{
         CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
         WidgetModifier, WidgetType,
@@ -171,17 +174,22 @@ pub mod api {
             transparent: widget_request.transparent,
             decorations: widget_request.decorations,
             is_open: true,
-            bounds: WidgetBounds {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
+            bounds: if widget_request.bounds.is_some() {
+                widget_request.bounds.unwrap()
+            } else {
+                WidgetBounds {
+                    x: DEFAULT_WIDGET_X,
+                    y: DEFAULT_WIDGET_Y,
+                    width: DEFAULT_WIDGET_WIDTH,
+                    height: DEFAULT_WIDGET_HEIGHT,
+                }
             },
         };
 
-        state
+        let res = state
             .event_sender
             .send_message(ApiAction::CreateWidget(widget_config.clone()));
+        info!("Send Create Widget event result: {:?}", res);
 
         let mut db = state.db.lock().await;
         match db.insert_widget_configuration(vec![widget_config.clone()]) {

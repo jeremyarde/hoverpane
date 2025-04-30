@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Drink Water Timer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+      }
+
+      body {
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.3s ease;
+      }
+
+      body.opaque {
+        background: rgba(0, 0, 0, 0.7);
+      }
+
+      .water-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 20px;
+        max-width: 100%;
+        box-sizing: border-box;
+        background-color: rgba(0, 0, 0, 0.3);
+        border-radius: 12px;
+        backdrop-filter: blur(4px);
+        cursor: pointer;
+        transition: transform 0.3s ease;
+      }
+
+      .water-container:hover {
+        transform: scale(1.05);
+      }
+
+      .water-message {
+        font-size: 36px;
+        font-weight: 600;
+        color: #ffffff;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        text-align: center;
+      }
+
+      .water-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+      }
+
+      .timer {
+        font-size: 24px;
+        color: #ffffff;
+        opacity: 0.8;
+        margin-top: 8px;
+      }
+
+      .timer-input {
+        margin-top: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .timer-input input {
+        width: 60px;
+        padding: 4px 8px;
+        border: none;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        font-size: 16px;
+        text-align: center;
+      }
+
+      .timer-input input:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .timer-input button {
+        padding: 4px 12px;
+        border: none;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+
+      .timer-input button:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .debug-button {
+        margin-top: 8px;
+        padding: 4px 12px;
+        border: none;
+        border-radius: 4px;
+        background: rgba(255, 0, 0, 0.3);
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        font-size: 12px;
+        opacity: 0.7;
+      }
+
+      .debug-button:hover {
+        background: rgba(255, 0, 0, 0.4);
+        opacity: 1;
+      }
+
+      .fullscreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+      }
+
+      .fullscreen .water-container {
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 40px;
+      }
+
+      .fullscreen .water-message {
+        font-size: 72px;
+      }
+
+      .fullscreen .water-icon {
+        font-size: 96px;
+      }
+
+      .fullscreen .timer {
+        font-size: 36px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="water-container">
+      <div class="water-icon">💧</div>
+      <div class="water-message">Drink Water</div>
+      <div class="timer">
+        Next reminder in: <span id="time-left">30:00</span>
+      </div>
+      <div class="timer-input">
+        <input type="number" id="timer-minutes" min="1" max="120" value="30" />
+        <button id="update-timer">Update</button>
+      </div>
+      <button class="debug-button" id="debug-trigger">
+        Debug: Trigger Now
+      </button>
+    </div>
+
+    <script>
+      const FULLSCREEN_DURATION = 30 * 1000; // 30 seconds
+      let timerInterval;
+      let reminderTimeout;
+      let currentTimerMinutes = 30;
+
+      function updateTimer(minutes = currentTimerMinutes) {
+        const timeLeft = document.getElementById("time-left");
+        let remainingMinutes = minutes;
+        let seconds = 0;
+
+        // Clear any existing interval
+        if (timerInterval) {
+          clearInterval(timerInterval);
+        }
+
+        timerInterval = setInterval(() => {
+          if (seconds === 0) {
+            remainingMinutes--;
+            seconds = 59;
+          } else {
+            seconds--;
+          }
+
+          timeLeft.textContent = `${remainingMinutes
+            .toString()
+            .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
+          if (remainingMinutes === 0 && seconds === 0) {
+            clearInterval(timerInterval);
+            showFullscreenReminder();
+          }
+        }, 1000);
+      }
+
+      function showFullscreenReminder() {
+        const container = document.querySelector(".water-container");
+        container.classList.add("fullscreen");
+        document.body.classList.add("opaque");
+
+        // Set timeout to return to normal size
+        setTimeout(() => {
+          container.classList.remove("fullscreen");
+          document.body.classList.remove("opaque");
+          updateTimer();
+        }, FULLSCREEN_DURATION);
+      }
+
+      // Add click event to make background opaque
+      document
+        .querySelector(".water-container")
+        .addEventListener("click", (e) => {
+          // Don't toggle opacity if clicking the input or button
+          if (!e.target.closest(".timer-input")) {
+            document.body.classList.toggle("opaque");
+          }
+        });
+
+      // Handle timer updates
+      document.getElementById("update-timer").addEventListener("click", () => {
+        const input = document.getElementById("timer-minutes");
+        const newMinutes = parseInt(input.value);
+
+        if (newMinutes >= 1 && newMinutes <= 120) {
+          currentTimerMinutes = newMinutes;
+          updateTimer(newMinutes);
+        } else {
+          alert("Please enter a number between 1 and 120 minutes");
+          input.value = currentTimerMinutes;
+        }
+      });
+
+      // Debug trigger button
+      document.getElementById("debug-trigger").addEventListener("click", () => {
+        clearInterval(timerInterval);
+        showFullscreenReminder();
+      });
+
+      // Start the timer
+      updateTimer();
+    </script>
+  </body>
+</html>

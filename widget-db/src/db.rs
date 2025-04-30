@@ -86,9 +86,12 @@ pub mod db {
             let mut conn = if in_memory {
                 Connection::open_in_memory()?
             } else {
-                Connection::open(
-                    "/Users/jarde/Documents/code/web-extension-scraper/widget-db/widgets.db",
-                )?
+                let directory =
+                    directories::ProjectDirs::from("com", "jarde", "hoverpane").unwrap();
+                let data_dir = directory.data_dir();
+                std::fs::create_dir_all(data_dir).unwrap();
+                let db_path = data_dir.join("widgets.db");
+                Connection::open(db_path)?
             };
             conn.pragma_update_and_check(None, "journal_mode", &"WAL", |_| Ok(()))
                 .unwrap();

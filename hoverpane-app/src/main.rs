@@ -33,12 +33,8 @@ use cocoa::base::nil;
 use cocoa::foundation::NSString;
 use cocoa::{appkit::*, foundation::NSData};
 
-const DOCK_ICON: &[u8] = include_bytes!(
-    "/Users/jarde/Documents/code/web-extension-scraper/hoverpane-app/build_assets/icon.png"
-);
-const TRAY_ICON: &[u8] = include_bytes!(
-    "/Users/jarde/Documents/code/web-extension-scraper/hoverpane-app/build_assets/tray-icon.png"
-);
+const DOCK_ICON: &[u8] = include_bytes!("../build_assets/icon.png");
+const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
 
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
@@ -288,16 +284,16 @@ JSON.stringify({
             .filter(|w| w.nano_id != NanoId("controls".to_string()))
             .count();
 
-        if current_widget_count >= MAX_WIDGETS
-            && widget_config.widget_id != NanoId("controls".to_string())
-        {
-            warn!(
-                "Widget limit ({}) reached. Cannot create new widget: {}",
-                MAX_WIDGETS, widget_config.title
-            );
-            // Optionally, send a message back to the UI or notify the user
-            return;
-        }
+        // if current_widget_count >= MAX_WIDGETS
+        //     && widget_config.widget_id != NanoId("controls".to_string())
+        // {
+        //     warn!(
+        //         "Widget limit ({}) reached. Cannot create new widget: {}",
+        //         MAX_WIDGETS, widget_config.title
+        //     );
+        //     // Optionally, send a message back to the UI or notify the user
+        //     return;
+        // }
 
         // check if widget is visible or not
         if !widget_config.is_open {
@@ -341,9 +337,9 @@ JSON.stringify({
             )
             .expect("Something failed");
 
-        set_app_dock_icon(&new_window);
+        // set_app_dock_icon(&new_window);
 
-        let scale_factor = new_window.scale_factor();
+        // let scale_factor = new_window.scale_factor();
 
         let common_webview_attributes = WebViewBuilder::new()
             .with_bounds(Rect {
@@ -424,6 +420,8 @@ JSON.stringify({
                 },
             );
         }
+
+        info!("Widget created: {:?}", widget_config.title);
     }
 
     fn ipc_handler(body: &str, proxy: EventLoopProxy<UserEvent>) {
@@ -513,6 +511,15 @@ JSON.stringify({
             info!("Widget {:?} not found", widget_id);
         }
     }
+
+    fn maximize_webview(&mut self, nano_id: NanoId) {
+        if let Some(window_id) = self.widget_id_to_window_id.get(&nano_id) {
+            let widget = self.all_widgets.get_mut(window_id).unwrap();
+            widget.window.set_maximized(true);
+        } else {
+            info!("Widget {:?} not found", nano_id);
+        }
+    }
 }
 
 fn setup_tray_menu(
@@ -600,9 +607,10 @@ enum UserEvent {
     // Scrape(NanoId, String),
     RemoveWebView(NanoId),
     // ShowNewViewForm,
-    MoveWebView(NanoId, Direction),
+    // MoveWebView(NanoId, Direction),
     Minimize(NanoId),
-    ToggleElementView(NanoId),
+    Maximize(NanoId),
+    // ToggleElementView(NanoId),
     ExtractResult(ScrapedData),
     SaveSettings(AppSettings),
 }
@@ -707,15 +715,6 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Removing webview at index {}", id.0);
                 self.remove_webview(id);
             }
-            UserEvent::MoveWebView(id, direction) => {
-                info!("Moving webview at index {} {}", id.0, direction);
-                // self.move_webview(id, direction);
-            }
-            // UserEvent::ExtractResult(result) => {
-            //     info!("Extracted result: {:?}", result);
-            //     self.add_scrape_result(result.clone());
-            //     // self.update_element_view(result);
-            // }
             UserEvent::Minimize(id) => {
                 info!("Minimizing webview at index {}", id.0);
                 // self.minimize_webview(id);
@@ -830,8 +829,15 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                 }
             }
-            _ => {
-                info!("Unknown event: {:?}", userevent);
+            UserEvent::Maximize(nano_id) => {
+                info!("Maximizing webview at index {}", nano_id.0);
+                self.maximize_webview(nano_id);
+            }
+            UserEvent::ExtractResult(scraped_data) => {
+                // should not happen?
+            }
+            UserEvent::SaveSettings(app_settings) => {
+                // should not happen?
             }
         }
     }

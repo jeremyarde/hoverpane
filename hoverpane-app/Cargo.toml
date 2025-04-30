@@ -60,5 +60,6 @@ resources = [
 ]
 macos = {info-plist-path = "build_assets/Info.plist"}
 
-
+[package.metadata.packager.nsis]
+appdata-paths = ["$LOCALAPPDATA/$IDENTIFIER"]
 

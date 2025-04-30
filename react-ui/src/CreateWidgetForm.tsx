@@ -141,6 +141,11 @@ const helpIcon = (
   </svg>
 );
 
+const DEFAULT_WIDGET_X = 100;
+const DEFAULT_WIDGET_Y = 100;
+const DEFAULT_WIDGET_WIDTH = 800;
+const DEFAULT_WIDGET_HEIGHT = 600;
+
 type ApiError = {
   message: string;
   origin: string;
@@ -154,6 +159,12 @@ const defaultValues: CreateWidgetRequest = {
   transparent: false,
   decorations: false,
   modifiers: [],
+  bounds: {
+    x: DEFAULT_WIDGET_X,
+    y: DEFAULT_WIDGET_Y,
+    width: DEFAULT_WIDGET_WIDTH,
+    height: DEFAULT_WIDGET_HEIGHT,
+  },
 };
 
 export default function CreateWidgetForm() {
@@ -168,6 +179,12 @@ export default function CreateWidgetForm() {
   const [scrapeValue, setScrapeValue] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [selector, setSelector] = useState("");
+  const [bounds, setBounds] = useState({
+    x: DEFAULT_WIDGET_X,
+    y: DEFAULT_WIDGET_Y,
+    width: DEFAULT_WIDGET_WIDTH,
+    height: DEFAULT_WIDGET_HEIGHT,
+  });
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -184,6 +201,7 @@ export default function CreateWidgetForm() {
       transparent: formData.get("transparent") === "on",
       decorations: false,
       modifiers: [],
+      bounds: bounds,
     };
 
     // Add modifiers if enabled
@@ -231,6 +249,12 @@ export default function CreateWidgetForm() {
         setScrapeValue(false);
         setRefreshInterval(30);
         setSelector("");
+        setBounds({
+          x: DEFAULT_WIDGET_X,
+          y: DEFAULT_WIDGET_Y,
+          width: DEFAULT_WIDGET_WIDTH,
+          height: DEFAULT_WIDGET_HEIGHT,
+        });
       } else {
         const error = await res.json();
         setError(error);
@@ -254,6 +278,12 @@ export default function CreateWidgetForm() {
     setScrapeValue(false);
     setRefreshInterval(30);
     setSelector("");
+    setBounds({
+      x: DEFAULT_WIDGET_X,
+      y: DEFAULT_WIDGET_Y,
+      width: DEFAULT_WIDGET_WIDTH,
+      height: DEFAULT_WIDGET_HEIGHT,
+    });
   };
 
   const inputClass = "border rounded p-1 w-full text-sm";
@@ -527,6 +557,69 @@ export default function CreateWidgetForm() {
             </div>
           </div>
         )}
+
+        {/* Size and Location Fields */}
+        <div className="space-y-2">
+          <label className={labelClass}>Size and Location</label>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">
+                X Position
+              </label>
+              <input
+                type="number"
+                value={bounds.x}
+                onChange={(e) =>
+                  setBounds({ ...bounds, x: Number(e.target.value) })
+                }
+                className={inputClass}
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">
+                Y Position
+              </label>
+              <input
+                type="number"
+                value={bounds.y}
+                onChange={(e) =>
+                  setBounds({ ...bounds, y: Number(e.target.value) })
+                }
+                className={inputClass}
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">
+                Width
+              </label>
+              <input
+                type="number"
+                value={bounds.width}
+                onChange={(e) =>
+                  setBounds({ ...bounds, width: Number(e.target.value) })
+                }
+                className={inputClass}
+                min="100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">
+                Height
+              </label>
+              <input
+                type="number"
+                value={bounds.height}
+                onChange={(e) =>
+                  setBounds({ ...bounds, height: Number(e.target.value) })
+                }
+                className={inputClass}
+                min="100"
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Form Actions */}
         <div className="flex justify-end space-x-2">

@@ -24,6 +24,13 @@ export type Modifier =
 	interval_sec: number;
 }};
 
+export interface WidgetBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 export interface CreateWidgetRequest {
 	url?: string;
 	html?: string;
@@ -32,6 +39,7 @@ export interface CreateWidgetRequest {
 	transparent: boolean;
 	decorations: boolean;
 	modifiers: Modifier[];
+	bounds?: WidgetBounds;
 }
 
 export interface FileConfiguration {
@@ -61,13 +69,6 @@ export interface Widget {
 	id: string;
 	name: string;
 	description: string;
-}
-
-export interface WidgetBounds {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
 }
 
 export type WidgetType = 

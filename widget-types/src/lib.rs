@@ -8,8 +8,10 @@ pub use event::EventSender;
 pub use event::EventSenderImpl;
 
 pub const API_PORT: u16 = 3111;
-pub const DEFAULT_WIDGET_WIDTH: u32 = 480;
-pub const DEFAULT_WIDGET_HEIGHT: u32 = 550;
+pub const DEFAULT_WIDGET_WIDTH: u32 = 800;
+pub const DEFAULT_WIDGET_HEIGHT: u32 = 600;
+pub const DEFAULT_WIDGET_X: u32 = 100;
+pub const DEFAULT_WIDGET_Y: u32 = 100;
 
 #[derive(Debug, Deserialize)]
 #[typeshare]
@@ -163,6 +165,7 @@ pub struct CreateWidgetRequest {
     pub transparent: bool,
     pub decorations: bool,
     pub modifiers: Vec<Modifier>,
+    pub bounds: Option<WidgetBounds>,
 }
 
 impl WidgetConfiguration {
@@ -179,10 +182,10 @@ impl WidgetConfiguration {
             decorations: false,
             is_open: false,
             bounds: WidgetBounds {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
+                x: DEFAULT_WIDGET_X,
+                y: DEFAULT_WIDGET_Y,
+                width: DEFAULT_WIDGET_WIDTH,
+                height: DEFAULT_WIDGET_HEIGHT,
             },
         }
     }
