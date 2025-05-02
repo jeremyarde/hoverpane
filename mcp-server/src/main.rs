@@ -1,4 +1,4 @@
-use rmcp::transport::sse_server::{SseServer, SseServerConfig};
+use rmcp::serve_server;
 use tracing_subscriber::{
     layer::SubscriberExt,
     util::SubscriberInitExt,
@@ -6,6 +6,8 @@ use tracing_subscriber::{
 };
 mod counter;
 use counter::Counter;
+mod generic_service;
+use generic_service::{GenericService, MemoryDataService};
 
 const BIND_ADDRESS: &str = "127.0.0.1:8000";
 
@@ -19,26 +21,14 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let config = SseServerConfig {
-        bind: BIND_ADDRESS.parse()?,
-        sse_path: "/sse".to_string(),
-        post_path: "/message".to_string(),
-        ct: tokio_util::sync::CancellationToken::new(),
-        // sse_keep_alive: None,
-    };
+    let memory_service = MemoryDataService::new("initial data");
 
-    let sse_server = SseServer::serve_with_config(config).await?;
+    let generic_service = GenericService::new(memory_service);
 
-    // let (sse_server, router) = SseServer::new(config);
+    println!("start server, connect to standard input/output");
 
-    // Do something with the router, e.g., add routes or middleware
+    let io = (tokio::io::stdin(), tokio::io::stdout());
 
-    // let listener = tokio::net::TcpListener::bind(sse_server.config.bind).await?;
-    // let service = sse_server.with_service(Counter::new);
-
-    let ct = sse_server.with_service(Counter::new);
-
-    tokio::signal::ctrl_c().await?;
-    ct.cancel();
+    serve_server(generic_service, io).await?.waiting().await?;
     Ok(())
 }
