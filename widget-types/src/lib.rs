@@ -62,7 +62,12 @@ pub enum ApiAction {
         widget_id: String,
         bounds: WidgetBounds,
     },
-    // DeleteWidgetModifier(String, String),
+    MaximizeWidget {
+        widget_id: String,
+    },
+    MinimizeWidget {
+        widget_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -160,7 +165,7 @@ pub struct WidgetConfiguration {
 pub struct CreateWidgetRequest {
     pub url: Option<String>,
     pub html: Option<String>,
-    pub title: String,
+    pub title: Option<String>,
     pub level: Level,
     pub transparent: bool,
     pub decorations: bool,

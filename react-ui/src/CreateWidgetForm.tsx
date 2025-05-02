@@ -373,7 +373,6 @@ export default function CreateWidgetForm() {
             defaultValue={defaultValues.title}
             placeholder="Widget Title"
             className={inputClass}
-            required
           />
         </div>
 

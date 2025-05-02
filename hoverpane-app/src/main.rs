@@ -20,6 +20,7 @@ use widget_types::{
     ApiAction, AppSettings, CreateWidgetRequest, FileConfiguration, IpcEvent, Level, Modifier,
     MonitorPosition, ScrapedData, UrlConfiguration, WidgetBounds, WidgetConfiguration,
     WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+    DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
 };
 use winit::{
     application::ApplicationHandler,
@@ -77,10 +78,7 @@ struct ViewSize {
 struct App {
     tray_icon: TrayIcon,
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
-    tray_menu_quit_id: String,
-    tray_menu_show_controls_id: String,
-    tray_menu_hide_titlebar_id: String,
-    tray_menu_show_titlebar_id: String,
+    menu_items: MenuItems,
     current_size: LogicalSize<u32>,
     menu: Menu,
     current_modifiers: Modifiers,
@@ -462,6 +460,11 @@ JSON.stringify({
         });
     }
 
+    fn reset_database(&mut self, event_loop: &ActiveEventLoop) {
+        info!("Resetting database");
+        self.db.reset();
+    }
+
     fn show_titlebars(&mut self, event_loop: &ActiveEventLoop) {
         self.all_widgets.iter().for_each(|(_, widget)| {
             widget.window.set_decorations(true);
@@ -520,22 +523,45 @@ JSON.stringify({
             info!("Widget {:?} not found", nano_id);
         }
     }
+
+    fn minimize_webview(&mut self, nano_id: NanoId) {
+        if let Some(window_id) = self.widget_id_to_window_id.get(&nano_id) {
+            let widget = self.all_widgets.get_mut(window_id).unwrap();
+            widget.window.set_maximized(false);
+            widget.window.request_inner_size(LogicalSize::new(0, 0));
+            widget
+                .window
+                .set_outer_position(LogicalPosition::new(10, 10));
+        } else {
+            info!("Widget {:?} not found", nano_id);
+        }
+    }
+}
+
+pub struct MenuItems {
+    pub quit_id: String,
+    pub show_controls_id: String,
+    pub hide_titlebar_id: String,
+    pub show_titlebar_id: String,
+    pub reset_database_id: String,
 }
 
 fn setup_tray_menu(
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     proxy_clone: EventLoopProxy<UserEvent>,
-) -> (String, String, String, String, TrayIcon) {
+) -> (MenuItems, TrayIcon) {
     let tray_menu = tray_icon::menu::Menu::new();
     let quit_item = tray_icon::menu::MenuItem::new("Quit HoverPane", true, None);
     let show_controls_item = tray_icon::menu::MenuItem::new("Show controls", true, None);
     let hide_titlebar_item = tray_icon::menu::MenuItem::new("Hide titlebars", true, None);
     let show_titlebar_item = tray_icon::menu::MenuItem::new("Show titlebars", true, None);
+    let reset_database_item = tray_icon::menu::MenuItem::new("Reset database", true, None);
 
     // Append items and the separator correctly
     tray_menu.append(&show_controls_item).unwrap();
     tray_menu.append(&hide_titlebar_item).unwrap();
     tray_menu.append(&show_titlebar_item).unwrap();
+    tray_menu.append(&reset_database_item).unwrap();
     tray_menu
         .append(&tray_icon::menu::PredefinedMenuItem::separator())
         .unwrap();
@@ -545,7 +571,7 @@ fn setup_tray_menu(
     let tray_show_controls_id = show_controls_item.id().0.clone();
     let tray_hide_titlebar_id = hide_titlebar_item.id().0.clone();
     let tray_show_titlebar_id = show_titlebar_item.id().0.clone();
-
+    let tray_reset_database_id = reset_database_item.id().0.clone();
     let (width, height) = app_icon.dimensions();
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("HoverPane")
@@ -560,10 +586,13 @@ fn setup_tray_menu(
     }));
 
     (
-        tray_quit_id,
-        tray_show_controls_id,
-        tray_hide_titlebar_id,
-        tray_show_titlebar_id,
+        MenuItems {
+            quit_id: tray_quit_id,
+            show_controls_id: tray_show_controls_id,
+            hide_titlebar_id: tray_hide_titlebar_id,
+            show_titlebar_id: tray_show_titlebar_id,
+            reset_database_id: tray_reset_database_id,
+        },
         tray_icon,
     )
 }
@@ -608,8 +637,8 @@ enum UserEvent {
     RemoveWebView(NanoId),
     // ShowNewViewForm,
     // MoveWebView(NanoId, Direction),
-    Minimize(NanoId),
-    Maximize(NanoId),
+    // Minimize(NanoId),
+    // Maximize(NanoId),
     // ToggleElementView(NanoId),
     ExtractResult(ScrapedData),
     SaveSettings(AppSettings),
@@ -703,6 +732,10 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::CursorLeft { device_id } => {
                 info!("Cursor left: {:?}", device_id);
             }
+            WindowEvent::Moved(position) => {
+                info!("Window moved: {:?}", position);
+                // TODO: Update widget position in the database
+            }
             _ => {
                 info!("Unhandledevent: {:?}", event);
             }
@@ -714,10 +747,6 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id.0);
                 self.remove_webview(id);
-            }
-            UserEvent::Minimize(id) => {
-                info!("Minimizing webview at index {}", id.0);
-                // self.minimize_webview(id);
             }
             UserEvent::CreateWidget(widget_options) => {
                 info!("Creating new widget: {:?}", widget_options);
@@ -734,12 +763,18 @@ impl ApplicationHandler<UserEvent> for App {
                     })
                     .with_transparent(widget_options.transparent)
                     .with_level(widget_options.level)
-                    .with_title(widget_options.title);
+                    .with_title(widget_options.title.unwrap_or("".to_string()))
+                    .with_bounds(if let Some(bounds) = widget_options.bounds {
+                        bounds
+                    } else {
+                        WidgetBounds {
+                            x: DEFAULT_WIDGET_X,
+                            y: DEFAULT_WIDGET_Y,
+                            width: DEFAULT_WIDGET_WIDTH,
+                            height: DEFAULT_WIDGET_HEIGHT,
+                        }
+                    });
                 let res: Result<(), ()> = {
-                    // let mut db = futures::executor::block_on(self.db.lock());
-                    // futures::executor::block_on(
-                    //     db.insert_widget_configuration(vec![widget_config.clone()]),
-                    // )
                     info!("TODO: Inserting widget configuration: {:?}", widget_config);
                     Ok(())
                 };
@@ -758,21 +793,25 @@ impl ApplicationHandler<UserEvent> for App {
                 info!("Menu id: {:?}", id);
 
                 match id.0.as_str() {
-                    val if val == self.tray_menu_quit_id => {
+                    val if val == self.menu_items.quit_id => {
                         info!("Quitting application");
                         event_loop.exit();
                     }
-                    val if val == self.tray_menu_show_controls_id => {
+                    val if val == self.menu_items.show_controls_id => {
                         info!("Showing controls");
                         self.show_controls(event_loop);
                     }
-                    val if val == self.tray_menu_hide_titlebar_id => {
+                    val if val == self.menu_items.hide_titlebar_id => {
                         info!("Hiding titlebars");
                         self.hide_titlebars(event_loop);
                     }
-                    val if val == self.tray_menu_show_titlebar_id => {
+                    val if val == self.menu_items.show_titlebar_id => {
                         info!("Showing titlebars");
                         self.show_titlebars(event_loop);
+                    }
+                    val if val == self.menu_items.reset_database_id => {
+                        info!("Resetting database");
+                        self.reset_database(event_loop);
                     }
                     _ => {
                         info!("No tray menu show controls id found");
@@ -800,7 +839,7 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             UserEvent::ApiAction(action) => {
-                info!("Api action: {:?}", action);
+                info!("Api action received");
                 match action {
                     ApiAction::CreateWidget(widget_request) => {
                         info!("Creating widget: {:?}", widget_request.title);
@@ -816,6 +855,12 @@ impl ApplicationHandler<UserEvent> for App {
                     ApiAction::UpdateWidgetBounds { widget_id, bounds } => {
                         self.update_widget_bounds(widget_id, bounds);
                     }
+                    ApiAction::MaximizeWidget { widget_id } => {
+                        self.maximize_webview(NanoId(widget_id));
+                    }
+                    ApiAction::MinimizeWidget { widget_id } => {
+                        self.minimize_webview(NanoId(widget_id));
+                    }
                 }
             }
             UserEvent::IpcEvent(ipc_event) => {
@@ -828,10 +873,6 @@ impl ApplicationHandler<UserEvent> for App {
                         self.add_scrape_result(scraped_data);
                     }
                 }
-            }
-            UserEvent::Maximize(nano_id) => {
-                info!("Maximizing webview at index {}", nano_id.0);
-                self.maximize_webview(nano_id);
             }
             UserEvent::ExtractResult(scraped_data) => {
                 // should not happen?
@@ -1072,13 +1113,7 @@ fn main() {
         .into_rgba8();
     let (width, height) = img.dimensions();
 
-    let (
-        tray_quit_id,
-        tray_show_controls_id,
-        tray_hide_titlebar_id,
-        tray_show_titlebar_id,
-        tray_icon,
-    ) = setup_tray_menu(img.clone(), event_loop_proxy.clone());
+    let (menu_items, tray_icon) = setup_tray_menu(img.clone(), event_loop_proxy.clone());
     tray_icon.set_visible(app_settings.show_tray_icon);
 
     let mut app = App {
@@ -1087,12 +1122,7 @@ fn main() {
         db: app_db,
         app_settings,
         app_settings_path: config_dir.join("settings.json"),
-        // tray_menu_quit_id2: tray_quit_id.clone(),
-        // tray_menu_show_controls_id2: tray_show_controls_id.clone(),
-        tray_menu_quit_id: tray_quit_id,
-        tray_menu_show_controls_id: tray_show_controls_id,
-        tray_menu_hide_titlebar_id: tray_hide_titlebar_id,
-        tray_menu_show_titlebar_id: tray_show_titlebar_id,
+        menu_items,
         current_size: LogicalSize::new(DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_HEIGHT),
         current_modifiers: Modifiers::default(),
         all_widgets: HashMap::new(),

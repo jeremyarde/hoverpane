@@ -21,7 +21,7 @@ impl WinitEventSender {
 
 impl EventSenderImpl for WinitEventSender {
     fn send_message(&self, message: ApiAction) -> Result<(), String> {
-        info!("Sending message: {:?}", message);
+        info!("Sending message");
         self.proxy
             .send_event(super::UserEvent::ApiAction(message))
             .map_err(|e| e.to_string())

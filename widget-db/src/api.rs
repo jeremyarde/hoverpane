@@ -156,7 +156,7 @@ pub mod api {
         let widget_config: WidgetConfiguration = WidgetConfiguration {
             id: 0,
             widget_id: widget_types::NanoId(nanoid_gen(8)),
-            title: widget_request.title,
+            title: widget_request.title.unwrap_or("".to_string()),
             widget_type: if widget_request.html.is_some()
                 && !widget_request.html.clone().unwrap().is_empty()
             {

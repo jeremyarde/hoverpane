@@ -34,7 +34,7 @@ export interface WidgetBounds {
 export interface CreateWidgetRequest {
 	url?: string;
 	html?: string;
-	title: string;
+	title?: string;
 	level: Level;
 	transparent: boolean;
 	decorations: boolean;
@@ -102,6 +102,12 @@ export type ApiAction =
 	| { type: "updatewidgetbounds", content: {
 	widget_id: string;
 	bounds: WidgetBounds;
+}}
+	| { type: "maximizewidget", content: {
+	widget_id: string;
+}}
+	| { type: "minimizewidget", content: {
+	widget_id: string;
 }};
 
 export type IpcEvent = 

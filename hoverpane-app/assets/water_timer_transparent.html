@@ -42,6 +42,8 @@
         backdrop-filter: blur(4px);
         cursor: pointer;
         transition: transform 0.3s ease;
+        position: relative;
+        -webkit-app-region: no-drag;
       }
 
       .water-container:hover {
@@ -152,6 +154,36 @@
       .fullscreen .timer {
         font-size: 36px;
       }
+
+      .window-controls {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 4px;
+        z-index: 10;
+      }
+
+      .window-control {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+      }
+
+      .window-control:hover {
+        opacity: 0.8;
+      }
+
+      .minimize {
+        background-color: #f1c40f;
+      }
+
+      .maximize {
+        background-color: #2ecc71;
+      }
     </style>
   </head>
   <body>
@@ -159,27 +191,23 @@
       <div class="water-icon">💧</div>
       <div class="water-message">Drink Water</div>
       <div class="timer">
-        Next reminder in: <span id="time-left">30:00</span>
+        Next reminder in: <span id="time-left">00:10</span>
       </div>
       <div class="timer-input">
-        <input type="number" id="timer-minutes" min="1" max="120" value="30" />
+        <input type="number" id="timer-minutes" min="1" max="120" value="10" />
         <button id="update-timer">Update</button>
       </div>
-      <button class="debug-button" id="debug-trigger">
-        Debug: Trigger Now
-      </button>
     </div>
 
     <script>
-      const FULLSCREEN_DURATION = 30 * 1000; // 30 seconds
+      const FULLSCREEN_DURATION = 3 * 1000;
       let timerInterval;
       let reminderTimeout;
-      let currentTimerMinutes = 30;
-
-      function updateTimer(minutes = currentTimerMinutes) {
+      let currentTimerMinutes = 10;
+      let minimized = false;
+      function updateTimer(seconds = currentTimerMinutes) {
         const timeLeft = document.getElementById("time-left");
-        let remainingMinutes = minutes;
-        let seconds = 0;
+        let remainingSeconds = seconds; // Clear any existing interval
 
         // Clear any existing interval
         if (timerInterval) {
@@ -187,21 +215,26 @@
         }
 
         timerInterval = setInterval(() => {
-          if (seconds === 0) {
-            remainingMinutes--;
-            seconds = 59;
-          } else {
-            seconds--;
-          }
-
-          timeLeft.textContent = `${remainingMinutes
-            .toString()
-            .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-
-          if (remainingMinutes === 0 && seconds === 0) {
+          if (remainingSeconds === 0) {
             clearInterval(timerInterval);
+
+            fetch(`http://localhost:3111/widgets/${window.WIDGET_ID}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                type: "maximizewidget",
+                content: {
+                  widget_id: window.WIDGET_ID ? window.WIDGET_ID : "",
+                },
+              }),
+            });
             showFullscreenReminder();
+          } else {
+            remainingSeconds--;
           }
+          timeLeft.textContent = remainingSeconds.toString();
         }, 1000);
       }
 
@@ -209,13 +242,28 @@
         const container = document.querySelector(".water-container");
         container.classList.add("fullscreen");
         document.body.classList.add("opaque");
+      }
 
-        // Set timeout to return to normal size
-        setTimeout(() => {
-          container.classList.remove("fullscreen");
-          document.body.classList.remove("opaque");
-          updateTimer();
-        }, FULLSCREEN_DURATION);
+      function hideFullscreenReminder() {
+        const container = document.querySelector(".water-container");
+        container.classList.remove("fullscreen");
+        document.body.classList.remove("opaque");
+        container.classList.remove("fullscreen");
+
+        // Return to normal size
+        fetch(`http://localhost:3111/widgets/${window.WIDGET_ID}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "minimizewidget",
+            content: {
+              widget_id: window.WIDGET_ID ? window.WIDGET_ID : "",
+            },
+          }),
+        });
+        updateTimer();
       }
 
       // Add click event to make background opaque
@@ -224,7 +272,11 @@
         .addEventListener("click", (e) => {
           // Don't toggle opacity if clicking the input or button
           if (!e.target.closest(".timer-input")) {
-            document.body.classList.toggle("opaque");
+            if (document.querySelector(".water-container.fullscreen")) {
+              hideFullscreenReminder();
+            } else {
+              document.body.classList.toggle("opaque");
+            }
           }
         });
 
@@ -242,14 +294,31 @@
         }
       });
 
-      // Debug trigger button
-      document.getElementById("debug-trigger").addEventListener("click", () => {
-        clearInterval(timerInterval);
-        showFullscreenReminder();
-      });
-
       // Start the timer
       updateTimer();
+
+      // Window control handlers
+      document.getElementById("minimize-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        fetch(`http://localhost:3111/widgets/${window.WIDGET_ID}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ type: "minimizewidget" }),
+        });
+      });
+
+      document.getElementById("maximize-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        fetch(`http://localhost:3111/widgets/${window.WIDGET_ID}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ type: "maximizewidget" }),
+        });
+      });
     </script>
   </body>
 </html>

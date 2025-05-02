@@ -10,8 +10,8 @@ pub mod db {
     use std::fs;
     use std::path::PathBuf;
     use widget_types::{
-        Level, MonitorPosition, NanoId, ScrapedData, WidgetConfiguration, WidgetModifier,
-        DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+        Level, MonitorPosition, NanoId, ScrapedData, WidgetBounds, WidgetConfiguration,
+        WidgetModifier, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
     };
 
     fn get_db_path() -> PathBuf {
@@ -33,12 +33,12 @@ pub mod db {
                 transparent INTEGER NOT NULL,
                 decorations INTEGER NOT NULL,
                 is_open INTEGER NOT NULL,
-                position TEXT NOT NULL
+                bounds TEXT NOT NULL
             )"#
         }
 
         fn get_insert_sql() -> &'static str {
-            "INSERT INTO widgets (widget_id, title, widget_type, level, transparent, decorations, is_open, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO widgets (widget_id, title, widget_type, level, transparent, decorations, is_open, bounds) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         }
     }
 
@@ -81,6 +81,25 @@ pub mod db {
     }
 
     impl Database {
+        pub fn reset(&mut self) {
+            self.conn
+                .execute("DROP TABLE IF EXISTS widgets", [])
+                .unwrap();
+            self.conn
+                .execute("DROP TABLE IF EXISTS modifiers", [])
+                .unwrap();
+            self.conn
+                .execute("DROP TABLE IF EXISTS scraped_data", [])
+                .unwrap();
+            self.conn.execute("PRAGMA user_version = 0", []).unwrap();
+            let migrations = Migrations::new(vec![
+                M::up(WidgetConfiguration::get_create_table_sql()),
+                M::up(WidgetModifier::get_create_table_sql()),
+                M::up(ScrapedData::get_create_table_sql()),
+            ]);
+            migrations.to_latest(&mut self.conn).unwrap();
+        }
+
         pub fn from(in_memory: bool) -> SqliteResult<Self> {
             // let conn = Connection::open_in_memory()?;
             let mut conn = if in_memory {
@@ -108,26 +127,22 @@ pub mod db {
 
         pub fn get_configuration(&self) -> SqliteResult<Vec<WidgetConfiguration>> {
             let mut stmt = self.conn.prepare("SELECT * FROM widgets")?;
-            let rows = stmt.query_map([], |row| {
-                Ok(WidgetConfiguration {
-                    id: row.get(0)?,
-                    widget_id: NanoId(row.get(1)?),
-                    title: row.get(2)?,
-                    widget_type: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                    level: match row.get::<_, String>(4)?.as_str() {
-                        "AlwaysOnTop" => Level::AlwaysOnTop,
-                        "Normal" => Level::Normal,
-                        "AlwaysOnBottom" => Level::AlwaysOnBottom,
-                        _ => Level::Normal,
-                    },
-                    transparent: row.get::<_, i32>(5)? != 0,
-                    decorations: row.get::<_, i32>(6)? != 0,
-                    is_open: row.get::<_, i32>(7)? != 0,
-                    bounds: serde_json::from_str(&row.get::<_, String>(8)?).unwrap(),
-                })
-            })?;
-
-            rows.collect()
+            let widgets = stmt
+                .query_map([], |row| {
+                    Ok(WidgetConfiguration {
+                        id: row.get(0)?,
+                        widget_id: NanoId(row.get(1)?),
+                        title: row.get(2)?,
+                        widget_type: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                        level: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                        transparent: row.get::<_, i32>(5)? != 0,
+                        decorations: row.get::<_, i32>(6)? != 0,
+                        is_open: row.get::<_, i32>(7)? != 0,
+                        bounds: serde_json::from_str(&row.get::<_, String>(8)?).unwrap(),
+                    })
+                })?
+                .collect::<SqliteResult<Vec<_>>>()?;
+            Ok(widgets)
         }
         pub fn upsert_widget_configuration(
             &mut self,
@@ -150,7 +165,6 @@ pub mod db {
             // Insert the new configuration
             let widget_type = serde_json::to_string(&config.widget_type).unwrap();
             let level = serde_json::to_string(&config.level).unwrap();
-            let position_json = serde_json::to_string(&config.bounds).unwrap();
             tx.execute(
                 WidgetConfiguration::get_insert_sql(),
                 [
@@ -161,7 +175,7 @@ pub mod db {
                     &(config.transparent as i32).to_string(),
                     &(config.decorations as i32).to_string(),
                     &(config.is_open as i32).to_string(),
-                    &position_json,
+                    &serde_json::to_string(&config.bounds).unwrap(),
                 ],
             )?;
 
