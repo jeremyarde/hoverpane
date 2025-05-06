@@ -19,6 +19,15 @@ pub const DEFAULT_WIDGET_Y: u32 = 100;
 pub enum IpcEvent {
     SaveSettings(AppSettings),
     ExtractResult(ScrapedData),
+    DragEvent(DragEvent),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct DragEvent {
+    pub widget_id: String,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

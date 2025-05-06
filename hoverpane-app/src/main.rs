@@ -40,7 +40,7 @@ const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use wry::{
-    dpi::{LogicalPosition, LogicalSize},
+    dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
     Rect, WebView, WebViewBuilder, WebViewExtMacOS,
 };
 
@@ -344,6 +344,7 @@ JSON.stringify({
                 position: LogicalPosition::new(0, 0).into(),
                 size: self.current_size.into(),
             })
+            // .with_drag_drop_handler(false)
             .with_transparent(widget_config.transparent)
             .with_ipc_handler({
                 let proxy_clone = self.proxy.clone();
@@ -534,6 +535,37 @@ JSON.stringify({
                 .set_outer_position(LogicalPosition::new(10, 10));
         } else {
             info!("Widget {:?} not found", nano_id);
+        }
+    }
+
+    fn handle_drag_event(&mut self, drag_event: widget_types::DragEvent) {
+        info!("Drag event: {:?}", drag_event);
+        let Some(window_id) = self
+            .widget_id_to_window_id
+            .get(&NanoId(drag_event.widget_id.clone()))
+        else {
+            info!("Widget {:?} not found", drag_event.widget_id);
+            return;
+        };
+
+        let widget = self.all_widgets.get_mut(window_id).unwrap();
+        if let Ok(current_position) = widget.window.outer_position() {
+            info!("Current position: {:?}", current_position);
+            info!("Drag event: {:?}", drag_event);
+
+            // Get the scale factor for this window
+            let scale_factor = widget.window.scale_factor();
+
+            // Convert logical position to physical position and add the drag movement
+            widget.window.set_outer_position(PhysicalPosition::new(
+                (current_position.x as f64) + (drag_event.x as f64 * scale_factor),
+                (current_position.y as f64) + (drag_event.y as f64 * scale_factor),
+            ));
+        } else {
+            error!(
+                "Failed to get window position for widget {:?}",
+                drag_event.widget_id
+            );
         }
     }
 }
@@ -889,6 +921,7 @@ impl ApplicationHandler<UserEvent> for App {
                     IpcEvent::ExtractResult(scraped_data) => {
                         self.add_scrape_result(scraped_data);
                     }
+                    IpcEvent::DragEvent(drag_event) => self.handle_drag_event(drag_event),
                 }
             }
             UserEvent::ExtractResult(scraped_data) => {

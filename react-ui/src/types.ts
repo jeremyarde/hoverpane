@@ -42,6 +42,12 @@ export interface CreateWidgetRequest {
 	bounds?: WidgetBounds;
 }
 
+export interface DragEvent {
+	widget_id: string;
+	x: number;
+	y: number;
+}
+
 export interface FileConfiguration {
 	html: string;
 }
@@ -112,5 +118,6 @@ export type ApiAction =
 
 export type IpcEvent = 
 	| { type: "savesettings", content: AppSettings }
-	| { type: "extractresult", content: ScrapedData };
+	| { type: "extractresult", content: ScrapedData }
+	| { type: "dragevent", content: DragEvent };
 

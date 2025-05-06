@@ -6,6 +6,7 @@ import CreateWidgetForm from "./CreateWidgetForm";
 import EditWidgets from "./EditWidgets";
 import DataWidget from "./DataWidget";
 import SettingsWidget from "./SettingsWidget";
+import SimpleCreateWidgetForm from "./SimpleCreateWidget";
 
 // import "./App.css";
 
@@ -34,12 +35,22 @@ declare global {
 
 const App = () => {
   const [displayedWidget, setDisplayedWidget] = useState<
-    "create" | "edit" | "data" | "settings"
-  >("create");
+    "create" | "edit" | "data" | "settings" | "simple"
+  >("simple");
   return (
     <div className="min-h-screen flex justify-center p-4">
       <div className="flex flex-col min-w-[400px]">
         <div className="flex flex-row">
+          <button
+            className={`flex-1 relative px-4 py-0.5 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
+              displayedWidget === "simple"
+                ? "bg-[#98EECC] hover:bg-[#7DCCAA] border-b-0 after:absolute after:bottom-[-2px] after:left-0 after:right-0 after:h-[2px] after:bg-[#98EECC]"
+                : "bg-white hover:bg-gray-100"
+            }`}
+            onClick={() => setDisplayedWidget("simple")}
+          >
+            Simple
+          </button>
           <button
             className={`flex-1 relative px-4 py-0.5 font-bold text-sm uppercase border-1 rounded-t-lg transition-colors ${
               displayedWidget === "create"
@@ -83,6 +94,7 @@ const App = () => {
         </div>
         {/* Border around the widget contents */}
         <div className="border-1 border-black rounded-b-lg min-h-[200px]">
+          {displayedWidget === "simple" && <SimpleCreateWidgetForm />}
           {displayedWidget === "create" && <CreateWidgetForm />}
           {displayedWidget === "edit" && <EditWidgets />}
           {displayedWidget === "data" && <DataWidget />}
