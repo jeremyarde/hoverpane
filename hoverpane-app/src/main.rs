@@ -17,17 +17,17 @@ use std::{
 };
 use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
-    ApiAction, AppSettings, CreateWidgetRequest, FileConfiguration, IpcEvent, Level, Modifier,
-    MonitorPosition, ScrapedData, UrlConfiguration, WidgetBounds, WidgetConfiguration,
-    WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
-    DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
+    ApiAction, AppSettings, ConfigInformation, CreateWidgetRequest, FileConfiguration, IpcEvent,
+    Level, Modifier, MonitorPosition, ScrapedData, UrlConfiguration, WidgetBounds,
+    WidgetConfiguration, WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT,
+    DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
 };
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
-    platform::macos::{EventLoopBuilderExtMacOS, WindowAttributesExtMacOS},
-    window::{Window, WindowId, WindowLevel},
+    platform::macos::{EventLoopBuilderExtMacOS, MonitorHandleExtMacOS, WindowAttributesExtMacOS},
+    window::{self, Window, WindowId, WindowLevel},
 };
 
 use cocoa::base::nil;
@@ -652,6 +652,23 @@ impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
         // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+
+        let monitors = event_loop.available_monitors().collect::<Vec<_>>();
+        info!("Monitors: {:?}", monitors);
+        let mut config_information = vec![];
+        for monitor in monitors {
+            info!("Monitor: {:?}", monitor);
+            let config_information = ConfigInformation {
+                identifier: monitor.native_id().to_string(),
+                physical_size: (
+                    monitor.size().width as usize,
+                    monitor.size().height as usize,
+                ),
+                scale_factor: monitor.scale_factor(),
+            };
+        }
+        self.db.set_config_information(config_information);
+
         let mut widgets = vec![];
         {
             info!("TODO: Get widgets from db");

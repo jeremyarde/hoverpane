@@ -10,8 +10,8 @@ pub mod db {
     use std::fs;
     use std::path::PathBuf;
     use widget_types::{
-        Level, MonitorPosition, NanoId, ScrapedData, WidgetBounds, WidgetConfiguration,
-        WidgetModifier, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+        ConfigInformation, Level, MonitorPosition, NanoId, ScrapedData, WidgetBounds,
+        WidgetConfiguration, WidgetModifier, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
     };
 
     fn get_db_path() -> PathBuf {
@@ -23,19 +23,19 @@ pub mod db {
     }
 
     impl DbTable for WidgetConfiguration {
-        fn get_create_table_sql() -> &'static str {
-            r#"CREATE TABLE IF NOT EXISTS widgets (
-                id INTEGER PRIMARY KEY,
-                widget_id TEXT NOT NULL UNIQUE,
-                title TEXT NOT NULL,
-                widget_type TEXT NOT NULL,
-                level TEXT NOT NULL,
-                transparent INTEGER NOT NULL,
-                decorations INTEGER NOT NULL,
-                is_open INTEGER NOT NULL,
-                bounds TEXT NOT NULL
-            )"#
-        }
+        // fn get_create_table_sql() -> &'static str {
+        //     r#"CREATE TABLE IF NOT EXISTS widgets (
+        //         id INTEGER PRIMARY KEY,
+        //         widget_id TEXT NOT NULL UNIQUE,
+        //         title TEXT NOT NULL,
+        //         widget_type TEXT NOT NULL,
+        //         level TEXT NOT NULL,
+        //         transparent INTEGER NOT NULL,
+        //         decorations INTEGER NOT NULL,
+        //         is_open INTEGER NOT NULL,
+        //         bounds TEXT NOT NULL
+        //     )"#
+        // }
 
         fn get_insert_sql() -> &'static str {
             "INSERT INTO widgets (widget_id, title, widget_type, level, transparent, decorations, is_open, bounds) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -43,15 +43,15 @@ pub mod db {
     }
 
     impl DbTable for WidgetModifier {
-        fn get_create_table_sql() -> &'static str {
-            r#"
-                CREATE TABLE IF NOT EXISTS modifiers (
-                    id INTEGER PRIMARY KEY,
-                    widget_id TEXT NOT NULL,
-                    modifier_type TEXT NOT NULL UNIQUE
-                )
-                "#
-        }
+        // fn get_create_table_sql() -> &'static str {
+        //     r#"
+        //                 CREATE TABLE IF NOT EXISTS modifiers (
+        //                     id INTEGER PRIMARY KEY,
+        //                     widget_id TEXT NOT NULL,
+        //                     modifier_type TEXT NOT NULL UNIQUE
+        //                 )
+        //         "#
+        // }
 
         fn get_insert_sql() -> &'static str {
             "INSERT INTO modifiers (widget_id, modifier_type) VALUES (?, ?)"
@@ -59,17 +59,17 @@ pub mod db {
     }
 
     impl DbTable for ScrapedData {
-        fn get_create_table_sql() -> &'static str {
-            r#"
-                CREATE TABLE IF NOT EXISTS scraped_data (
-                    id INTEGER PRIMARY KEY,
-                    widget_id TEXT NOT NULL,
-                    value TEXT NOT NULL,
-                    error TEXT NOT NULL,
-                    timestamp TEXT NOT NULL
-                )
-                "#
-        }
+        // fn get_create_table_sql() -> &'static str {
+        //     r#"
+        //         CREATE TABLE IF NOT EXISTS scraped_data (
+        //             id INTEGER PRIMARY KEY,
+        //             widget_id TEXT NOT NULL,
+        //             value TEXT NOT NULL,
+        //             error TEXT NOT NULL,
+        //             timestamp TEXT NOT NULL
+        //         )
+        //         "#
+        // }
 
         fn get_insert_sql() -> &'static str {
             "INSERT INTO scraped_data (widget_id, value, error, timestamp) VALUES (?, ?, ?, ?)"
@@ -91,11 +91,16 @@ pub mod db {
             self.conn
                 .execute("DROP TABLE IF EXISTS scraped_data", [])
                 .unwrap();
+
+            self.conn
+                .execute("DROP TABLE IF EXISTS config", [])
+                .unwrap();
             self.conn.execute("PRAGMA user_version = 0", []).unwrap();
             let migrations = Migrations::new(vec![
-                M::up(WidgetConfiguration::get_create_table_sql()),
-                M::up(WidgetModifier::get_create_table_sql()),
-                M::up(ScrapedData::get_create_table_sql()),
+                M::up(include_str!("../migrations/20240318000000_initial.sql")),
+                // M::up(WidgetConfiguration::get_create_table_sql()),
+                // M::up(WidgetModifier::get_create_table_sql()),
+                // M::up(ScrapedData::get_create_table_sql()),
             ]);
             migrations.to_latest(&mut self.conn).unwrap();
         }
@@ -116,9 +121,10 @@ pub mod db {
                 .unwrap();
 
             let migrations = Migrations::new(vec![
-                M::up(WidgetConfiguration::get_create_table_sql()),
-                M::up(WidgetModifier::get_create_table_sql()),
-                M::up(ScrapedData::get_create_table_sql()),
+                M::up(include_str!("../migrations/20240318000000_initial.sql")),
+                // M::up(WidgetConfiguration::get_create_table_sql()),
+                // M::up(WidgetModifier::get_create_table_sql()),
+                // M::up(ScrapedData::get_create_table_sql()),
             ]);
             migrations.to_latest(&mut conn).unwrap();
 
@@ -425,6 +431,16 @@ pub mod db {
                 [position_json, widget_id.to_string()],
             )?;
             Ok(())
+        }
+
+        pub fn set_config_information(&self, config_information: Vec<ConfigInformation>) {
+            let config_information_json = serde_json::to_string(&config_information).unwrap();
+            self.conn
+                .execute(
+                    "INSERT INTO config (json) VALUES (?)",
+                    [&config_information_json],
+                )
+                .unwrap();
         }
     }
 

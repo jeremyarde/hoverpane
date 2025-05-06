@@ -17,6 +17,8 @@ convert-video:
     ffmpeg -i /Users/jarde/Desktop/hoverpane-2.mov -vf scale=1280:-1 -c:v libvpx-vp9 -crf 32 -b:v 0 -c:a libopus /Users/jarde/Documents/code/web-extension-scraper/landingpage/public/hoverpane-demo.webm
     ffmpeg -i /Users/jarde/Desktop/tools-demo.mov -vf scale=1280:-1 -c:v libvpx-vp9 -crf 32 -b:v 0 -c:a libopus /Users/jarde/Documents/code/web-extension-scraper/landingpage/public/tools-demo.webm
 
+runo:
+    RUST_LOG=info cargo run
 
 run: types frontend
     RUST_LOG=info cargo run

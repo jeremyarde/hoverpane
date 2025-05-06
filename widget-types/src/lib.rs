@@ -27,6 +27,13 @@ pub struct AppSettings {
     pub show_tray_icon: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConfigInformation {
+    pub identifier: String,
+    pub physical_size: (usize, usize),
+    pub scale_factor: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[typeshare]
 pub struct NanoId(pub String);
