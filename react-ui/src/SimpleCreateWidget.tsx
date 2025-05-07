@@ -1,202 +1,20 @@
 import { useState } from "react";
 import { CreateWidgetRequest, Level, WidgetType } from "./types";
-
-const stack = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-6"
-  >
-    <rect
-      x="3.75"
-      y="3.75"
-      width="12"
-      height="12"
-      rx="2.25"
-      fill="white"
-      opacity="1"
-      stroke="black"
-    />
-    <rect
-      x="8"
-      y="8"
-      width="12"
-      height="12"
-      rx="2.25"
-      fill="black"
-      opacity="1"
-      stroke="black"
-    />
-  </svg>
-);
-const stackFront = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-6"
-  >
-    <rect
-      x="3.75"
-      y="3.75"
-      width="12"
-      height="12"
-      rx="2.25"
-      fill="black"
-      opacity="1"
-      stroke="none"
-    />
-    <rect
-      x="8"
-      y="8"
-      width="12"
-      height="12"
-      rx="2.25"
-      fill="white"
-      opacity="1"
-      stroke="black"
-    />
-  </svg>
-);
-
-// Add refresh icon
-const refreshIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-    />
-  </svg>
-);
-
-// Add scrape/extract icon
-const scrapeIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-    />
-  </svg>
-);
-
-// Add help icon
-const helpIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4 text-gray-400"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
-    />
-  </svg>
-);
-
-// Add step icons
-const urlIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"
-    />
-  </svg>
-);
-
-const appearanceIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"
-    />
-  </svg>
-);
-
-const settingsIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-    />
-  </svg>
-);
-
-const positionIcon = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="size-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
-    />
-  </svg>
-);
+import {
+  urlIcon,
+  appearanceIcon,
+  settingsIcon,
+  stack,
+  stackFront,
+  refreshIcon,
+  scrapeIcon,
+  helpIcon,
+} from "./utils";
 
 const steps = [
-  { id: 1, title: "Basic Info", icon: urlIcon },
+  { id: 1, title: "Type", icon: urlIcon },
   { id: 2, title: "Appearance", icon: appearanceIcon },
   { id: 3, title: "Advanced", icon: settingsIcon },
-  { id: 4, title: "Position", icon: positionIcon },
 ];
 
 const DEFAULT_WIDGET_X = 100;
@@ -234,7 +52,7 @@ export default function SimpleCreateWidgetForm() {
     url: "",
     html: "",
     title: "",
-    transparent: false,
+    transparent: true,
   });
 
   const validateStep = (step: number): boolean => {
@@ -274,8 +92,21 @@ export default function SimpleCreateWidgetForm() {
     return Object.keys(errors).length === 0;
   };
 
+  const isStepValid = (step: number): boolean => {
+    const isValid = validateStep(step);
+    return isValid;
+  };
+
+  const handleStepClick = (stepId: number) => {
+    // If trying to go forward, validate current step first
+    if (stepId > currentStep && !isStepValid(currentStep)) {
+      return;
+    }
+    setCurrentStep(stepId);
+  };
+
   const handleNext = () => {
-    if (validateStep(currentStep)) {
+    if (isStepValid(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, 4));
     }
   };
@@ -349,6 +180,56 @@ export default function SimpleCreateWidgetForm() {
     }
   };
 
+  const handleQuickCreate = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    // Validate both step 1 and current step if we're on step 2
+    if (!validateStep(1) || (currentStep === 2 && !validateStep(2))) {
+      return;
+    }
+
+    const data: CreateWidgetRequest = {
+      url: widgetType.type === "url" ? formData.url : "",
+      html: widgetType.type === "file" ? formData.html : "",
+      title: formData.title,
+      level: selectedLevel,
+      transparent: formData.transparent,
+      decorations: false,
+      modifiers: [],
+      bounds: {
+        x: DEFAULT_WIDGET_X,
+        y: DEFAULT_WIDGET_Y,
+        width: DEFAULT_WIDGET_WIDTH,
+        height: DEFAULT_WIDGET_HEIGHT,
+      },
+    };
+
+    try {
+      const res = await fetch(`http://127.0.0.1:3111/widgets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        setError(null);
+        const widget = await res.json();
+        console.log("Widget created:", widget);
+        resetForm();
+      } else {
+        const error = await res.json();
+        setError(error);
+      }
+    } catch (fetchError) {
+      setError({
+        message: "Network error or API unreachable",
+        origin: "fetch",
+      });
+      console.error("Fetch error:", fetchError);
+    }
+  };
+
   const resetForm = () => {
     setCurrentStep(1);
     setValidationErrors({});
@@ -372,39 +253,55 @@ export default function SimpleCreateWidgetForm() {
     });
   };
 
-  const inputClass = "border rounded p-1 w-full text-sm";
-  const labelClass = "block text-xs font-medium mb-0.5";
-
   const renderStepIndicator = () => (
-    <div className="mb-8">
-      <div className="flex justify-between mb-2">
-        {steps.map((step) => (
-          <div
-            key={step.id}
-            className={`flex flex-col items-center ${
-              step.id <= currentStep ? "text-blue-600" : "text-gray-400"
-            }`}
-          >
+    <div className="mb-4">
+      <div className="relative flex items-center justify-between mb-3">
+        {/* Progress bar (continuous) */}
+        <div
+          className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 z-0"
+          style={{ transform: "translateY(-50%)" }}
+        />
+        <div
+          className="absolute top-1/2 left-0 h-0.5 bg-blue-500 z-10 transition-all duration-300"
+          style={{
+            width: `${((currentStep - 1) / (steps.length - 1)) * 100}%`,
+            transform: "translateY(-50%)",
+          }}
+        />
+        {steps.map((step) => {
+          const isCurrent = step.id === currentStep;
+          return (
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${
-                step.id <= currentStep ? "bg-blue-100" : "bg-gray-100"
-              }`}
+              key={step.id}
+              className="relative z-20 flex flex-col items-center flex-1"
             >
-              {step.icon}
+              <button
+                type="button"
+                onClick={() => handleStepClick(step.id)}
+                className={`
+                  w-7 h-7 rounded-full flex items-center justify-center mb-1 border transition-all duration-200 text-base
+                  ${
+                    isCurrent
+                      ? "border-blue-600 text-blue-600 shadow-sm bg-white"
+                      : "border-gray-300 text-gray-400 bg-white hover:border-gray-400 hover:text-gray-600"
+                  }
+                  cursor-pointer
+                `}
+              >
+                {step.icon}
+              </button>
+              <span
+                className={`
+                  text-[10px] font-medium cursor-pointer hover:text-gray-600
+                  ${isCurrent ? "text-blue-700" : "text-gray-400"}
+                `}
+                onClick={() => handleStepClick(step.id)}
+              >
+                {step.title}
+              </span>
             </div>
-            <span className="text-xs">{step.title}</span>
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between">
-        {steps.map((step) => (
-          <div
-            key={step.id}
-            className={`flex-1 h-1 mx-1 rounded ${
-              step.id <= currentStep ? "bg-blue-500" : "bg-gray-200"
-            }`}
-          />
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -413,15 +310,14 @@ export default function SimpleCreateWidgetForm() {
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium mb-4">Basic Information</h3>
-            <div className="flex border rounded overflow-hidden mb-4">
+          <div className="space-y-3">
+            <div className="p-1 bg-gray-100 rounded-lg flex">
               <button
                 type="button"
-                className={`flex-1 p-2 text-center text-sm ${
+                className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
                   widgetType.type === "url"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-200"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
                 }`}
                 onClick={() =>
                   setWidgetType({ type: "url", content: { url: "" } })
@@ -431,10 +327,10 @@ export default function SimpleCreateWidgetForm() {
               </button>
               <button
                 type="button"
-                className={`flex-1 p-2 text-center text-sm ${
+                className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
                   widgetType.type === "file"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-200"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
                 }`}
                 onClick={() =>
                   setWidgetType({ type: "file", content: { html: "" } })
@@ -458,12 +354,14 @@ export default function SimpleCreateWidgetForm() {
                   }
                   placeholder="https://example.com"
                   className={`${inputClass} ${
-                    validationErrors.url ? "border-red-300" : ""
+                    validationErrors.url
+                      ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                      : ""
                   }`}
                   required
                 />
                 {validationErrors.url && (
-                  <p className="text-xs text-red-500 mt-1">
+                  <p className="text-xs text-red-500 mt-0.5">
                     {validationErrors.url}
                   </p>
                 )}
@@ -481,13 +379,15 @@ export default function SimpleCreateWidgetForm() {
                   }
                   placeholder="<div>Hello World</div>"
                   className={`${inputClass} min-h-[80px] ${
-                    validationErrors.html ? "border-red-300" : ""
+                    validationErrors.html
+                      ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                      : ""
                   }`}
                   rows={4}
                   required
                 />
                 {validationErrors.html && (
-                  <p className="text-xs text-red-500 mt-1">
+                  <p className="text-xs text-red-500 mt-0.5">
                     {validationErrors.html}
                   </p>
                 )}
@@ -498,8 +398,7 @@ export default function SimpleCreateWidgetForm() {
 
       case 2:
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium mb-4">Appearance</h3>
+          <div className="space-y-3">
             <div>
               <label htmlFor="title" className={labelClass}>
                 Title
@@ -518,25 +417,25 @@ export default function SimpleCreateWidgetForm() {
 
             <div>
               <label className={labelClass}>Window Level</label>
-              <div className="flex border rounded overflow-hidden">
+              <div className="p-1 bg-gray-100 rounded-lg flex">
                 <button
                   type="button"
-                  className={`flex-1 flex items-center justify-center gap-1 p-1.5 text-sm transition-colors ${
+                  className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                     selectedLevel === Level.AlwaysOnBottom
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 hover:bg-gray-300"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
                   }`}
                   onClick={() => setSelectedLevel(Level.AlwaysOnBottom)}
                 >
                   {stack}
-                  Bottom
+                  <span>Bottom</span>
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 flex items-center justify-center gap-1 p-1.5 text-sm transition-colors ${
+                  className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
                     selectedLevel === Level.Normal
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 hover:bg-gray-300"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
                   }`}
                   onClick={() => setSelectedLevel(Level.Normal)}
                 >
@@ -544,22 +443,20 @@ export default function SimpleCreateWidgetForm() {
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 flex items-center justify-center gap-1 p-1.5 text-sm transition-colors ${
+                  className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                     selectedLevel === Level.AlwaysOnTop
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 hover:bg-gray-300"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
                   }`}
                   onClick={() => setSelectedLevel(Level.AlwaysOnTop)}
                 >
-                  <div className="flex items-center gap-1">
-                    {stackFront}
-                    Top
-                  </div>
+                  {stackFront}
+                  <span>Top</span>
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
                 id="transparent"
@@ -567,9 +464,9 @@ export default function SimpleCreateWidgetForm() {
                 onChange={(e) =>
                   setFormData({ ...formData, transparent: e.target.checked })
                 }
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
               />
-              <label htmlFor="transparent" className="text-sm">
+              <label htmlFor="transparent" className="text-sm text-gray-600">
                 Transparent Background
               </label>
             </div>
@@ -579,13 +476,86 @@ export default function SimpleCreateWidgetForm() {
       case 3:
         return (
           <div className="space-y-4">
-            <h3 className="text-sm font-medium mb-4">Advanced Options</h3>
+            <div className="bg-gray-50 rounded-lg p-3 space-y-3">
+              <div>
+                <label className={labelClass}>Position & Size</label>
+                <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="flex items-center gap-1 px-2 py-1">
+                    <span className="text-xs font-medium text-gray-500">X</span>
+                    <input
+                      type="number"
+                      value={bounds.x}
+                      onChange={(e) =>
+                        setBounds({ ...bounds, x: Number(e.target.value) })
+                      }
+                      className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
+                        validationErrors.x ? "text-red-500" : ""
+                      }`}
+                      min="0"
+                    />
+                  </div>
+                  <div className="h-4 w-px bg-gray-200" />
+                  <div className="flex items-center gap-1 px-2 py-1">
+                    <span className="text-xs font-medium text-gray-500">Y</span>
+                    <input
+                      type="number"
+                      value={bounds.y}
+                      onChange={(e) =>
+                        setBounds({ ...bounds, y: Number(e.target.value) })
+                      }
+                      className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
+                        validationErrors.y ? "text-red-500" : ""
+                      }`}
+                      min="0"
+                    />
+                  </div>
+                  <div className="h-4 w-px bg-gray-200" />
+                  <div className="flex items-center gap-1 px-2 py-1">
+                    <span className="text-xs font-medium text-gray-500">W</span>
+                    <input
+                      type="number"
+                      value={bounds.width}
+                      onChange={(e) =>
+                        setBounds({ ...bounds, width: Number(e.target.value) })
+                      }
+                      className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
+                        validationErrors.width ? "text-red-500" : ""
+                      }`}
+                      min="100"
+                    />
+                  </div>
+                  <div className="h-4 w-px bg-gray-200" />
+                  <div className="flex items-center gap-1 px-2 py-1">
+                    <span className="text-xs font-medium text-gray-500">H</span>
+                    <input
+                      type="number"
+                      value={bounds.height}
+                      onChange={(e) =>
+                        setBounds({ ...bounds, height: Number(e.target.value) })
+                      }
+                      className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
+                        validationErrors.height ? "text-red-500" : ""
+                      }`}
+                      min="100"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-1">
+                  {validationErrors.width && (
+                    <p className="text-xs text-red-500">Min width: 100px</p>
+                  )}
+                  {validationErrors.height && (
+                    <p className="text-xs text-red-500">Min height: 100px</p>
+                  )}
+                </div>
+              </div>
+            </div>
             {widgetType.type === "url" && (
               <>
-                <div className="space-y-2">
+                <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium flex items-center gap-1.5">
+                      <div className="text-xs font-medium flex items-center gap-1.5">
                         {refreshIcon}
                         Auto Refresh
                       </div>
@@ -597,12 +567,12 @@ export default function SimpleCreateWidgetForm() {
                         onChange={(e) => setAutoRefresh(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                      <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
                     </label>
                   </div>
                   {autoRefresh && (
                     <div className="pl-6">
-                      <label className="block text-xs font-medium mb-1">
+                      <label className={labelClass}>
                         Refresh Interval (seconds)
                       </label>
                       <input
@@ -613,14 +583,14 @@ export default function SimpleCreateWidgetForm() {
                         onChange={(e) =>
                           setRefreshInterval(Number(e.target.value))
                         }
-                        className={`w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                        className={`${inputClass} ${
                           validationErrors.refreshInterval
-                            ? "border-red-300"
+                            ? "border-red-300 focus:border-red-500 focus:ring-red-500"
                             : ""
                         }`}
                       />
                       {validationErrors.refreshInterval && (
-                        <p className="text-xs text-red-500 mt-1">
+                        <p className="text-xs text-red-500 mt-0.5">
                           {validationErrors.refreshInterval}
                         </p>
                       )}
@@ -631,15 +601,15 @@ export default function SimpleCreateWidgetForm() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium flex items-center gap-1.5">
+                      <div className="text-xs font-medium flex items-center gap-1.5">
                         {scrapeIcon}
                         Scrape Value
                         <div className="group relative">
                           {helpIcon}
-                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg">
+                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-gray-800 text-white text-[11px] rounded shadow-lg">
                             Use a CSS selector to extract specific content from
-                            the webpage. Examples:
-                            <ul className="mt-1 ml-2 list-disc">
+                            the webpage.
+                            <ul className="mt-1 ml-2 list-disc text-[10px]">
                               <li>#price-value</li>
                               <li>.stock-price</li>
                               <li>span.temperature</li>
@@ -655,25 +625,25 @@ export default function SimpleCreateWidgetForm() {
                         onChange={(e) => setScrapeValue(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                      <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
                     </label>
                   </div>
                   {scrapeValue && (
                     <div className="pl-6">
-                      <label className="block text-xs font-medium mb-1">
-                        CSS Selector
-                      </label>
+                      <label className={labelClass}>CSS Selector</label>
                       <input
                         type="text"
                         value={selector}
                         onChange={(e) => setSelector(e.target.value)}
                         placeholder="#price, .value, etc."
-                        className={`w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                          validationErrors.selector ? "border-red-300" : ""
+                        className={`${inputClass} ${
+                          validationErrors.selector
+                            ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                            : ""
                         }`}
                       />
                       {validationErrors.selector && (
-                        <p className="text-xs text-red-500 mt-1">
+                        <p className="text-xs text-red-500 mt-0.5">
                           {validationErrors.selector}
                         </p>
                       )}
@@ -684,129 +654,82 @@ export default function SimpleCreateWidgetForm() {
             )}
           </div>
         );
-
-      case 4:
-        return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium mb-4">Size and Position</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-gray-500 mb-0.5">
-                  X Position
-                </label>
-                <input
-                  type="number"
-                  value={bounds.x}
-                  onChange={(e) =>
-                    setBounds({ ...bounds, x: Number(e.target.value) })
-                  }
-                  className={inputClass}
-                  min="0"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-0.5">
-                  Y Position
-                </label>
-                <input
-                  type="number"
-                  value={bounds.y}
-                  onChange={(e) =>
-                    setBounds({ ...bounds, y: Number(e.target.value) })
-                  }
-                  className={inputClass}
-                  min="0"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-0.5">
-                  Width
-                </label>
-                <input
-                  type="number"
-                  value={bounds.width}
-                  onChange={(e) =>
-                    setBounds({ ...bounds, width: Number(e.target.value) })
-                  }
-                  className={`${inputClass} ${
-                    validationErrors.width ? "border-red-300" : ""
-                  }`}
-                  min="100"
-                />
-                {validationErrors.width && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {validationErrors.width}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-0.5">
-                  Height
-                </label>
-                <input
-                  type="number"
-                  value={bounds.height}
-                  onChange={(e) =>
-                    setBounds({ ...bounds, height: Number(e.target.value) })
-                  }
-                  className={`${inputClass} ${
-                    validationErrors.height ? "border-red-300" : ""
-                  }`}
-                  min="100"
-                />
-                {validationErrors.height && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {validationErrors.height}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        );
     }
   };
 
+  const inputClass =
+    "w-full px-2 py-1.5 text-xs border border-gray-200 rounded bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400";
+  const labelClass = "block text-[11px] font-medium mb-0.5 text-gray-500";
+  const buttonClass = {
+    primary:
+      "px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded border border-transparent hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1",
+    secondary:
+      "px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1",
+    quick:
+      "px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1",
+    tab: (active: boolean) =>
+      `flex-1 py-2 text-sm font-medium transition-colors ${
+        active ? "text-blue-600" : "text-gray-500 hover:text-gray-700"
+      }`,
+  };
+
   return (
-    <div className="max-w-md mx-auto">
-      <form onSubmit={handleSubmit} className="p-3 space-y-4">
-        <h2 className="font-semibold">Create New Widget</h2>
+    <div className="max-w-[95%] w-[460px] mx-auto">
+      <form onSubmit={handleSubmit} className="p-2">
+        <h2 className="font-semibold text-base text-gray-800">
+          Create New Widget
+        </h2>
         {renderStepIndicator()}
-        <div className="transition-all duration-300 ease-in-out">
+        <div className="transition-all duration-300 ease-in-out space-y-4">
           {renderStepContent()}
         </div>
-
-        <div className="flex justify-between pt-4">
+        <div className="flex justify-end gap-2 pt-4">
           {currentStep > 1 && (
             <button
               type="button"
               onClick={handleBack}
-              className="px-3 py-1 border border-gray-300 rounded-md text-xs font-medium hover:bg-gray-50"
+              className={buttonClass.secondary}
             >
               Back
             </button>
           )}
-          {currentStep < 4 ? (
+          {(currentStep === 1 || currentStep === 2) && (
+            <button
+              type="button"
+              onClick={handleQuickCreate}
+              className={buttonClass.quick}
+            >
+              Quick Create
+            </button>
+          )}
+          {currentStep < 3 ? (
             <button
               type="button"
               onClick={handleNext}
-              className="ml-auto px-3 py-1 border border-transparent rounded-md shadow-sm text-xs font-medium text-white bg-blue-600 hover:bg-blue-700"
+              className={buttonClass.primary}
             >
               Next
             </button>
           ) : (
-            <button
-              type="submit"
-              className="ml-auto px-3 py-1 border border-transparent rounded-md shadow-sm text-xs font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
+            <button type="submit" className={buttonClass.primary}>
               Create Widget
             </button>
           )}
         </div>
       </form>
       {error && (
-        <div className="mt-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-xs">
-          <p className="font-medium">Error:</p>
-          <p>{error.message}</p>
+        <div className="mt-2 px-2 py-1.5 bg-red-50 border border-red-200 text-red-600 rounded-md text-xs flex items-start gap-2 relative">
+          <button
+            className="absolute top-0.5 right-1.5 text-red-400 hover:text-red-600 focus:outline-none"
+            aria-label="Dismiss error"
+            onClick={() => setError(null)}
+            type="button"
+          >
+            ×
+          </button>
+          <div className="pr-4">
+            <span className="font-medium">Error:</span> {error.message}
+          </div>
         </div>
       )}
     </div>

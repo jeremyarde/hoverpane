@@ -307,6 +307,7 @@ JSON.stringify({
             widget_config.bounds.height as f64,
         );
         let window_attributes = Window::default_attributes()
+            .with_accepts_first_mouse(true)
             .with_position(log_position)
             .with_inner_size(size)
             .with_transparent(widget_config.transparent)
