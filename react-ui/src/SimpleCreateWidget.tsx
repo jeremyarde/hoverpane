@@ -105,13 +105,17 @@ export default function SimpleCreateWidgetForm() {
     setCurrentStep(stepId);
   };
 
-  const handleNext = () => {
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (isStepValid(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, 4));
     }
   };
 
-  const handleBack = () => {
+  const handleBack = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
@@ -180,8 +184,9 @@ export default function SimpleCreateWidgetForm() {
     }
   };
 
-  const handleQuickCreate = async (event: React.MouseEvent) => {
-    event.preventDefault();
+  const handleQuickCreate = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     // Validate both step 1 and current step if we're on step 2
     if (!validateStep(1) || (currentStep === 2 && !validateStep(2))) {
       return;
@@ -456,18 +461,23 @@ export default function SimpleCreateWidgetForm() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="transparent"
-                checked={formData.transparent}
-                onChange={(e) =>
-                  setFormData({ ...formData, transparent: e.target.checked })
-                }
-                className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-              />
-              <label htmlFor="transparent" className="text-sm text-gray-600">
-                Transparent Background
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="text-xs font-medium flex items-center gap-1.5">
+                  Transparent Background
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="transparent"
+                  checked={formData.transparent}
+                  onChange={(e) =>
+                    setFormData({ ...formData, transparent: e.target.checked })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
               </label>
             </div>
           </div>
@@ -673,9 +683,15 @@ export default function SimpleCreateWidgetForm() {
       }`,
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+    }
+  };
+
   return (
     <div className="max-w-[95%] w-[460px] mx-auto">
-      <form onSubmit={handleSubmit} className="p-2">
+      <form onSubmit={handleSubmit} className="p-2" onKeyDown={handleKeyDown}>
         <h2 className="font-semibold text-base text-gray-800">
           Create New Widget
         </h2>
@@ -693,28 +709,30 @@ export default function SimpleCreateWidgetForm() {
               Back
             </button>
           )}
-          {(currentStep === 1 || currentStep === 2) && (
-            <button
-              type="button"
-              onClick={handleQuickCreate}
-              className={buttonClass.quick}
-            >
-              Quick Create
-            </button>
-          )}
-          {currentStep < 3 ? (
-            <button
-              type="button"
-              onClick={handleNext}
-              className={buttonClass.primary}
-            >
-              Next
-            </button>
-          ) : (
-            <button type="submit" className={buttonClass.primary}>
-              Create Widget
-            </button>
-          )}
+          <div className="flex gap-2">
+            {(currentStep === 1 || currentStep === 2) && (
+              <button
+                type="button"
+                onClick={handleQuickCreate}
+                className={buttonClass.quick}
+              >
+                Quick Create
+              </button>
+            )}
+            {currentStep < 3 ? (
+              <button
+                type="button"
+                onClick={handleNext}
+                className={buttonClass.primary}
+              >
+                Next
+              </button>
+            ) : (
+              <button type="submit" className={buttonClass.primary}>
+                Create Widget
+              </button>
+            )}
+          </div>
         </div>
       </form>
       {error && (
