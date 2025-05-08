@@ -260,50 +260,69 @@ export default function SimpleCreateWidgetForm() {
 
   const renderStepIndicator = () => (
     <div className="mb-4">
-      <div className="relative flex items-center justify-between mb-3">
-        {/* Progress bar (continuous) */}
-        <div
-          className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 z-0"
-          style={{ transform: "translateY(-50%)" }}
-        />
-        <div
-          className="absolute top-1/2 left-0 h-0.5 bg-blue-500 z-10 transition-all duration-300"
-          style={{
-            width: `${((currentStep - 1) / (steps.length - 1)) * 100}%`,
-            transform: "translateY(-50%)",
-          }}
-        />
-        {steps.map((step) => {
+      <div className="flex items-center gap-2">
+        {steps.map((step, index) => {
           const isCurrent = step.id === currentStep;
+          const isCompleted = step.id < currentStep;
+
           return (
-            <div
-              key={step.id}
-              className="relative z-20 flex flex-col items-center flex-1"
-            >
+            <div key={step.id} className="flex items-center">
               <button
                 type="button"
                 onClick={() => handleStepClick(step.id)}
                 className={`
-                  w-7 h-7 rounded-full flex items-center justify-center mb-1 border transition-all duration-200 text-base
+                  flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium
+                  transition-all duration-200
                   ${
                     isCurrent
-                      ? "border-blue-600 text-blue-600 shadow-sm bg-white"
-                      : "border-gray-300 text-gray-400 bg-white hover:border-gray-400 hover:text-gray-600"
+                      ? "bg-blue-500 text-white"
+                      : isCompleted
+                      ? "bg-blue-50 text-blue-600"
+                      : "bg-gray-50 text-gray-500 hover:bg-gray-100"
                   }
-                  cursor-pointer
                 `}
               >
-                {step.icon}
-              </button>
-              <span
-                className={`
-                  text-[10px] font-medium cursor-pointer hover:text-gray-600
-                  ${isCurrent ? "text-blue-700" : "text-gray-400"}
+                <div
+                  className={`
+                  w-5 h-5 rounded-full flex items-center justify-center
+                  ${
+                    isCurrent
+                      ? "bg-white text-blue-500"
+                      : isCompleted
+                      ? "bg-blue-100 text-blue-600"
+                      : "bg-white text-gray-400"
+                  }
                 `}
-                onClick={() => handleStepClick(step.id)}
-              >
+                >
+                  {isCompleted ? (
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  ) : (
+                    <span className="text-xs font-medium">{step.id}</span>
+                  )}
+                </div>
                 {step.title}
-              </span>
+              </button>
+              {index < steps.length - 1 && (
+                <div className="w-4 h-[2px] bg-gray-200 mx-1">
+                  <div
+                    className={`h-full bg-blue-500 transition-all duration-300 ${
+                      isCompleted ? "w-full" : "w-0"
+                    }`}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
@@ -741,7 +760,6 @@ export default function SimpleCreateWidgetForm() {
             className="absolute top-0.5 right-1.5 text-red-400 hover:text-red-600 focus:outline-none"
             aria-label="Dismiss error"
             onClick={() => setError(null)}
-            type="button"
           >
             ×
           </button>
