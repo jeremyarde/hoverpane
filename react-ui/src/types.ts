@@ -4,6 +4,11 @@
 
 export type NanoId = string;
 
+export interface ApiError {
+	message: string;
+	origin: string;
+}
+
 export interface AppSettings {
 	show_tray_icon: boolean;
 }

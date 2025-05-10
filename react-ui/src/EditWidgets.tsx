@@ -15,6 +15,7 @@ import {
   WidgetConfiguration,
   WidgetModifier,
 } from "./types";
+import { getWidgets } from "./clientInterface";
 
 export default function EditWidgets() {
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfiguration[]>([]);
@@ -30,11 +31,15 @@ export default function EditWidgets() {
   const [widgetModifiers, setWidgetModifiers] = useState<
     Record<string, WidgetModifier[]>
   >({});
+  const [editingBounds, setEditingBounds] = useState<{
+    widgetId: string;
+    bounds: WidgetBounds;
+  } | null>(null);
 
   useEffect(() => {
     const fetchWidgets = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:3111/widgets");
+        const response = await getWidgets();
         if (!response.ok) throw new Error("Failed to fetch widgets");
         const data = await response.json();
         setWidgetConfigs(data);
@@ -216,6 +221,26 @@ export default function EditWidgets() {
     }
   };
 
+  const handleBoundsChange = (field: keyof WidgetBounds, value: number) => {
+    if (!editingBounds) return;
+    setEditingBounds({
+      ...editingBounds,
+      bounds: {
+        ...editingBounds.bounds,
+        [field]: value,
+      },
+    });
+  };
+
+  const handleSaveBounds = async () => {
+    if (!editingBounds) return;
+    await handleUpdateWidgetBounds(
+      editingBounds.widgetId,
+      editingBounds.bounds
+    );
+    setEditingBounds(null);
+  };
+
   return (
     <div className="h-full bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="max-w-7xl mx-auto p-4">
@@ -299,16 +324,122 @@ export default function EditWidgets() {
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
                           <p className="text-gray-500">Bounds</p>
-                          <p className="text-gray-900">
-                            {widget.bounds ? (
-                              <>
-                                {widget.bounds.x}, {widget.bounds.y} -{" "}
-                                {widget.bounds.width}×{widget.bounds.height}
-                              </>
-                            ) : (
-                              "Not set"
-                            )}
-                          </p>
+                          {editingBounds?.widgetId === widget.widget_id ? (
+                            <div className="space-y-2 mt-1">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-xs text-gray-500">
+                                    X
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="w-full border border-gray-300 rounded p-1 text-xs"
+                                    value={editingBounds.bounds.x}
+                                    onChange={(e) =>
+                                      handleBoundsChange(
+                                        "x",
+                                        Number(e.target.value)
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-500">
+                                    Y
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="w-full border border-gray-300 rounded p-1 text-xs"
+                                    value={editingBounds.bounds.y}
+                                    onChange={(e) =>
+                                      handleBoundsChange(
+                                        "y",
+                                        Number(e.target.value)
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-xs text-gray-500">
+                                    Width
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="w-full border border-gray-300 rounded p-1 text-xs"
+                                    value={editingBounds.bounds.width}
+                                    onChange={(e) =>
+                                      handleBoundsChange(
+                                        "width",
+                                        Number(e.target.value)
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-500">
+                                    Height
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="w-full border border-gray-300 rounded p-1 text-xs"
+                                    value={editingBounds.bounds.height}
+                                    onChange={(e) =>
+                                      handleBoundsChange(
+                                        "height",
+                                        Number(e.target.value)
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={handleSaveBounds}
+                                  className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setEditingBounds(null)}
+                                  className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <p className="text-gray-900">
+                                {widget.bounds ? (
+                                  <>
+                                    {widget.bounds.x}, {widget.bounds.y} -{" "}
+                                    {widget.bounds.width}×{widget.bounds.height}
+                                  </>
+                                ) : (
+                                  "Not set"
+                                )}
+                              </p>
+                              <button
+                                onClick={() =>
+                                  setEditingBounds({
+                                    widgetId: widget.widget_id,
+                                    bounds: widget.bounds || {
+                                      x: 0,
+                                      y: 0,
+                                      width: 800,
+                                      height: 600,
+                                    },
+                                  })
+                                }
+                                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                title="Edit Bounds"
+                              >
+                                <ArrowsPointingOutIcon className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <div>
                           <p className="text-gray-500">Level</p>

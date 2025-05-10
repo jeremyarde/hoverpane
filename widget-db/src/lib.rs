@@ -1,6 +1,7 @@
 mod api;
 mod db;
 mod db_impl;
+mod deserializer;
 
 use std::{path::PathBuf, sync::Arc};
 

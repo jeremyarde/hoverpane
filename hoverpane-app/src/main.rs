@@ -360,6 +360,19 @@ JSON.stringify({
                 window.WINDOW_ID = "$window_id  ";
                 window.WIDGET_ID = "$widget_id";
                 window.PORT = "$PORT";
+
+                // Add CSS to ensure 100% width and height
+                const style = document.createElement('style');
+                style.textContent = `
+                    html, body {
+                        margin: 0;
+                        padding: 0;
+                        width: 100%;
+                        height: 100%;
+                        overflow: hidden;
+                    }
+                `;
+                document.head.appendChild(style);
                 "#
                 .replace("$window_id", &format!("{:?}", new_window.id()))
                 .replace("$widget_id", &widget_config.widget_id.0)
@@ -1000,10 +1013,10 @@ fn get_controls_widget_config() -> WidgetConfiguration {
                 .replace("$PORT", &API_PORT.to_string()),
         }))
         .with_bounds(WidgetBounds {
-            x: 200,
-            y: 200,
-            width: DEFAULT_WIDGET_WIDTH as u32,
-            height: DEFAULT_WIDGET_HEIGHT as u32,
+            x: 0,
+            y: 0,
+            width: 500,
+            height: 400,
         })
         .with_open(true)
         .with_level(Level::Normal)

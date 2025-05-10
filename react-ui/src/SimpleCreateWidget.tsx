@@ -1,31 +1,45 @@
 import { useState } from "react";
-import { CreateWidgetRequest, Level, WidgetType } from "./types";
+import { CreateWidgetRequest, Level, ApiError, Modifier } from "./types";
 import {
   urlIcon,
   appearanceIcon,
-  settingsIcon,
-  stack,
   stackFront,
+  stack,
   refreshIcon,
   scrapeIcon,
   helpIcon,
 } from "./utils";
+import { createWidget } from "./clientInterface";
 
 const steps = [
   { id: 1, title: "Type", icon: urlIcon },
   { id: 2, title: "Appearance", icon: appearanceIcon },
-  { id: 3, title: "Advanced", icon: settingsIcon },
 ];
 
 const DEFAULT_WIDGET_X = 100;
 const DEFAULT_WIDGET_Y = 100;
-const DEFAULT_WIDGET_WIDTH = 800;
-const DEFAULT_WIDGET_HEIGHT = 600;
+const DEFAULT_WIDGET_WIDTH = 200;
+const DEFAULT_WIDGET_HEIGHT = 200;
 
-type ApiError = {
-  message: string;
-  origin: string;
-};
+interface FormData {
+  type: "url" | "file";
+  url: string;
+  html: string;
+  title: string;
+  transparent: boolean;
+  level: Level;
+  autoRefresh: boolean;
+  scrapeValue: boolean;
+  refreshInterval: number;
+  selector: string;
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  modifiers: Modifier[];
+}
 
 export default function SimpleCreateWidgetForm() {
   const [error, setError] = useState<ApiError | null>(null);
@@ -33,26 +47,24 @@ export default function SimpleCreateWidgetForm() {
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
-  const [widgetType, setWidgetType] = useState<WidgetType>({
-    type: "url",
-    content: { url: "" },
-  });
-  const [selectedLevel, setSelectedLevel] = useState<Level>(Level.Normal);
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [scrapeValue, setScrapeValue] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(30);
-  const [selector, setSelector] = useState("");
-  const [bounds, setBounds] = useState({
-    x: DEFAULT_WIDGET_X,
-    y: DEFAULT_WIDGET_Y,
-    width: DEFAULT_WIDGET_WIDTH,
-    height: DEFAULT_WIDGET_HEIGHT,
-  });
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
+    type: "url" as "url" | "file",
     url: "",
     html: "",
     title: "",
     transparent: true,
+    level: Level.AlwaysOnTop,
+    autoRefresh: false,
+    scrapeValue: false,
+    refreshInterval: 5,
+    selector: "",
+    bounds: {
+      x: DEFAULT_WIDGET_X,
+      y: DEFAULT_WIDGET_Y,
+      width: DEFAULT_WIDGET_WIDTH,
+      height: DEFAULT_WIDGET_HEIGHT,
+    },
+    modifiers: [],
   });
 
   const validateStep = (step: number): boolean => {
@@ -60,31 +72,14 @@ export default function SimpleCreateWidgetForm() {
 
     switch (step) {
       case 1:
-        if (widgetType.type === "url" && !formData.url) {
+        if (formData.type === "url" && !formData.url) {
           errors.url = "URL is required";
-        } else if (widgetType.type === "file" && !formData.html) {
+        } else if (formData.type === "file" && !formData.html) {
           errors.html = "HTML content is required";
         }
         break;
       case 2:
         // No validation needed for appearance
-        break;
-      case 3:
-        if (autoRefresh && refreshInterval < 5) {
-          errors.refreshInterval =
-            "Refresh interval must be at least 5 seconds";
-        }
-        if (scrapeValue && !selector.trim()) {
-          errors.selector = "CSS selector is required when scraping is enabled";
-        }
-        break;
-      case 4:
-        if (bounds.width < 100) {
-          errors.width = "Width must be at least 100px";
-        }
-        if (bounds.height < 100) {
-          errors.height = "Height must be at least 100px";
-        }
         break;
     }
 
@@ -119,143 +114,70 @@ export default function SimpleCreateWidgetForm() {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!validateStep(currentStep)) {
-      return;
-    }
-
-    const data: CreateWidgetRequest = {
-      url: widgetType.type === "url" ? formData.url : "",
-      html: widgetType.type === "file" ? formData.html : "",
-      title: formData.title,
-      level: selectedLevel,
-      transparent: formData.transparent,
-      decorations: false,
-      modifiers: [],
-      bounds: bounds,
-    };
-
-    if (widgetType.type === "url") {
-      if (autoRefresh && refreshInterval >= 5) {
-        data.modifiers.push({
-          type: "refresh",
-          content: {
-            modifier_id: "",
-            interval_sec: refreshInterval,
-          },
-        });
-      }
-      if (scrapeValue && selector.trim()) {
-        data.modifiers.push({
-          type: "scrape",
-          content: {
-            modifier_id: "",
-            selector: selector.trim(),
-          },
-        });
-      }
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateStep(currentStep)) return;
 
     try {
-      const res = await fetch(`http://127.0.0.1:3111/widgets`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
+      const request: CreateWidgetRequest = {
+        url: formData.url,
+        html: formData.html,
+        title: formData.title,
+        level: formData.level,
+        transparent: formData.transparent,
+        decorations: false,
+        bounds: formData.bounds,
+        modifiers: formData.modifiers,
+      };
 
-      if (res.ok) {
-        setError(null);
-        const widget = await res.json();
-        console.log("Widget created:", widget);
-        resetForm();
-      } else {
-        const error = await res.json();
-        setError(error);
+      const response = await createWidget(request);
+
+      if (!response.ok) {
+        throw new Error("Failed to create widget");
       }
-    } catch (fetchError) {
+    } catch (error) {
+      console.error("Error creating widget:", error);
       setError({
-        message: "Network error or API unreachable",
+        message: "Failed to create widget. Please try again.",
         origin: "fetch",
       });
-      console.error("Fetch error:", fetchError);
     }
   };
 
-  const handleQuickCreate = async (e: React.MouseEvent) => {
+  const handleQuickCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Validate both step 1 and current step if we're on step 2
-    if (!validateStep(1) || (currentStep === 2 && !validateStep(2))) {
-      return;
-    }
 
-    const data: CreateWidgetRequest = {
-      url: widgetType.type === "url" ? formData.url : "",
-      html: widgetType.type === "file" ? formData.html : "",
-      title: formData.title,
-      level: selectedLevel,
-      transparent: formData.transparent,
-      decorations: false,
-      modifiers: [],
-      bounds: {
-        x: DEFAULT_WIDGET_X,
-        y: DEFAULT_WIDGET_Y,
-        width: DEFAULT_WIDGET_WIDTH,
-        height: DEFAULT_WIDGET_HEIGHT,
-      },
-    };
+    if (!validateStep(1) || !validateStep(currentStep)) return;
 
     try {
-      const res = await fetch(`http://127.0.0.1:3111/widgets`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
+      const request: CreateWidgetRequest = {
+        url: formData.url,
+        html: formData.html,
+        title: formData.title,
+        level: formData.level,
+        transparent: formData.transparent,
+        decorations: false,
+        bounds: formData.bounds,
+        modifiers: formData.modifiers,
+      };
 
-      if (res.ok) {
-        setError(null);
-        const widget = await res.json();
-        console.log("Widget created:", widget);
-        resetForm();
-      } else {
-        const error = await res.json();
-        setError(error);
+      const response = await createWidget(request);
+
+      if (!response.ok) {
+        throw new Error("Failed to create widget");
       }
-    } catch (fetchError) {
+    } catch (error) {
+      console.error("Error creating widget:", error);
       setError({
-        message: "Network error or API unreachable",
+        message: "Failed to create widget. Please try again.",
         origin: "fetch",
       });
-      console.error("Fetch error:", fetchError);
     }
   };
 
-  const resetForm = () => {
-    setCurrentStep(1);
-    setValidationErrors({});
-    setWidgetType({ type: "url", content: { url: "" } });
-    setSelectedLevel(Level.Normal);
-    setAutoRefresh(false);
-    setScrapeValue(false);
-    setRefreshInterval(30);
-    setSelector("");
-    setBounds({
-      x: DEFAULT_WIDGET_X,
-      y: DEFAULT_WIDGET_Y,
-      width: DEFAULT_WIDGET_WIDTH,
-      height: DEFAULT_WIDGET_HEIGHT,
-    });
-    setFormData({
-      url: "",
-      html: "",
-      title: "",
-      transparent: false,
-    });
+  const handleLevelChange = (level: Level) => {
+    setFormData({ ...formData, level });
   };
 
   const renderStepIndicator = () => (
@@ -339,32 +261,28 @@ export default function SimpleCreateWidgetForm() {
               <button
                 type="button"
                 className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
-                  widgetType.type === "url"
+                  formData.type === "url"
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-gray-600 hover:text-gray-900"
                 }`}
-                onClick={() =>
-                  setWidgetType({ type: "url", content: { url: "" } })
-                }
+                onClick={() => setFormData({ ...formData, type: "url" })}
               >
                 URL
               </button>
               <button
                 type="button"
                 className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
-                  widgetType.type === "file"
+                  formData.type === "file"
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-gray-600 hover:text-gray-900"
                 }`}
-                onClick={() =>
-                  setWidgetType({ type: "file", content: { html: "" } })
-                }
+                onClick={() => setFormData({ ...formData, type: "file" })}
               >
                 HTML/JS
               </button>
             </div>
 
-            {widgetType.type === "url" ? (
+            {formData.type === "url" ? (
               <div>
                 <label htmlFor="url" className={labelClass}>
                   URL
@@ -441,38 +359,46 @@ export default function SimpleCreateWidgetForm() {
 
             <div>
               <label className={labelClass}>Window Level</label>
-              <div className="p-1 bg-gray-100 rounded-lg flex">
+              <div className="flex rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
                 <button
                   type="button"
-                  className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                    selectedLevel === Level.AlwaysOnBottom
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                  onClick={() => setSelectedLevel(Level.AlwaysOnBottom)}
+                  className={`flex-1 flex items-center justify-center gap-1 py-2 text-sm font-medium transition-colors focus:outline-none focus:z-10
+                    ${
+                      formData.level === Level.AlwaysOnBottom
+                        ? "bg-white text-blue-600"
+                        : "bg-gray-50 text-gray-700 hover:bg-white"
+                    }
+                  `}
+                  style={{ borderRight: "1px solid #e5e7eb" }}
+                  onClick={() => handleLevelChange(Level.AlwaysOnBottom)}
                 >
                   {stack}
-                  <span>Bottom</span>
+                  <span>Below</span>
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
-                    selectedLevel === Level.Normal
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                  onClick={() => setSelectedLevel(Level.Normal)}
+                  className={`flex-1 flex items-center justify-center gap-1 py-2 text-sm font-medium transition-colors focus:outline-none focus:z-10
+                    ${
+                      formData.level === Level.Normal
+                        ? "bg-white text-blue-600"
+                        : "bg-gray-50 text-gray-700 hover:bg-white"
+                    }
+                  `}
+                  style={{ borderRight: "1px solid #e5e7eb" }}
+                  onClick={() => handleLevelChange(Level.Normal)}
                 >
                   Normal
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                    selectedLevel === Level.AlwaysOnTop
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                  onClick={() => setSelectedLevel(Level.AlwaysOnTop)}
+                  className={`flex-1 flex items-center justify-center gap-1 py-2 text-sm font-medium transition-colors focus:outline-none focus:z-10
+                    ${
+                      formData.level === Level.AlwaysOnTop
+                        ? "bg-white text-blue-600"
+                        : "bg-gray-50 text-gray-700 hover:bg-white"
+                    }
+                  `}
+                  onClick={() => handleLevelChange(Level.AlwaysOnTop)}
                 >
                   {stackFront}
                   <span>Top</span>
@@ -499,12 +425,7 @@ export default function SimpleCreateWidgetForm() {
                 <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
               </label>
             </div>
-          </div>
-        );
 
-      case 3:
-        return (
-          <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-3 space-y-3">
               <div>
                 <label className={labelClass}>Position & Size</label>
@@ -513,9 +434,15 @@ export default function SimpleCreateWidgetForm() {
                     <span className="text-xs font-medium text-gray-500">X</span>
                     <input
                       type="number"
-                      value={bounds.x}
+                      value={formData.bounds.x}
                       onChange={(e) =>
-                        setBounds({ ...bounds, x: Number(e.target.value) })
+                        setFormData({
+                          ...formData,
+                          bounds: {
+                            ...formData.bounds,
+                            x: Number(e.target.value),
+                          },
+                        })
                       }
                       className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
                         validationErrors.x ? "text-red-500" : ""
@@ -528,9 +455,15 @@ export default function SimpleCreateWidgetForm() {
                     <span className="text-xs font-medium text-gray-500">Y</span>
                     <input
                       type="number"
-                      value={bounds.y}
+                      value={formData.bounds.y}
                       onChange={(e) =>
-                        setBounds({ ...bounds, y: Number(e.target.value) })
+                        setFormData({
+                          ...formData,
+                          bounds: {
+                            ...formData.bounds,
+                            y: Number(e.target.value),
+                          },
+                        })
                       }
                       className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
                         validationErrors.y ? "text-red-500" : ""
@@ -543,9 +476,15 @@ export default function SimpleCreateWidgetForm() {
                     <span className="text-xs font-medium text-gray-500">W</span>
                     <input
                       type="number"
-                      value={bounds.width}
+                      value={formData.bounds.width}
                       onChange={(e) =>
-                        setBounds({ ...bounds, width: Number(e.target.value) })
+                        setFormData({
+                          ...formData,
+                          bounds: {
+                            ...formData.bounds,
+                            width: Number(e.target.value),
+                          },
+                        })
                       }
                       className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
                         validationErrors.width ? "text-red-500" : ""
@@ -558,9 +497,15 @@ export default function SimpleCreateWidgetForm() {
                     <span className="text-xs font-medium text-gray-500">H</span>
                     <input
                       type="number"
-                      value={bounds.height}
+                      value={formData.bounds.height}
                       onChange={(e) =>
-                        setBounds({ ...bounds, height: Number(e.target.value) })
+                        setFormData({
+                          ...formData,
+                          bounds: {
+                            ...formData.bounds,
+                            height: Number(e.target.value),
+                          },
+                        })
                       }
                       className={`w-14 text-xs border-0 p-0 focus:ring-0 ${
                         validationErrors.height ? "text-red-500" : ""
@@ -579,7 +524,7 @@ export default function SimpleCreateWidgetForm() {
                 </div>
               </div>
             </div>
-            {widgetType.type === "url" && (
+            {formData.type === "url" && (
               <>
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between">
@@ -592,14 +537,19 @@ export default function SimpleCreateWidgetForm() {
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={autoRefresh}
-                        onChange={(e) => setAutoRefresh(e.target.checked)}
+                        checked={formData.autoRefresh}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            autoRefresh: e.target.checked,
+                          })
+                        }
                         className="sr-only peer"
                       />
                       <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
                     </label>
                   </div>
-                  {autoRefresh && (
+                  {formData.autoRefresh && (
                     <div className="pl-6">
                       <label className={labelClass}>
                         Refresh Interval (seconds)
@@ -608,9 +558,12 @@ export default function SimpleCreateWidgetForm() {
                         type="number"
                         min="5"
                         max="3600"
-                        value={refreshInterval}
+                        value={formData.refreshInterval}
                         onChange={(e) =>
-                          setRefreshInterval(Number(e.target.value))
+                          setFormData({
+                            ...formData,
+                            refreshInterval: Number(e.target.value),
+                          })
                         }
                         className={`${inputClass} ${
                           validationErrors.refreshInterval
@@ -650,20 +603,27 @@ export default function SimpleCreateWidgetForm() {
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={scrapeValue}
-                        onChange={(e) => setScrapeValue(e.target.checked)}
+                        checked={formData.scrapeValue}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            scrapeValue: e.target.checked,
+                          })
+                        }
                         className="sr-only peer"
                       />
                       <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
                     </label>
                   </div>
-                  {scrapeValue && (
+                  {formData.scrapeValue && (
                     <div className="pl-6">
                       <label className={labelClass}>CSS Selector</label>
                       <input
                         type="text"
-                        value={selector}
-                        onChange={(e) => setSelector(e.target.value)}
+                        value={formData.selector}
+                        onChange={(e) =>
+                          setFormData({ ...formData, selector: e.target.value })
+                        }
                         placeholder="#price, .value, etc."
                         className={`${inputClass} ${
                           validationErrors.selector
@@ -702,18 +662,9 @@ export default function SimpleCreateWidgetForm() {
       }`,
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-    }
-  };
-
   return (
     <div className="max-w-[95%] w-[460px] mx-auto">
-      <form onSubmit={handleSubmit} className="p-2" onKeyDown={handleKeyDown}>
-        <h2 className="font-semibold text-base text-gray-800">
-          Create New Widget
-        </h2>
+      <form onSubmit={handleSubmit} className="p-2">
         {renderStepIndicator()}
         <div className="transition-all duration-300 ease-in-out space-y-4">
           {renderStepContent()}
@@ -729,7 +680,7 @@ export default function SimpleCreateWidgetForm() {
             </button>
           )}
           <div className="flex gap-2">
-            {(currentStep === 1 || currentStep === 2) && (
+            {currentStep === 1 && (
               <button
                 type="button"
                 onClick={handleQuickCreate}
@@ -738,7 +689,7 @@ export default function SimpleCreateWidgetForm() {
                 Quick Create
               </button>
             )}
-            {currentStep < 3 ? (
+            {currentStep < 2 ? (
               <button
                 type="button"
                 onClick={handleNext}

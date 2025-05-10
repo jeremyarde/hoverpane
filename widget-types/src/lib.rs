@@ -8,10 +8,17 @@ pub use event::EventSender;
 pub use event::EventSenderImpl;
 
 pub const API_PORT: u16 = 3111;
-pub const DEFAULT_WIDGET_WIDTH: u32 = 800;
-pub const DEFAULT_WIDGET_HEIGHT: u32 = 600;
-pub const DEFAULT_WIDGET_X: u32 = 100;
-pub const DEFAULT_WIDGET_Y: u32 = 100;
+pub const DEFAULT_WIDGET_WIDTH: u32 = 200;
+pub const DEFAULT_WIDGET_HEIGHT: u32 = 200;
+pub const DEFAULT_WIDGET_X: u32 = 0;
+pub const DEFAULT_WIDGET_Y: u32 = 0;
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct ApiError {
+    pub message: String,
+    pub origin: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[typeshare]

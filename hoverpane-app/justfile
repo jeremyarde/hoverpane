@@ -21,7 +21,7 @@ runo:
     RUST_LOG=info cargo run
 
 run: types frontend
-    RUST_LOG=info cargo run
+    RUST_LOG=info,widget-db=info cargo run
 
 clean:
     rm -rf hoverpane.app
