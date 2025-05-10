@@ -119,6 +119,10 @@ export type ApiAction =
 }}
 	| { type: "minimizewidget", content: {
 	widget_id: string;
+}}
+	| { type: "deletewidgetmodifier", content: {
+	widget_id: string;
+	modifier_id: string;
 }};
 
 export type IpcEvent = 

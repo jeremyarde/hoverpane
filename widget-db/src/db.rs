@@ -131,6 +131,38 @@ pub mod db {
             Ok(Self { conn })
         }
 
+        pub fn get_widget_configuration_by_id(
+            &self,
+            widget_id: &str,
+        ) -> SqliteResult<WidgetConfiguration> {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT * FROM widgets WHERE widget_id = ?")?;
+            let widget = stmt
+                .query_map([widget_id], |row| {
+                    Ok(WidgetConfiguration {
+                        id: row.get(0)?,
+                        widget_id: NanoId(row.get(1)?),
+                        title: row.get(2)?,
+                        widget_type: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                        level: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                        transparent: row.get::<_, i32>(5)? != 0,
+                        decorations: row.get::<_, i32>(6)? != 0,
+                        is_open: row.get::<_, i32>(7)? != 0,
+                        bounds: serde_json::from_str(&row.get::<_, String>(8)?).unwrap(),
+                    })
+                })?
+                .next()
+                .unwrap();
+
+            match widget {
+                Ok(widget) => Ok(widget),
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+
         pub fn get_configuration(&self) -> SqliteResult<Vec<WidgetConfiguration>> {
             let mut stmt = self.conn.prepare("SELECT * FROM widgets")?;
             let widgets = stmt

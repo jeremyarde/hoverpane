@@ -175,10 +175,23 @@ pub mod api {
         info!("Creating widget: {:?}", widget_request.title);
         debug!("Creating widget: {:?}", widget_request);
 
+        let title = if widget_request.title.is_some() {
+            widget_request.title.unwrap()
+        } else {
+            widget_request
+                .url
+                .clone()
+                .unwrap()
+                .split("/")
+                .last()
+                .unwrap_or("")
+                .to_string()
+        };
+
         let widget_config: WidgetConfiguration = WidgetConfiguration {
             id: 0,
             widget_id: widget_types::NanoId(nanoid_gen(8)),
-            title: widget_request.title.unwrap_or("".to_string()),
+            title,
             widget_type: if widget_request.html.is_some()
                 && !widget_request.html.clone().unwrap().is_empty()
             {
@@ -323,7 +336,10 @@ pub mod api {
 
         if state
             .event_sender
-            .send_message(ApiAction::DeleteWidget(widget_id))
+            .send_message(ApiAction::DeleteWidgetModifier {
+                widget_id,
+                modifier_id: modifier_id.clone(),
+            })
             .is_err()
         {
             return Err(ApiError::EventSender(
@@ -347,7 +363,7 @@ pub mod api {
         State(state): State<ApiState>,
         Path(widget_id): Path<String>,
         Json(modifier): Json<WidgetModifier>,
-    ) -> Result<StatusCode, ApiError> {
+    ) -> Result<(StatusCode, Json<WidgetModifier>), ApiError> {
         info!("Adding modifier to widget {}: {:?}", widget_id, modifier);
 
         let widget_modifier = WidgetModifier {
@@ -372,7 +388,7 @@ pub mod api {
         };
 
         let mut db = state.db.lock().await;
-        db.insert_widget_modifier(widget_modifier)?;
-        Ok(StatusCode::CREATED)
+        db.insert_widget_modifier(widget_modifier.clone())?;
+        Ok((StatusCode::CREATED, Json(widget_modifier)))
     }
 }

@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   TrashIcon,
   EyeIcon,
+  EyeSlashIcon,
   ArrowsPointingOutIcon,
   PlusIcon,
   ClockIcon,
@@ -15,7 +16,12 @@ import {
   WidgetConfiguration,
   WidgetModifier,
 } from "./types";
-import { getWidgets } from "./clientInterface";
+import {
+  addWidgetModifier,
+  getWidgetModifiers,
+  getWidgets,
+} from "./clientInterface";
+import Toast from "./Toast";
 
 export default function EditWidgets() {
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfiguration[]>([]);
@@ -34,6 +40,10 @@ export default function EditWidgets() {
   const [editingBounds, setEditingBounds] = useState<{
     widgetId: string;
     bounds: WidgetBounds;
+  } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
   } | null>(null);
 
   useEffect(() => {
@@ -56,9 +66,7 @@ export default function EditWidgets() {
       if (!selectedWidget) return;
 
       try {
-        const response = await fetch(
-          `http://127.0.0.1:3111/widgets/${selectedWidget}/modifiers`
-        );
+        const response = await getWidgetModifiers(selectedWidget);
         if (!response.ok) throw new Error("Failed to fetch modifiers");
         const data = await response.json();
         setWidgetModifiers((prev) => ({
@@ -95,19 +103,11 @@ export default function EditWidgets() {
     if (!selectedWidget || !modifierType || !modifierConfig) return;
 
     try {
-      const response = await fetch(
-        `http://127.0.0.1:3111/widgets/${selectedWidget}/modifiers`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            widget_id: selectedWidget,
-            modifier: modifierConfig,
-          }),
-        }
-      );
+      const response = await addWidgetModifier(selectedWidget, {
+        id: 0,
+        widget_id: selectedWidget,
+        modifier_type: modifierConfig,
+      });
 
       if (!response.ok) throw new Error("Failed to add modifier");
 
@@ -117,8 +117,16 @@ export default function EditWidgets() {
         [selectedWidget]: [...(prev[selectedWidget] || []), data],
       }));
       setIsModalOpen(false);
+      setToast({
+        message: "Modifier added successfully",
+        type: "success",
+      });
     } catch (error) {
       console.error("Error adding modifier:", error);
+      setToast({
+        message: "Failed to add modifier",
+        type: "error",
+      });
     }
   };
 
@@ -302,9 +310,13 @@ export default function EditWidgets() {
                       <button
                         onClick={() => handleHideWidget(widget.widget_id)}
                         className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
-                        title="Hide Widget"
+                        title={widget.is_open ? "Hide Widget" : "Show Widget"}
                       >
-                        <EyeIcon className="h-4 w-4" />
+                        {widget.is_open ? (
+                          <EyeIcon className="h-4 w-4" />
+                        ) : (
+                          <EyeSlashIcon className="h-4 w-4" />
+                        )}
                       </button>
                       <button
                         onClick={() => handleDeleteWidget(widget.widget_id)}
@@ -564,7 +576,7 @@ export default function EditWidgets() {
 
       {/* Modifier Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-[28rem] max-w-[90vw] shadow-xl">
             <h3 className="text-lg font-semibold mb-4">Add Modifier</h3>
 
@@ -661,6 +673,14 @@ export default function EditWidgets() {
             </div>
           </div>
         </div>
+      )}
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

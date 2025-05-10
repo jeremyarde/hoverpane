@@ -139,8 +139,13 @@ impl App {
     fn refresh_webview(&mut self, id: NanoId, refresh_interval_secs: i32) {
         info!("Refreshing webview for: {}", id.0);
 
-        let window_id = self.widget_id_to_window_id[&id];
-        let Some(webview) = self.all_widgets.get_mut(&window_id) else {
+        let window_id = self.widget_id_to_window_id.get(&id);
+        if window_id.is_none() {
+            error!("Webview not found or window is closed");
+            return;
+        }
+
+        let Some(webview) = self.all_widgets.get_mut(&window_id.unwrap()) else {
             error!("Webview not found");
             return;
         };
@@ -412,27 +417,34 @@ JSON.stringify({
             }
         };
 
-        if let Some(webview) = webview {
-            self.widget_id_to_window_id
-                .insert(widget_config.widget_id.clone(), new_window.id());
-            self.window_id_to_widget_id
-                .insert(new_window.id(), widget_config.widget_id.clone());
-            self.all_widgets.insert(
-                new_window.id(),
-                WidgetView {
-                    last_scrape: None,
-                    last_refresh: Instant::now(),
-                    app_webview: AppWebView { webview },
-                    window: new_window,
-                    nano_id: widget_config.widget_id.clone(),
-                    visible: true,
-                    options: WidgetOptions {
-                        title: widget_config.title.clone(),
-                        widget_type: widget_config.widget_type.clone(),
-                    },
-                },
-            );
+        if webview.is_none() {
+            error!("Failed to create webview");
+            return;
         }
+
+        self.widget_id_to_window_id
+            .insert(widget_config.widget_id.clone(), new_window.id());
+        self.window_id_to_widget_id
+            .insert(new_window.id(), widget_config.widget_id.clone());
+        self.all_widgets.insert(
+            new_window.id(),
+            WidgetView {
+                last_scrape: None,
+                last_refresh: Instant::now(),
+                app_webview: AppWebView {
+                    webview: webview.unwrap(),
+                },
+                window: new_window,
+                nano_id: widget_config.widget_id.clone(),
+                visible: true,
+                options: WidgetOptions {
+                    title: widget_config.title.clone(),
+                    widget_type: widget_config.widget_type.clone(),
+                },
+            },
+        );
+
+        // todo: update or create a new widget in the database here?
 
         info!("Widget created: {:?}", widget_config.title);
     }
@@ -458,6 +470,8 @@ JSON.stringify({
             .widget_id_to_window_id
             .get(&NanoId("controls".to_string()))
         else {
+            // let mut widget_config = get_controls_widget_config();
+            // widget_config.is_open = true;
             info!("Controls widget not found");
             self.create_widget(event_loop, get_controls_widget_config());
             return;
@@ -505,13 +519,27 @@ JSON.stringify({
         self.app_settings = settings;
     }
 
-    fn toggle_visibility(&mut self, widget_id: String, visible: bool) {
+    fn toggle_visibility(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        widget_id: String,
+        visible: bool,
+    ) {
         if let Some(window_id) = self.widget_id_to_window_id.get(&NanoId(widget_id.clone())) {
             let widget = self.all_widgets.get_mut(window_id).unwrap();
             widget.visible = visible;
             widget.window.set_visible(visible);
         } else {
+            // widgets that get here should ALWAYS be hidden, so
+            let mut widget_config = self
+                .db
+                .get_widget_configuration_by_id(widget_id.clone().as_str())
+                .unwrap();
+
+            widget_config.is_open = true;
+
             info!("Widget {:?} not found", widget_id);
+            self.create_widget(event_loop, widget_config);
         }
     }
 
@@ -582,6 +610,19 @@ JSON.stringify({
             );
         }
     }
+
+    // fn remove_widget_modifier(&self, widget_id: String, modifier_id: String) -> Result<(), ()> {
+    //     self.db.delete_widget_modifier(modifier_id);
+
+    //     let widget = self.all_widgets.get_mut(&NanoId(widget_id.clone()));
+    //     if widget.is_none() {
+    //         error!("Widget {:?} not found", widget_id);
+    //         return Err(());
+    //     }
+    //     let widget = widget.unwrap();
+    //     widget.modifiers.remove(&NanoId(modifier_id.clone()));
+    //     Ok(())
+    // }
 }
 
 pub struct MenuItems {
@@ -913,7 +954,7 @@ impl ApplicationHandler<UserEvent> for App {
                         self.remove_webview(NanoId(widget_id));
                     }
                     ApiAction::ToggleWidgetVisibility { widget_id, visible } => {
-                        self.toggle_visibility(widget_id, visible);
+                        self.toggle_visibility(event_loop, widget_id, visible);
                     }
                     ApiAction::UpdateWidgetBounds { widget_id, bounds } => {
                         self.update_widget_bounds(widget_id, bounds);
@@ -923,6 +964,14 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                     ApiAction::MinimizeWidget { widget_id } => {
                         self.minimize_webview(NanoId(widget_id));
+                    }
+                    ApiAction::DeleteWidgetModifier {
+                        widget_id,
+                        modifier_id,
+                    } => {
+                        info!("Deleting widget modifier: {:?}", modifier_id);
+                        // self.remove_widget_modifier(widget_id, modifier_id);
+                        self.db.delete_widget_modifier(modifier_id.as_str());
                     }
                 }
             }

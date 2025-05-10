@@ -91,6 +91,10 @@ pub enum ApiAction {
     MinimizeWidget {
         widget_id: String,
     },
+    DeleteWidgetModifier {
+        widget_id: String,
+        modifier_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
