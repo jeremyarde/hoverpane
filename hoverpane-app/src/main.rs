@@ -358,6 +358,7 @@ JSON.stringify({
                     App::ipc_handler(message.body(), proxy_clone.clone());
                 }
             })
+            .with_focused(false)
             .with_hotkeys_zoom(true)
             // .with_traffic_light_inset(PhysicalPosition::new(10, 10))
             .with_initialization_script(
@@ -383,8 +384,7 @@ JSON.stringify({
                 .replace("$widget_id", &widget_config.widget_id.0)
                 .replace("$PORT", &API_PORT.to_string())
                 .as_str(),
-            )
-            .with_focused(true);
+            );
 
         let webview = match &widget_config.widget_type {
             WidgetType::File(file_config) => {
@@ -526,19 +526,20 @@ JSON.stringify({
         visible: bool,
     ) {
         if let Some(window_id) = self.widget_id_to_window_id.get(&NanoId(widget_id.clone())) {
+            info!("TOGGLE VISIBILITY: Widget {:?} found", widget_id);
             let widget = self.all_widgets.get_mut(window_id).unwrap();
-            widget.visible = visible;
-            widget.window.set_visible(visible);
+            widget.visible = !widget.visible;
+            widget.window.set_visible(widget.visible);
+            self.db
+                .update_widget_open_state(NanoId(widget_id), widget.visible);
         } else {
-            // widgets that get here should ALWAYS be hidden, so
+            // create the widget based on widget in the database
             let mut widget_config = self
                 .db
                 .get_widget_configuration_by_id(widget_id.clone().as_str())
                 .unwrap();
-
             widget_config.is_open = true;
-
-            info!("Widget {:?} not found", widget_id);
+            self.db.update_widget_open_state(NanoId(widget_id), true);
             self.create_widget(event_loop, widget_config);
         }
     }
@@ -951,18 +952,23 @@ impl ApplicationHandler<UserEvent> for App {
                         self.create_widget(event_loop, widget_request);
                     }
                     ApiAction::DeleteWidget(widget_id) => {
+                        info!("Deleting widget: {:?}", widget_id);
                         self.remove_webview(NanoId(widget_id));
                     }
                     ApiAction::ToggleWidgetVisibility { widget_id, visible } => {
+                        info!("Toggling widget visibility: {:?}", widget_id);
                         self.toggle_visibility(event_loop, widget_id, visible);
                     }
                     ApiAction::UpdateWidgetBounds { widget_id, bounds } => {
+                        info!("Updating widget bounds: {:?}", widget_id);
                         self.update_widget_bounds(widget_id, bounds);
                     }
                     ApiAction::MaximizeWidget { widget_id } => {
+                        info!("Maximizing widget: {:?}", widget_id);
                         self.maximize_webview(NanoId(widget_id));
                     }
                     ApiAction::MinimizeWidget { widget_id } => {
+                        info!("Minimizing widget: {:?}", widget_id);
                         self.minimize_webview(NanoId(widget_id));
                     }
                     ApiAction::DeleteWidgetModifier {

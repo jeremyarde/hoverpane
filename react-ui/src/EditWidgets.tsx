@@ -219,11 +219,11 @@ export default function EditWidgets() {
 
       if (!response.ok) throw new Error("Failed to hide widget");
 
-      setWidgetConfigs((prev) =>
-        prev.map((w) =>
-          w.widget_id === widgetId ? { ...w, visible: false } : w
-        )
-      );
+      // Refresh widgets data
+      const widgetsResponse = await getWidgets();
+      if (!widgetsResponse.ok) throw new Error("Failed to fetch widgets");
+      const data = await widgetsResponse.json();
+      setWidgetConfigs(data);
     } catch (error) {
       console.error("Error hiding widget:", error);
     }
