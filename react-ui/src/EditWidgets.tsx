@@ -250,7 +250,7 @@ export default function EditWidgets() {
   };
 
   return (
-    <div className="h-full bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="h-full">
       <div className="max-w-7xl mx-auto p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -272,17 +272,15 @@ export default function EditWidgets() {
                 {/* Widget Header */}
                 <div className="p-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleWidget(widget.widget_id)}
-                        className="p-1 rounded hover:bg-gray-100 transition-colors"
-                      >
-                        {expandedWidgets.has(widget.widget_id) ? (
-                          <ChevronDownIcon className="h-4 w-4 text-gray-500" />
-                        ) : (
-                          <ChevronRightIcon className="h-4 w-4 text-gray-500" />
-                        )}
-                      </button>
+                    <div
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                      onClick={() => toggleWidget(widget.widget_id)}
+                    >
+                      {expandedWidgets.has(widget.widget_id) ? (
+                        <ChevronDownIcon className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <ChevronRightIcon className="h-4 w-4 text-gray-500" />
+                      )}
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900">
                           {widget.title}
@@ -294,21 +292,25 @@ export default function EditWidgets() {
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleUpdateWidgetBounds(widget.widget_id, {
                             x: 100,
                             y: 100,
                             width: 800,
                             height: 600,
-                          })
-                        }
+                          });
+                        }}
                         className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
                         title="Update Bounds"
                       >
                         <ArrowsPointingOutIcon className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleHideWidget(widget.widget_id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleHideWidget(widget.widget_id);
+                        }}
                         className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
                         title={widget.is_open ? "Hide Widget" : "Show Widget"}
                       >
@@ -319,7 +321,10 @@ export default function EditWidgets() {
                         )}
                       </button>
                       <button
-                        onClick={() => handleDeleteWidget(widget.widget_id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteWidget(widget.widget_id);
+                        }}
                         className="p-1 text-red-600 hover:text-red-800 transition-colors"
                         title="Delete Widget"
                       >
@@ -517,11 +522,28 @@ export default function EditWidgets() {
                                       ? "Scrape Element"
                                       : "Auto Refresh"}
                                   </div>
-                                  {modifier.modifier_type.type === "scrape" && (
-                                    <div className="text-xs text-gray-500">
-                                      {modifier.modifier_type.content.selector}
-                                    </div>
-                                  )}
+                                  <div className="text-xs text-gray-500">
+                                    {modifier.modifier_type.type ===
+                                    "scrape" ? (
+                                      <div className="flex flex-col">
+                                        <span className="font-mono bg-gray-50 px-1 py-0.5 rounded">
+                                          {
+                                            modifier.modifier_type.content
+                                              .selector
+                                          }
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span>
+                                        Every{" "}
+                                        {
+                                          modifier.modifier_type.content
+                                            .interval_sec
+                                        }{" "}
+                                        seconds
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                               <button
@@ -540,20 +562,7 @@ export default function EditWidgets() {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-4 bg-white rounded border border-gray-200">
-                          <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-blue-50 flex items-center justify-center">
-                            <PlusIcon className="h-4 w-4 text-blue-600" />
-                          </div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            No modifiers added yet
-                          </p>
-                          <button
-                            onClick={() => handleAddModifier(widget.widget_id)}
-                            className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
-                          >
-                            Add your first modifier
-                          </button>
-                        </div>
+                        <div></div>
                       )}
                     </div>
                   </div>
@@ -561,7 +570,7 @@ export default function EditWidgets() {
               </div>
             ))
           ) : (
-            <div className="text-center py-8 bg-white rounded-lg border border-gray-200">
+            <div className="text-center py-4 bg-white border border-gray-200">
               <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-blue-50 flex items-center justify-center">
                 <PlusIcon className="h-6 w-6 text-blue-600" />
               </div>
