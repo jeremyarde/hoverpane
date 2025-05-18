@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import React from "react";
-import { MeshGradient } from "@paper-design/shaders-react";
 import LandingPage from "./LandingPage";
+import Desktop from "./Desktop";
 
 const App: React.FC = () => {
   return (
     <>
-      <LandingPage />
+      {/* <LandingPage /> */}
+      <Desktop />
     </>
   );
 };

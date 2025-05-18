@@ -1,5 +1,6 @@
 import React from "react";
 import "./styles.css";
+import FloatingWidget from "./components/FloatingWidget";
 
 // Placeholder Icons (replace with actual icons or component library)
 // const IconBolt = () => (
@@ -152,6 +153,19 @@ const IconPin = () => (
 const LandingPage: React.FC = () => {
   return (
     <div>
+      <FloatingWidget dragAreaHeight={24} initialPosition={{ x: 100, y: 100 }}>
+        <h3 style={{ margin: "0 0 12px 0", fontSize: "18px" }}>Demo Widget</h3>
+        <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
+          This is how your widgets will look and behave. Try dragging me around!
+        </p>
+      </FloatingWidget>
+
+      <FloatingWidget
+        iframeSrc="/98_widget.html"
+        dragAreaHeight={30}
+        initialPosition={{ x: 300, y: 300 }}
+      />
+
       {/* Navbar */}
       <nav className="navbar">
         <div className="container navbar-content">

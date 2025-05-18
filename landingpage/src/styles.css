@@ -23,9 +23,17 @@
 }
 
 body {
-  font-family: "Inter", system-ui, sans-serif;
-  background-color: var(--color-slate-50);
-  color: var(--color-slate-800);
+  min-height: 100vh;
+  min-width: 100vw;
+  margin: 0;
+  padding: 0;
+  /* Classic Windows blue gradient */
+  background: linear-gradient(135deg, #3a6ea5 0%, #b0c4de 100%);
+  /* Optionally, add a subtle pattern overlay */
+  /* background-image: url('data:image/svg+xml;utf8,<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="%23b0c4de"/><rect x="10" y="10" width="10" height="10" fill="%233a6ea5" fill-opacity="0.05"/></svg>'); */
+  background-repeat: no-repeat;
+  background-size: cover;
+  font-family: "Segoe UI", "MS Sans Serif", "Microsoft Sans Serif", sans-serif;
 }
 
 .container {

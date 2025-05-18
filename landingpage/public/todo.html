@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple Todo List</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+      }
+
+      body {
+        background-color: #f5f5f5;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        padding: 1rem;
+      }
+
+      .todo-container {
+        background-color: white;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 400px;
+        padding: 0.75rem;
+      }
+
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 0.75rem;
+        font-size: 1.25rem;
+      }
+
+      .input-container {
+        display: flex;
+        gap: 0.25rem;
+        margin-bottom: 0.75rem;
+      }
+
+      #todo-input {
+        flex: 1;
+        padding: 0.4rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.9rem;
+      }
+
+      #add-button {
+        padding: 0.4rem 0.75rem;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: background-color 0.2s;
+      }
+
+      #add-button:hover {
+        background-color: #45a049;
+      }
+
+      .todo-list {
+        list-style: none;
+      }
+
+      .todo-item {
+        display: flex;
+        align-items: center;
+        padding: 0.4rem;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+        margin-bottom: 0.25rem;
+        transition: background-color 0.2s;
+      }
+
+      .todo-item:hover {
+        background-color: #f0f0f0;
+      }
+
+      .todo-item.completed {
+        opacity: 0.7;
+      }
+
+      .todo-item.completed span {
+        text-decoration: line-through;
+        color: #888;
+      }
+
+      .todo-item input[type="checkbox"] {
+        margin-right: 0.5rem;
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+      }
+
+      .todo-item span {
+        flex: 1;
+        font-size: 0.9rem;
+      }
+
+      .delete-button {
+        background-color: #ff4444;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        padding: 0.15rem 0.4rem;
+        cursor: pointer;
+        font-size: 0.75rem;
+        transition: background-color 0.2s;
+      }
+
+      .delete-button:hover {
+        background-color: #cc0000;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="todo-container">
+      <div class="input-container">
+        <input type="text" id="todo-input" placeholder="Add a new task..." />
+        <button id="add-button">Add</button>
+      </div>
+      <ul class="todo-list" id="todo-list">
+        <!-- Todo items will be added here dynamically -->
+      </ul>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const todoInput = document.getElementById("todo-input");
+        const addButton = document.getElementById("add-button");
+        const todoList = document.getElementById("todo-list");
+
+        // Load todos from localStorage
+        let todos = JSON.parse(localStorage.getItem("todos")) || [];
+
+        // Function to save todos to localStorage
+        const saveTodos = () => {
+          localStorage.setItem("todos", JSON.stringify(todos));
+        };
+
+        // Function to render todos
+        const renderTodos = () => {
+          todoList.innerHTML = "";
+          todos.forEach((todo, index) => {
+            const li = document.createElement("li");
+            li.className = `todo-item ${todo.completed ? "completed" : ""}`;
+            li.innerHTML = `
+                        <input type="checkbox" ${
+                          todo.completed ? "checked" : ""
+                        }>
+                        <span>${todo.text}</span>
+                        <button class="delete-button">Delete</button>
+                    `;
+
+            // Add event listeners
+            const checkbox = li.querySelector('input[type="checkbox"]');
+            checkbox.addEventListener("change", () => {
+              todos[index].completed = checkbox.checked;
+              saveTodos();
+              renderTodos();
+            });
+
+            const deleteButton = li.querySelector(".delete-button");
+            deleteButton.addEventListener("click", () => {
+              todos.splice(index, 1);
+              saveTodos();
+              renderTodos();
+            });
+
+            todoList.appendChild(li);
+          });
+        };
+
+        // Add new todo
+        const addTodo = () => {
+          const text = todoInput.value.trim();
+          if (text) {
+            todos.push({ text, completed: false });
+            todoInput.value = "";
+            saveTodos();
+            renderTodos();
+          }
+        };
+
+        // Event listeners
+        addButton.addEventListener("click", addTodo);
+        todoInput.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            addTodo();
+          }
+        });
+
+        // Initial render
+        renderTodos();
+      });
+    </script>
+  </body>
+</html>
