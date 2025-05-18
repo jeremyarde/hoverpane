@@ -3,6 +3,9 @@
 :root {
   --color-indigo-600: #4f46e5;
   --color-indigo-700: #4338ca;
+  --color-indigo-500: #6366f1;
+  --color-indigo-200: #c7d2fe;
+  --color-indigo-100: #e0e7ff;
   --color-slate-50: #f8fafc;
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
@@ -14,6 +17,10 @@
   --color-slate-800: #1e293b;
   --color-slate-900: #0f172a;
   --color-white: #ffffff;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-500: #10b981;
+  --color-amber-100: #fef3c7;
+  --color-sky-100: #e0f2fe;
 }
 
 * {
@@ -25,13 +32,8 @@ body {
   min-width: 100vw;
   margin: 0;
   padding: 0;
-  /* Classic Windows blue gradient */
-  background: linear-gradient(135deg, #3a6ea5 0%, #b0c4de 100%);
-  /* Optionally, add a subtle pattern overlay */
-  /* background-image: url('data:image/svg+xml;utf8,<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="%23b0c4de"/><rect x="10" y="10" width="10" height="10" fill="%233a6ea5" fill-opacity="0.05"/></svg>'); */
-  background-repeat: no-repeat;
-  background-size: cover;
-  font-family: "Segoe UI", "MS Sans Serif", "Microsoft Sans Serif", sans-serif;
+  background: var(--color-slate-50);
+  font-family: "Inter", system-ui, sans-serif;
 }
 
 .container {
@@ -456,7 +458,7 @@ body {
 
 .footer-description {
   font-size: 1.125rem;
-  color: var(--color-gray-400);
+  color: var(--color-slate-400);
   max-width: 36rem;
   margin: 0 auto 2rem;
   line-height: 1.75;
@@ -481,23 +483,23 @@ body {
 .made-by {
   margin-top: 2rem;
   font-size: 0.9rem;
-  color: var(--color-gray-400);
+  color: var(--color-slate-400);
 }
 
 .made-by-link {
-  color: var(--color-gray-200);
+  color: var(--color-slate-200);
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
 .made-by-link:hover {
-  color: var(--color-gray-100);
+  color: var(--color-slate-100);
 }
 
 .copyright {
   margin-top: 1rem;
   font-size: 0.8rem;
-  color: var(--color-gray-500);
+  color: var(--color-slate-500);
 }
 
 .demo-video-container {
@@ -509,7 +511,7 @@ body {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
-  background: var(--color-gray-800);
+  background: var(--color-slate-800);
   aspect-ratio: 16 / 9;
 }
 

@@ -18,9 +18,9 @@
 export const paidEarlyAccessLink =
   "https://buy.polar.sh/polar_cl_CInamf8ulWDbVRoLyjWYWI5M8Vkzq2KTjLPDw2wUzQZ";
 
-export const IconCode = () => (
+export const IconCode: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    className="w-8 h-8 text-teal-400"
+    className={className}
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -78,9 +78,11 @@ export const IconCode = () => (
 //     />
 //   </svg>
 // );
-export const IconRefresh = () => (
+export const IconRefresh: React.FC<{ className?: string }> = ({
+  className,
+}) => (
   <svg
-    className="w-8 h-8 text-amber-300"
+    className={className}
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -94,9 +96,9 @@ export const IconRefresh = () => (
     />
   </svg>
 );
-export const IconCheck = () => (
+export const IconCheck: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    className="w-5 h-5 text-teal-400 mr-2 flex-shrink-0"
+    className={className}
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -112,9 +114,11 @@ export const IconCheck = () => (
 );
 
 // New Icons
-export const IconMinimalist = () => (
+export const IconMinimalist: React.FC<{ className?: string }> = ({
+  className,
+}) => (
   <svg
-    className="w-8 h-8 text-indigo-300"
+    className={className}
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -129,9 +133,9 @@ export const IconMinimalist = () => (
   </svg>
 );
 
-export const IconPin = () => (
+export const IconPin: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    className="w-8 h-8 text-sky-300"
+    className={className}
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
