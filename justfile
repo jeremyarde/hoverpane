@@ -23,3 +23,6 @@ macos: sign
 notarize-info:
     xcrun notarytool info f7714a27-e17b-4009-b4c6-d38b1b6f3974 --apple-id $A_ID --team-id 4JJPCY2A78 --password $PASSWORD
     spctl -a -t exec -v /Users/jarde/Documents/code/web-extension-scraper/target/release/hoverpane.app
+
+deploy:
+    wrangler pages deploy landingpage/dist --project-name widget-maker-landing
