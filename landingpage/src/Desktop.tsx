@@ -27,8 +27,8 @@ const Desktop: React.FC = () => {
         </>
       ),
       position: {
-        x: 100,
-        y: 100,
+        x: window.innerWidth * 0.1, // 10% from left
+        y: window.innerHeight * 0.2, // 20% from top
       },
       title: "Google",
       size: {
@@ -45,8 +45,8 @@ const Desktop: React.FC = () => {
         </>
       ),
       position: {
-        x: 300,
-        y: 350,
+        x: window.innerWidth * 0.6, // 60% from left
+        y: window.innerHeight * 0.1, // 10% from top
       },
       title: "ChatGPT",
       size: {
@@ -59,14 +59,14 @@ const Desktop: React.FC = () => {
       type: "Widget 3",
       iframeSrc: "/98_widget.html",
       position: {
-        x: 450,
-        y: 50,
+        x: window.innerWidth * 0.1, // 10% from left
+        y: window.innerHeight * 0.6, // 60% from top
       },
       title: "poke",
       ReactNode: <>{/* <img src={poke}></img> */}</>,
       size: {
         width: 300,
-        height: 250,
+        height: 280,
       },
     },
     {
@@ -74,14 +74,29 @@ const Desktop: React.FC = () => {
       type: "Widget 4",
       iframeSrc: "/todo.html",
       position: {
-        x: 700,
-        y: 700,
+        x: window.innerWidth * 0.6, // 60% from left
+        y: window.innerHeight * 0.6, // 60% from top
       },
       title: "Todo",
       ReactNode: <>{/* <img src={todo}></img> */}</>,
       size: {
         width: 300,
         height: 250,
+      },
+    },
+    {
+      id: 5,
+      type: "Widget 5",
+      iframeSrc: "https://hoverpane.com#features",
+      title: "HoverPane",
+      ReactNode: <>{/* <img src={stock}></img> */}</>,
+      size: {
+        width: 500,
+        height: 400,
+      },
+      position: {
+        x: window.innerWidth / 2 - 200, // Center horizontally (half of width)
+        y: window.innerHeight / 2 - 150, // Center vertically (half of height)
       },
     },
   ]);
@@ -91,7 +106,7 @@ const Desktop: React.FC = () => {
       <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
         <div
           style={{
-            position: "absolute",
+            position: "fixed",
             top: 0,
             left: 0,
             right: 0,
@@ -104,6 +119,7 @@ const Desktop: React.FC = () => {
             fontSize: "13px",
             color: "#333",
             borderBottom: "1px solid rgba(0, 0, 0, 0.1)",
+            zIndex: 1000,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>

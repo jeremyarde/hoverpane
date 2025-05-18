@@ -9,6 +9,7 @@ const App: React.FC = () => {
     <>
       {/* <LandingPage /> */}
       <Desktop />
+      <LandingPage />
     </>
   );
 };
