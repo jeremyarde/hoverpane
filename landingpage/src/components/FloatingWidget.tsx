@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 
 interface FloatingWidgetProps {
-  initialPosition?: { x: number; y: number };
+  initialPosition: { x: number; y: number };
   iframeSrc?: string;
   dragAreaHeight?: number;
   width?: number | string;
@@ -33,7 +33,7 @@ const WindowButton = ({
 );
 
 const FloatingWidget: React.FC<FloatingWidgetProps> = ({
-  initialPosition = { x: 100, y: 100 },
+  initialPosition,
   iframeSrc,
   dragAreaHeight = 30,
   width = 300,
@@ -44,100 +44,136 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
   onMinimize,
   onMaximize,
 }) => {
-  const [position, setPosition] = useState(initialPosition);
+  const [position, setPosition] = useState<{ x: number; y: number }>(
+    initialPosition ?? { x: 100, y: 100 }
+  );
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const widgetRef = useRef<HTMLDivElement>(null);
-  const livePosition = useRef(initialPosition);
-
-  // Update transform directly
-  const updateWidgetTransform = (x: number, y: number) => {
-    if (widgetRef.current) {
-      widgetRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-    }
-  };
-
-  useEffect(() => {
-    // Set initial transform
-    updateWidgetTransform(position.x, position.y);
-  }, []);
-
-  useEffect(() => {
-    // Keep transform in sync if position changes from outside
-    updateWidgetTransform(position.x, position.y);
-    livePosition.current = position;
-  }, [position]);
+  const startPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const startMousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastScrollY = useRef(window.scrollY);
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 0) {
-        // Move to right edge, keeping 20px visible
-        const visiblePart = 20;
-        const y = livePosition.current.y;
-        const x = window.innerWidth - visiblePart;
-        updateWidgetTransform(x, y);
-        livePosition.current = { x, y };
-        setPosition({ x, y });
-      } else {
-        // Restore original position
-        updateWidgetTransform(initialPosition.x, initialPosition.y);
-        livePosition.current = initialPosition;
-        setPosition(initialPosition);
+      const currentScrollY = window.scrollY;
+      const isScrollingDown = currentScrollY > lastScrollY.current;
+      lastScrollY.current = currentScrollY;
+
+      if (widgetRef.current) {
+        const rect = widgetRef.current.getBoundingClientRect();
+        // Check if widget is visible in viewport and we've scrolled past 30% of the viewport
+        const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+        const isAtRightEdge =
+          Math.abs(position.x - (window.innerWidth - 20)) < 1;
+        const hasScrolledEnough = currentScrollY > window.innerHeight * 0.3;
+
+        if (
+          isScrollingDown &&
+          isVisible &&
+          !isAtRightEdge &&
+          hasScrolledEnough
+        ) {
+          // Move to right edge, keeping 20px visible
+          const visiblePart = 20;
+          setPosition((prev) => ({
+            ...prev,
+            x: window.innerWidth - visiblePart,
+          }));
+        } else if (!isScrollingDown && currentScrollY === 0) {
+          // Restore original position when at the top
+          setPosition(initialPosition);
+        }
       }
     };
+
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [initialPosition]);
+  }, [initialPosition, position.x, title]);
+
+  // Add a resize handler to update positions when window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      if (widgetRef.current) {
+        const rect = widgetRef.current.getBoundingClientRect();
+        const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+        const hasScrolledEnough = window.scrollY > window.innerHeight * 0.3;
+
+        if (isVisible && hasScrolledEnough) {
+          const visiblePart = 20;
+          setPosition((prev) => ({
+            ...prev,
+            x: window.innerWidth - visiblePart,
+          }));
+        } else {
+          setPosition(initialPosition);
+        }
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [initialPosition, title]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     if (widgetRef.current) {
-      const rect = widgetRef.current.getBoundingClientRect();
-      setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
+      // Store the current position as the starting point
+      startPos.current = { ...position };
+      startMousePos.current = { x: e.clientX, y: e.clientY };
       setIsDragging(true);
+
+      // Initialize the CSS custom properties with current position
+      widgetRef.current.style.setProperty("--translate-x", `${position.x}px`);
+      widgetRef.current.style.setProperty("--translate-y", `${position.y}px`);
     }
   };
 
   useEffect(() => {
     if (!isDragging) return;
+
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
-      updateWidgetTransform(newX, newY);
-      livePosition.current = { x: newX, y: newY };
+      if (widgetRef.current) {
+        const dx = e.clientX - startMousePos.current.x;
+        const dy = e.clientY - startMousePos.current.y;
+        const newX = startPos.current.x + dx;
+        const newY = startPos.current.y + dy;
+
+        // Update CSS custom properties
+        widgetRef.current.style.setProperty("--translate-x", `${newX}px`);
+        widgetRef.current.style.setProperty("--translate-y", `${newY}px`);
+      }
     };
-    const handleMouseUp = () => {
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (widgetRef.current) {
+        const dx = e.clientX - startMousePos.current.x;
+        const dy = e.clientY - startMousePos.current.y;
+        setPosition({
+          x: startPos.current.x + dx,
+          y: startPos.current.y + dy,
+        });
+      }
       setIsDragging(false);
-      // Commit the final position to React state
-      setPosition(livePosition.current);
     };
+
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, dragOffset]);
+  }, [isDragging]);
 
   // Minimize: move to far right, just barely visible
   const handleMinimize = () => {
     const visiblePart = 20;
-    const y = livePosition.current.y;
-    const x = window.innerWidth - visiblePart;
-    updateWidgetTransform(x, y);
-    livePosition.current = { x, y };
-    setPosition({ x, y });
+    setPosition((prev) => ({ ...prev, x: window.innerWidth - visiblePart }));
     onMinimize?.();
   };
 
   // Maximize: restore to initial position
   const handleMaximize = () => {
-    updateWidgetTransform(initialPosition.x, initialPosition.y);
-    livePosition.current = initialPosition;
     setPosition(initialPosition);
     onMaximize?.();
   };
@@ -156,7 +192,11 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
       style={{
         width: widgetW,
         height: widgetH,
-        // left/top removed, handled by transform
+        transform: isDragging
+          ? "translate3d(var(--translate-x), var(--translate-y), 0)"
+          : `translate3d(${position.x}px, ${position.y}px, 0)`,
+        willChange: "transform",
+        touchAction: "none",
       }}
     >
       <div className="flex flex-col h-full">

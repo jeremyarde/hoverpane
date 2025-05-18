@@ -5,6 +5,7 @@ import FloatingWidget from "./components/FloatingWidget";
 const googleImage = "/google.png";
 const chatGpt = "/gpt.png";
 import trayIcon from "/tray-icon.png";
+import { paidEarlyAccessLink } from "./constants";
 
 const Desktop: React.FC = () => {
   const [widgets] = useState<
@@ -27,8 +28,8 @@ const Desktop: React.FC = () => {
         </>
       ),
       position: {
-        x: window.innerWidth * 0.1, // 10% from left
-        y: window.innerHeight * 0.2, // 20% from top
+        x: window.innerWidth * 0.1,
+        y: 100,
       },
       title: "Google",
       size: {
@@ -45,8 +46,8 @@ const Desktop: React.FC = () => {
         </>
       ),
       position: {
-        x: window.innerWidth * 0.6, // 60% from left
-        y: window.innerHeight * 0.1, // 10% from top
+        x: window.innerWidth * 0.6,
+        y: 100,
       },
       title: "ChatGPT",
       size: {
@@ -59,8 +60,8 @@ const Desktop: React.FC = () => {
       type: "Widget 3",
       iframeSrc: "/98_widget.html",
       position: {
-        x: window.innerWidth * 0.1, // 10% from left
-        y: window.innerHeight * 0.6, // 60% from top
+        x: window.innerWidth * 0.1,
+        y: 600,
       },
       title: "poke",
       ReactNode: <>{/* <img src={poke}></img> */}</>,
@@ -74,8 +75,8 @@ const Desktop: React.FC = () => {
       type: "Widget 4",
       iframeSrc: "/todo.html",
       position: {
-        x: window.innerWidth * 0.6, // 60% from left
-        y: window.innerHeight * 0.6, // 60% from top
+        x: window.innerWidth * 0.6,
+        y: 600,
       },
       title: "Todo",
       ReactNode: <>{/* <img src={todo}></img> */}</>,
@@ -87,16 +88,38 @@ const Desktop: React.FC = () => {
     {
       id: 5,
       type: "Widget 5",
-      iframeSrc: "https://hoverpane.com#features",
       title: "HoverPane",
-      ReactNode: <>{/* <img src={stock}></img> */}</>,
+      ReactNode: (
+        <>
+          <header className="hero">
+            <div className="hero-shape hero-shape-1"></div>
+            <div className="hero-shape hero-shape-2"></div>
+            <div className="hero-content">
+              <h1 className="hero-title">HoverPane</h1>
+              <p className="hero-subtitle">
+                Transform any website into a sleek desktop widget in seconds.
+                Keep your favorite content always visible and easily accessible.
+              </p>
+              <a href={paidEarlyAccessLink} className="hero-button">
+                Get Started
+              </a>
+              <div className="demo-video-container">
+                <video className="demo-video" autoPlay loop muted playsInline>
+                  <source src="/tools-demo.webm" type="video/webm" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            </div>
+          </header>
+        </>
+      ),
       size: {
         width: 500,
         height: 400,
       },
       position: {
-        x: window.innerWidth / 2 - 200, // Center horizontally (half of width)
-        y: window.innerHeight / 2 - 150, // Center vertically (half of height)
+        x: window.innerWidth / 2 - 200,
+        y: 400,
       },
     },
   ]);
@@ -138,30 +161,74 @@ const Desktop: React.FC = () => {
             >
               HoverPane
             </a>
-            <a
-              href="#features"
-              style={{ textDecoration: "none", color: "#333" }}
+            <button
+              onClick={() => {
+                const element = document.getElementById("features");
+                element?.scrollIntoView({ behavior: "smooth" });
+              }}
+              style={{
+                textDecoration: "none",
+                color: "#333",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                font: "inherit",
+              }}
             >
               Features
-            </a>
-            <a
-              href="#how-it-works"
-              style={{ textDecoration: "none", color: "#333" }}
+            </button>
+            <button
+              onClick={() => {
+                const element = document.getElementById("how-it-works");
+                element?.scrollIntoView({ behavior: "smooth" });
+              }}
+              style={{
+                textDecoration: "none",
+                color: "#333",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                font: "inherit",
+              }}
             >
               How It Works
-            </a>
-            <a
-              href="#use-cases"
-              style={{ textDecoration: "none", color: "#333" }}
+            </button>
+            <button
+              onClick={() => {
+                const element = document.getElementById("use-cases");
+                element?.scrollIntoView({ behavior: "smooth" });
+              }}
+              style={{
+                textDecoration: "none",
+                color: "#333",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                font: "inherit",
+              }}
             >
               Ideas
-            </a>
-            <a
-              href="#pricing"
-              style={{ textDecoration: "none", color: "#333" }}
+            </button>
+            <button
+              onClick={() => {
+                const element = document.getElementById("pricing");
+                element?.scrollIntoView({ behavior: "smooth" });
+              }}
+              style={{
+                textDecoration: "none",
+                color: "#333",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                font: "inherit",
+              }}
             >
               Pricing
-            </a>
+            </button>
           </div>
           <div
             style={{
@@ -190,6 +257,7 @@ const Desktop: React.FC = () => {
             height={widget.size?.height}
             title={widget.title}
             iframeSrc={widget.iframeSrc}
+            // scrollThreshold={widget.scrollThreshold ?? 200}
           >
             {widget.ReactNode}
           </FloatingWidget>
