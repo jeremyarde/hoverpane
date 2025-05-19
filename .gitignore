@@ -4,3 +4,5 @@ target/debug/*
 target/
 .env
 widget-util/src/product_config.json
+hoverpane.dmg
+    

@@ -30,3 +30,14 @@ deploy:
 
 logs:
     cat ~/Library/Application\ Support/com.jarde.hoverpane/hoverpane.log
+
+
+release:
+    cd hoverpane-app && cargo build --release
+
+final: release
+    cd hoverpane-app && cargo packager --release --formats app
+
+
+all: release macos
+
