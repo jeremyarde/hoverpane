@@ -1,6 +1,12 @@
 import { MeshGradient } from "@paper-design/shaders-react";
 import React, { useState } from "react";
 import FloatingWidget from "./components/FloatingWidget";
+import Dock from "./components/Dock";
+import {
+  FeaturesIcon,
+  HowItWorksIcon,
+  DownloadIcon,
+} from "./components/DockIcons";
 
 const googleImage = "/google.png";
 const chatGpt = "/gpt.png";
@@ -121,6 +127,33 @@ const Desktop: React.FC = () => {
       },
     },
   ]);
+
+  const dockItems = [
+    {
+      icon: <FeaturesIcon />,
+      label: "Features",
+      onClick: () => {
+        const element = document.getElementById("features");
+        element?.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+    {
+      icon: <HowItWorksIcon />,
+      label: "How",
+      onClick: () => {
+        const element = document.getElementById("how-it-works");
+        element?.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+    {
+      icon: <DownloadIcon />,
+      label: "Download",
+      onClick: () => {
+        const element = document.getElementById("pricing");
+        element?.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+  ];
 
   return (
     <>
@@ -260,6 +293,9 @@ const Desktop: React.FC = () => {
             {widget.ReactNode}
           </FloatingWidget>
         ))}
+
+        {/* Add the Dock component */}
+        <Dock items={dockItems} />
 
         <div
           style={{

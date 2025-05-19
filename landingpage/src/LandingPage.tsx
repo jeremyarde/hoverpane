@@ -272,10 +272,6 @@ const LandingPage: React.FC = () => {
             <ul className="mb-8 space-y-4">
               <li className="flex items-center text-slate-600">
                 <IconCheck className="mr-2 h-5 w-5 text-emerald-500" />
-                <span>Create up to 2 widgets</span>
-              </li>
-              <li className="flex items-center text-slate-600">
-                <IconCheck className="mr-2 h-5 w-5 text-emerald-500" />
                 <span>All widget features unlocked</span>
               </li>
               <li className="flex items-center text-slate-600">
