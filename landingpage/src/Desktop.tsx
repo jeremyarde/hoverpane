@@ -75,7 +75,7 @@ const Desktop: React.FC = () => {
       type: "Widget 4",
       iframeSrc: "/todo.html",
       position: {
-        x: window.innerWidth * 0.6,
+        x: window.innerWidth * 0.75,
         y: 600,
       },
       title: "Todo",
@@ -91,24 +91,22 @@ const Desktop: React.FC = () => {
       title: "HoverPane",
       ReactNode: (
         <>
-          <header className="hero">
-            <div className="hero-shape hero-shape-1"></div>
-            <div className="hero-shape hero-shape-2"></div>
-            <div className="hero-content">
+          <header className="text-center bg-indigo-400 w-full h-full">
+            <div className="hero-content text-white">
               <h1 className="hero-title">HoverPane</h1>
-              <p className="hero-subtitle">
+              <p className="hero-subtitle text-white">
                 Transform any website into a sleek desktop widget in seconds.
                 Keep your favorite content always visible and easily accessible.
               </p>
-              <a href={paidEarlyAccessLink} className="hero-button">
+              <a href={paidEarlyAccessLink} className="hero-button text-white">
                 Get Started
               </a>
-              <div className="demo-video-container">
+              {/* <div className="demo-video-container">
                 <video className="demo-video" autoPlay loop muted playsInline>
                   <source src="/tools-demo.webm" type="video/webm" />
                   Your browser does not support the video tag.
                 </video>
-              </div>
+              </div> */}
             </div>
           </header>
         </>

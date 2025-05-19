@@ -115,7 +115,19 @@ pub mod db {
                 let data_dir = directory.data_dir();
                 std::fs::create_dir_all(data_dir).unwrap();
                 let db_path = data_dir.join("widgets.db");
-                Connection::open(db_path)?
+
+                // Connection::open(db_path)?
+                match Connection::open(&db_path) {
+                    Ok(conn) => conn,
+                    Err(_) => {
+                        // Delete the database file if it exists
+                        if db_path.exists() {
+                            std::fs::remove_file(&db_path).unwrap();
+                        }
+                        // Try opening again after deletion
+                        Connection::open(&db_path)?
+                    }
+                }
             };
             conn.pragma_update_and_check(None, "journal_mode", &"WAL", |_| Ok(()))
                 .unwrap();

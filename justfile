@@ -25,4 +25,8 @@ notarize-info:
     spctl -a -t exec -v /Users/jarde/Documents/code/web-extension-scraper/target/release/hoverpane.app
 
 deploy:
+    cd landingpage && npm run build 
     wrangler pages deploy landingpage/dist --project-name widget-maker-landing
+
+logs:
+    cat ~/Library/Application\ Support/com.jarde.hoverpane/hoverpane.log
