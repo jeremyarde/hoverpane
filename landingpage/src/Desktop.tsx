@@ -158,38 +158,10 @@ const Desktop: React.FC = () => {
   return (
     <>
       <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: "28px",
-            background: "rgba(255, 255, 255, 0.8)",
-            backdropFilter: "blur(10px)",
-            display: "flex",
-            alignItems: "center",
-            padding: "0 10px",
-            fontSize: "13px",
-            color: "#333",
-            borderBottom: "1px solid rgba(0, 0, 0, 0.1)",
-            zIndex: 1000,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-            <img
-              src={trayIcon}
-              alt="tray icon"
-              style={{ width: "16px", height: "16px" }}
-            />
-            <a
-              href="/"
-              style={{
-                fontWeight: "bold",
-                textDecoration: "none",
-                color: "#333",
-              }}
-            >
+        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md flex items-center px-6 text-base text-gray-800 border-b border-gray-200 z-50">
+          <div className="flex items-center gap-6">
+            <img src={trayIcon} alt="tray icon" className="w-6 h-6" />
+            <a href="/" className="font-bold no-underline text-gray-800">
               HoverPane
             </a>
             <button
@@ -197,15 +169,7 @@ const Desktop: React.FC = () => {
                 const element = document.getElementById("features");
                 element?.scrollIntoView({ behavior: "smooth" });
               }}
-              style={{
-                textDecoration: "none",
-                color: "#333",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                font: "inherit",
-              }}
+              className="no-underline text-gray-800 bg-transparent border-none cursor-pointer p-0 font-inherit hover:text-gray-600"
             >
               Features
             </button>
@@ -214,15 +178,7 @@ const Desktop: React.FC = () => {
                 const element = document.getElementById("how-it-works");
                 element?.scrollIntoView({ behavior: "smooth" });
               }}
-              style={{
-                textDecoration: "none",
-                color: "#333",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                font: "inherit",
-              }}
+              className="no-underline text-gray-800 bg-transparent border-none cursor-pointer p-0 font-inherit hover:text-gray-600"
             >
               How It Works
             </button>
@@ -231,15 +187,7 @@ const Desktop: React.FC = () => {
                 const element = document.getElementById("use-cases");
                 element?.scrollIntoView({ behavior: "smooth" });
               }}
-              style={{
-                textDecoration: "none",
-                color: "#333",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                font: "inherit",
-              }}
+              className="no-underline text-gray-800 bg-transparent border-none cursor-pointer p-0 font-inherit hover:text-gray-600"
             >
               Ideas
             </button>
@@ -248,27 +196,12 @@ const Desktop: React.FC = () => {
                 const element = document.getElementById("pricing");
                 element?.scrollIntoView({ behavior: "smooth" });
               }}
-              style={{
-                textDecoration: "none",
-                color: "#333",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                font: "inherit",
-              }}
+              className="no-underline text-gray-800 bg-transparent border-none cursor-pointer p-0 font-inherit hover:text-gray-600"
             >
               Pricing
             </button>
           </div>
-          <div
-            style={{
-              marginLeft: "auto",
-              display: "flex",
-              alignItems: "center",
-              gap: "15px",
-            }}
-          >
+          <div className="ml-auto flex items-center gap-6">
             <span>🔋</span>
             <span>📶</span>
             <span>🔊</span>
