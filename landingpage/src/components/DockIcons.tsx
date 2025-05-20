@@ -1,5 +1,24 @@
 import React from "react";
 
+export const ExampleIcon = () => (
+  <svg
+    width="40"
+    height="40"
+    viewBox="0 0 40 40"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect x="8" y="8" width="24" height="24" rx="4" fill="#4F46E5" />
+    <path
+      d="M16 20H24M20 16V24"
+      stroke="white"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export const FeaturesIcon = () => (
   <svg
     width="40"
@@ -36,7 +55,7 @@ export const HowItWorksIcon = () => (
       fill="none"
     />
     <path
-      d="M20 15V20L24 24"
+      d="M20 25V26M20 15C20 15 22 17 22 19C22 21 20 22 20 22"
       stroke="#4F46E5"
       strokeWidth="2"
       strokeLinecap="round"

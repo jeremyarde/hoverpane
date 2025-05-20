@@ -3,7 +3,7 @@
 use env_logger::Builder;
 // use db::db::Database;
 use log::{error, info, warn, LevelFilter};
-use muda::{accelerator::Modifiers, Menu, PredefinedMenuItem, Submenu};
+use muda::{accelerator::Modifiers, Menu, MenuId, PredefinedMenuItem, Submenu};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -64,6 +64,9 @@ const MAX_WIDGETS: usize = 20;
 #[cfg(not(feature = "pro"))]
 const MAX_WIDGETS: usize = 3;
 
+mod updater;
+use updater::{UpdateInfo, Updater};
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ViewSize {
     width: u32,
@@ -76,6 +79,7 @@ struct ViewSize {
 // }
 
 struct App {
+    updater: Updater,
     tray_icon: TrayIcon,
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     menu_items: MenuItems,
@@ -632,6 +636,7 @@ pub struct MenuItems {
     pub hide_titlebar_id: String,
     pub show_titlebar_id: String,
     pub reset_database_id: String,
+    pub check_updates_id: String,
 }
 
 fn setup_tray_menu(
@@ -644,12 +649,20 @@ fn setup_tray_menu(
     let hide_titlebar_item = tray_icon::menu::MenuItem::new("Hide titlebars", true, None);
     let show_titlebar_item = tray_icon::menu::MenuItem::new("Show titlebars", true, None);
     let reset_database_item = tray_icon::menu::MenuItem::new("Reset database", true, None);
+    let check_updates_item = tray_icon::menu::MenuItem::new("Check for Updates...", true, None);
+    let version_item = tray_icon::menu::MenuItem::new(
+        format!("HoverPane v{}", env!("CARGO_PKG_VERSION")),
+        false,
+        None,
+    );
 
     // Append items and the separator correctly
     tray_menu.append(&show_controls_item).unwrap();
     tray_menu.append(&hide_titlebar_item).unwrap();
     tray_menu.append(&show_titlebar_item).unwrap();
     tray_menu.append(&reset_database_item).unwrap();
+    tray_menu.append(&check_updates_item).unwrap();
+    tray_menu.append(&version_item).unwrap();
     tray_menu
         .append(&tray_icon::menu::PredefinedMenuItem::separator())
         .unwrap();
@@ -660,6 +673,7 @@ fn setup_tray_menu(
     let tray_hide_titlebar_id = hide_titlebar_item.id().0.clone();
     let tray_show_titlebar_id = show_titlebar_item.id().0.clone();
     let tray_reset_database_id = reset_database_item.id().0.clone();
+    let tray_check_updates_id = check_updates_item.id().0.clone();
     let (width, height) = app_icon.dimensions();
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("HoverPane")
@@ -680,6 +694,7 @@ fn setup_tray_menu(
             hide_titlebar_id: tray_hide_titlebar_id,
             show_titlebar_id: tray_show_titlebar_id,
             reset_database_id: tray_reset_database_id,
+            check_updates_id: tray_check_updates_id,
         },
         tray_icon,
     )
@@ -720,16 +735,11 @@ enum UserEvent {
     MenuEvent(muda::MenuEvent),
     TrayIconEvent(tray_icon::TrayIconEvent),
     CreateWidget(CreateWidgetRequest),
-    // Refresh(NanoId),
-    // Scrape(NanoId, String),
     RemoveWebView(NanoId),
-    // ShowNewViewForm,
-    // MoveWebView(NanoId, Direction),
-    // Minimize(NanoId),
-    // Maximize(NanoId),
-    // ToggleElementView(NanoId),
     ExtractResult(ScrapedData),
     SaveSettings(AppSettings),
+    CheckForUpdates,
+    UpdateAvailable(UpdateInfo),
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -846,9 +856,9 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
     }
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, userevent: UserEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         let size = self.current_size;
-        match userevent {
+        match event {
             UserEvent::RemoveWebView(id) => {
                 info!("Removing webview at index {}", id.0);
                 self.remove_webview(id);
@@ -917,6 +927,10 @@ impl ApplicationHandler<UserEvent> for App {
                     val if val == self.menu_items.reset_database_id => {
                         info!("Resetting database");
                         self.reset_database(event_loop);
+                    }
+                    val if val == self.menu_items.check_updates_id => {
+                        info!("Checking for updates");
+                        self.proxy.send_event(UserEvent::CheckForUpdates).unwrap();
                     }
                     _ => {
                         info!("No tray menu show controls id found");
@@ -998,6 +1012,191 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::SaveSettings(app_settings) => {
                 // should not happen?
+            }
+            UserEvent::CheckForUpdates => {
+                let proxy = self.proxy.clone();
+                let current_version = env!("CARGO_PKG_VERSION");
+                // let updater = Updater::new(current_version, "https://api.hoverpane.com/updates");
+                let updater = self.updater.clone();
+
+                thread::spawn(move || {
+                    let rt = Runtime::new().unwrap();
+                    rt.block_on(async {
+                        match updater.check_for_updates().await {
+                            Ok(Some(update_info)) => {
+                                info!("New update available: {:?}", update_info);
+                                proxy
+                                    .send_event(UserEvent::UpdateAvailable(update_info))
+                                    .unwrap();
+                            }
+                            Ok(None) => {
+                                info!("No updates available");
+                            }
+                            Err(e) => {
+                                error!("Failed to check for updates: {}", e);
+                            }
+                        }
+                    });
+                });
+            }
+            UserEvent::UpdateAvailable(update_info) => {
+                let proxy = self.proxy.clone();
+                let updated = self.updater.clone();
+                let quit_id = self.menu_items.quit_id.clone();
+                thread::spawn(move || {
+                    let rt = Runtime::new().unwrap();
+                    rt.block_on(async {
+                        match updated.download_update(&update_info).await {
+                            Ok(update_file) => {
+                                info!("Update downloaded to: {:?}", update_file);
+
+                                // Mount the DMG file
+                                let mount_output = match std::process::Command::new("hdiutil")
+                                    .args([
+                                        "attach",
+                                        "-nobrowse",
+                                        "-plist",
+                                        update_file.to_str().unwrap(),
+                                    ])
+                                    .output()
+                                {
+                                    Ok(output) => output,
+                                    Err(e) => {
+                                        error!("Failed to mount DMG: {}", e);
+                                        return;
+                                    }
+                                };
+
+                                // Parse the plist output to get the mount point
+                                let mount_info = String::from_utf8_lossy(&mount_output.stdout);
+                                let volume_path = mount_info
+                                    .lines()
+                                    .find(|line| line.contains("<key>mount-point</key>"))
+                                    .and_then(|_| {
+                                        mount_info.lines().nth(
+                                            mount_info
+                                                .lines()
+                                                .position(|line| {
+                                                    line.contains("<key>mount-point</key>")
+                                                })
+                                                .unwrap()
+                                                + 1,
+                                        )
+                                    })
+                                    .and_then(|line| {
+                                        line.trim()
+                                            .strip_prefix("<string>")
+                                            .and_then(|s| s.strip_suffix("</string>"))
+                                    })
+                                    .unwrap_or("/Volumes/HoverPane");
+
+                                info!("DMG mounted at: {}", volume_path);
+
+                                // Give a moment for the DMG to mount
+                                std::thread::sleep(std::time::Duration::from_secs(1));
+
+                                // Find the .app in the mounted volume
+                                let app_path = std::fs::read_dir(volume_path)
+                                    .ok()
+                                    .and_then(|mut entries| {
+                                        entries.find(|entry| {
+                                            entry
+                                                .as_ref()
+                                                .map(|e| {
+                                                    e.path()
+                                                        .extension()
+                                                        .map_or(false, |ext| ext == "app")
+                                                })
+                                                .unwrap_or(false)
+                                        })
+                                    })
+                                    .and_then(|entry| entry.ok())
+                                    .map(|entry| entry.path());
+
+                                if let Some(app_path) = app_path {
+                                    info!("Found app at: {:?}", app_path);
+
+                                    // Get the Applications directory
+                                    let applications_dir =
+                                        std::path::PathBuf::from("/Applications");
+                                    let target_path =
+                                        applications_dir.join(app_path.file_name().unwrap());
+
+                                    // Remove the old app if it exists
+                                    if target_path.exists() {
+                                        info!("Removing old app from Applications");
+                                        if let Err(e) = std::process::Command::new("rm")
+                                            .args(["-rf", target_path.to_str().unwrap()])
+                                            .output()
+                                        {
+                                            error!("Failed to remove old app: {}", e);
+                                            // Try to unmount before returning
+                                            let _ = std::process::Command::new("hdiutil")
+                                                .args(["detach", volume_path])
+                                                .output();
+                                            return;
+                                        }
+                                    }
+
+                                    // Copy the new app to Applications
+                                    info!("Copying new app to Applications");
+                                    if let Err(e) = std::process::Command::new("cp")
+                                        .args([
+                                            "-R",
+                                            app_path.to_str().unwrap(),
+                                            target_path.to_str().unwrap(),
+                                        ])
+                                        .output()
+                                    {
+                                        error!("Failed to copy new app: {}", e);
+                                        // Try to unmount before returning
+                                        let _ = std::process::Command::new("hdiutil")
+                                            .args(["detach", volume_path])
+                                            .output();
+                                        return;
+                                    }
+
+                                    // Unmount the DMG
+                                    if let Err(e) = std::process::Command::new("hdiutil")
+                                        .args(["detach", volume_path])
+                                        .output()
+                                    {
+                                        error!("Failed to unmount DMG: {}", e);
+                                    }
+
+                                    info!("Update completed successfully");
+
+                                    // Launch the new version
+                                    if let Err(e) = std::process::Command::new("open")
+                                        .arg(target_path.to_str().unwrap())
+                                        .spawn()
+                                    {
+                                        error!("Failed to launch new version: {}", e);
+                                    }
+
+                                    // Give a moment for the new app to start
+                                    std::thread::sleep(std::time::Duration::from_secs(1));
+
+                                    // Exit the application
+                                    proxy
+                                        .send_event(UserEvent::MenuEvent(muda::MenuEvent {
+                                            id: MenuId::new(quit_id.clone()),
+                                        }))
+                                        .unwrap();
+                                } else {
+                                    error!("Could not find .app in mounted DMG");
+                                    // Try to unmount before returning
+                                    let _ = std::process::Command::new("hdiutil")
+                                        .args(["detach", volume_path])
+                                        .output();
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to download update: {}", e);
+                            }
+                        }
+                    });
+                });
             }
         }
     }
@@ -1236,6 +1435,10 @@ fn main() {
     tray_icon.set_visible(app_settings.show_tray_icon);
 
     let mut app = App {
+        updater: Updater::new(
+            env!("CARGO_PKG_VERSION"),
+            "http://localhost:3001/apps/hoverpane/latest",
+        ),
         tray_icon,
         app_icon: img,
         db: app_db,

@@ -13,9 +13,9 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Hero Section */}
-      <header className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-400 py-24 px-4 text-center md:py-36">
-        <div className="absolute top-0 left-0 h-48 w-64 -translate-x-1/3 -translate-y-1/3 rounded-xl bg-indigo-200 opacity-30"></div>
-        <div className="absolute bottom-0 right-0 h-64 w-80 translate-x-1/4 translate-y-1/4 rounded-xl bg-indigo-200 opacity-30"></div>
+      <header className="overflow-hidden relative px-4 py-24 text-center bg-gradient-to-br from-indigo-600 to-indigo-400 md:py-36">
+        <div className="absolute top-0 left-0 w-64 h-48 bg-indigo-200 rounded-xl opacity-30 -translate-x-1/3 -translate-y-1/3"></div>
+        <div className="absolute right-0 bottom-0 w-80 h-64 bg-indigo-200 rounded-xl opacity-30 translate-x-1/4 translate-y-1/4"></div>
         <div className="relative z-10">
           <h1 className="mb-4 text-4xl font-bold text-white md:text-6xl">
             HoverPane
@@ -26,19 +26,19 @@ const LandingPage: React.FC = () => {
           </p>
           <a
             href={paidEarlyAccessLink}
-            className="inline-block rounded-lg bg-white px-8 py-3 font-bold text-indigo-600 transition-all hover:scale-105 hover:bg-slate-100"
+            className="inline-block px-8 py-3 font-bold text-indigo-600 bg-white rounded-lg transition-all hover:scale-105 hover:bg-slate-100"
           >
             Get Started
           </a>
-          <div className="mx-auto mt-12 max-w-4xl overflow-hidden rounded-xl bg-slate-800 shadow-2xl">
+          <div className="overflow-hidden mx-auto mt-12 max-w-4xl rounded-xl shadow-2xl bg-slate-800">
             <video
-              className="aspect-video w-full object-cover"
+              className="object-cover w-full aspect-video"
               autoPlay
               loop
               muted
               playsInline
             >
-              <source src="/tools-demo.webm" type="video/webm" />
+              <source src="/example1.webm" type="video/webm" />
               Your browser does not support the video tag.
             </video>
           </div>
@@ -46,14 +46,14 @@ const LandingPage: React.FC = () => {
       </header>
 
       {/* Features Section */}
-      <section id="features" className="bg-slate-50 py-20 px-4">
+      <section id="features" className="px-4 py-20 bg-slate-50">
         <div className="mx-auto max-w-8xl">
-          <h2 className="mb-12 text-center text-3xl font-bold text-slate-800">
+          <h2 className="mb-12 text-3xl font-bold text-center text-slate-800">
             Why use HoverPane?
           </h2>
           <div className="grid gap-8 md:grid-cols-2 md:gap-10">
-            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100">
+            <div className="p-6 text-center bg-white rounded-xl border shadow-sm transition-shadow border-slate-200 hover:shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 bg-indigo-100 rounded-full">
                 <IconMinimalist className="w-8 h-8 text-indigo-300" />
               </div>
               <h3 className="mb-2 text-xl font-semibold text-slate-700">
@@ -64,8 +64,8 @@ const LandingPage: React.FC = () => {
                 toolbars, just what matters to you.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-sky-100">
+            <div className="p-6 text-center bg-white rounded-xl border shadow-sm transition-shadow border-slate-200 hover:shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 bg-sky-100 rounded-full">
                 <IconPin className="w-8 h-8 text-sky-300" />
               </div>
               <h3 className="mb-2 text-xl font-semibold text-slate-700">
@@ -76,8 +76,8 @@ const LandingPage: React.FC = () => {
                 on top of other windows, exactly where you need them.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+            <div className="p-6 text-center bg-white rounded-xl border shadow-sm transition-shadow border-slate-200 hover:shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 bg-amber-100 rounded-full">
                 <IconRefresh className="w-8 h-8 text-amber-300" />
               </div>
               <h3 className="mb-2 text-xl font-semibold text-slate-700">
@@ -88,8 +88,8 @@ const LandingPage: React.FC = () => {
                 information current.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+            <div className="p-6 text-center bg-white rounded-xl border shadow-sm transition-shadow border-slate-200 hover:shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 bg-emerald-100 rounded-full">
                 <IconCode className="w-8 h-8 text-emerald-500" />
               </div>
               <h3 className="mb-2 text-xl font-semibold text-slate-700">
@@ -105,14 +105,14 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* How It Works Section */}
-      <section id="how-it-works" className="bg-white py-20 px-4">
+      <section id="how-it-works" className="px-4 py-20 bg-white">
         <div className="mx-auto max-w-8xl">
-          <h2 className="mb-12 text-center text-3xl font-bold text-slate-800">
+          <h2 className="mb-12 text-3xl font-bold text-center text-slate-800">
             Simple Setup
           </h2>
-          <div className="mx-auto grid max-w-4xl gap-8 md:grid-cols-3 md:gap-12">
+          <div className="grid gap-8 mx-auto max-w-4xl md:grid-cols-3 md:gap-12">
             <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-xl font-bold text-white shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 text-xl font-bold text-white bg-indigo-600 rounded-full shadow-md">
                 1
               </div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
@@ -123,7 +123,7 @@ const LandingPage: React.FC = () => {
               </p>
             </div>
             <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-xl font-bold text-white shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 text-xl font-bold text-white bg-indigo-600 rounded-full shadow-md">
                 2
               </div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
@@ -135,7 +135,7 @@ const LandingPage: React.FC = () => {
               </p>
             </div>
             <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-xl font-bold text-white shadow-md">
+              <div className="flex justify-center items-center mx-auto mb-4 w-12 h-12 text-xl font-bold text-white bg-indigo-600 rounded-full shadow-md">
                 3
               </div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
@@ -151,14 +151,14 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Use Cases Section */}
-      <section id="use-cases" className="bg-slate-50 py-20 px-4">
+      <section id="use-cases" className="px-4 py-20 bg-slate-50">
         <div className="mx-auto max-w-8xl">
-          <h2 className="mb-12 text-center text-3xl font-bold text-slate-800">
+          <h2 className="mb-12 text-3xl font-bold text-center text-slate-800">
             Endless Possibilities
           </h2>
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-2xl">
+            <div className="flex gap-4 items-start p-6 bg-white rounded-xl border shadow-sm border-slate-200">
+              <div className="flex justify-center items-center w-10 h-10 text-2xl bg-indigo-100 rounded-full shrink-0">
                 📈
               </div>
               <div>
@@ -170,8 +170,8 @@ const LandingPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-2xl">
+            <div className="flex gap-4 items-start p-6 bg-white rounded-xl border shadow-sm border-slate-200">
+              <div className="flex justify-center items-center w-10 h-10 text-2xl bg-indigo-100 rounded-full shrink-0">
                 🌤️
               </div>
               <div>
@@ -183,8 +183,8 @@ const LandingPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-2xl">
+            <div className="flex gap-4 items-start p-6 bg-white rounded-xl border shadow-sm border-slate-200">
+              <div className="flex justify-center items-center w-10 h-10 text-2xl bg-indigo-100 rounded-full shrink-0">
                 📅
               </div>
               <div>
@@ -196,8 +196,8 @@ const LandingPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-2xl">
+            <div className="flex gap-4 items-start p-6 bg-white rounded-xl border shadow-sm border-slate-200">
+              <div className="flex justify-center items-center w-10 h-10 text-2xl bg-indigo-100 rounded-full shrink-0">
                 ⚡
               </div>
               <div>
@@ -209,8 +209,8 @@ const LandingPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-2xl">
+            <div className="flex gap-4 items-start p-6 bg-white rounded-xl border shadow-sm border-slate-200">
+              <div className="flex justify-center items-center w-10 h-10 text-2xl bg-indigo-100 rounded-full shrink-0">
                 🤖
               </div>
               <div>
@@ -226,20 +226,20 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      <div className="bg-white py-20 px-4">
+      <div className="px-4 py-20 bg-white">
         <div className="mx-auto max-w-8xl">
-          <h2 className="mb-12 text-center text-3xl font-bold text-slate-800">
-            Customize your desktop
+          <h2 className="mb-12 text-3xl font-bold text-center text-slate-800">
+            Customize your desktop with interactive widgets
           </h2>
-          <div className="mx-auto max-w-4xl overflow-hidden rounded-xl bg-slate-800 shadow-2xl">
+          <div className="overflow-hidden mx-auto max-w-4xl rounded-xl shadow-2xl bg-slate-800">
             <video
-              className="aspect-video w-full object-cover"
+              className="object-cover w-full"
               autoPlay
               loop
               muted
               playsInline
             >
-              <source src="/hoverpane-demo.webm" type="video/webm" />
+              <source src="/interactive-widget.webm" type="video/webm" />
               Your browser does not support the video tag.
             </video>
           </div>
@@ -247,16 +247,16 @@ const LandingPage: React.FC = () => {
       </div>
 
       {/* Pricing Section */}
-      <section id="pricing" className="bg-white py-20 px-4">
+      <section id="pricing" className="px-4 py-20 bg-white">
         <div className="mx-auto max-w-8xl">
-          <h2 className="mb-4 text-center text-3xl font-bold text-slate-800">
+          <h2 className="mb-4 text-3xl font-bold text-center text-slate-800">
             Simple Pricing
           </h2>
           <p className="mx-auto mb-12 max-w-2xl text-center text-slate-600">
             Start free, upgrade when you're ready. Early access supporters get
             special benefits.
           </p>
-          <div className="mx-auto max-w-md rounded-xl border-2 border-indigo-500 bg-white p-6 shadow-lg">
+          <div className="p-6 mx-auto max-w-md bg-white rounded-xl border-2 border-indigo-500 shadow-lg">
             <h3 className="mb-2 text-xl font-semibold text-indigo-600">
               Early Access
             </h3>
@@ -266,26 +266,23 @@ const LandingPage: React.FC = () => {
                 / one-time
               </span>
             </p>
-            <p className="mb-6 text-slate-600">
-              Join our early community and help shape the future of HoverPane.
-            </p>
             <ul className="mb-8 space-y-4">
               <li className="flex items-center text-slate-600">
-                <IconCheck className="mr-2 h-5 w-5 text-emerald-500" />
+                <IconCheck className="mr-2 w-5 h-5 text-emerald-500" />
                 <span>All widget features unlocked</span>
               </li>
               <li className="flex items-center text-slate-600">
-                <IconCheck className="mr-2 h-5 w-5 text-emerald-500" />
+                <IconCheck className="mr-2 w-5 h-5 text-emerald-500" />
                 <span>Priority support & feature requests</span>
               </li>
               <li className="flex items-center text-slate-600">
-                <IconCheck className="mr-2 h-5 w-5 text-emerald-500" />
+                <IconCheck className="mr-2 w-5 h-5 text-emerald-500" />
                 <span>Free updates during early access</span>
               </li>
             </ul>
             <a
               href={paidEarlyAccessLink}
-              className="block rounded-lg bg-indigo-600 px-8 py-3 text-center font-bold text-white transition-all hover:bg-indigo-700 hover:scale-105"
+              className="block px-8 py-3 font-bold text-center text-white bg-indigo-600 rounded-lg transition-all hover:bg-indigo-700 hover:scale-105"
             >
               Join Early Access
             </a>
@@ -294,7 +291,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-50 py-16 px-4 text-center">
+      <footer className="px-4 py-16 text-center bg-slate-50">
         <div className="mx-auto max-w-8xl">
           <h2 className="mb-4 text-3xl font-bold text-slate-900">
             Ready to Get Started?
@@ -304,7 +301,7 @@ const LandingPage: React.FC = () => {
           </p>
           <a
             href={paidEarlyAccessLink}
-            className="inline-block rounded-lg bg-indigo-600 px-8 py-3 font-bold text-white transition-all hover:bg-indigo-700 hover:scale-105"
+            className="inline-block px-8 py-3 font-bold text-white bg-indigo-600 rounded-lg transition-all hover:bg-indigo-700 hover:scale-105"
           >
             Download for macOS
           </a>

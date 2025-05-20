@@ -74,7 +74,7 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
           hasScrolledEnough
         ) {
           // Move to right edge, keeping 20px visible
-          const visiblePart = 20;
+          const visiblePart = 40;
           setPosition((prev) => ({
             ...prev,
             x: window.innerWidth - visiblePart,
