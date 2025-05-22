@@ -18,8 +18,8 @@ use std::{
 use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
     ApiAction, AppSettings, ConfigInformation, CreateWidgetRequest, FileConfiguration, IpcEvent,
-    Level, Modifier, MonitorPosition, ScrapedData, UrlConfiguration, WidgetBounds,
-    WidgetConfiguration, WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT,
+    Level, LicenceTier, Modifier, MonitorPosition, ScrapedData, UrlConfiguration, VersionInfo,
+    WidgetBounds, WidgetConfiguration, WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT,
     DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
 };
 use winit::{
@@ -640,6 +640,7 @@ pub struct MenuItems {
 }
 
 fn setup_tray_menu(
+    user_version: LicenceTier,
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     proxy_clone: EventLoopProxy<UserEvent>,
 ) -> (MenuItems, TrayIcon) {
@@ -649,9 +650,13 @@ fn setup_tray_menu(
     let hide_titlebar_item = tray_icon::menu::MenuItem::new("Hide titlebars", true, None);
     let show_titlebar_item = tray_icon::menu::MenuItem::new("Show titlebars", true, None);
     let reset_database_item = tray_icon::menu::MenuItem::new("Reset database", true, None);
-    let check_updates_item = tray_icon::menu::MenuItem::new("Check for Updates...", true, None);
+    let check_updates_item = tray_icon::menu::MenuItem::new("Check for updates...", true, None);
     let version_item = tray_icon::menu::MenuItem::new(
-        format!("HoverPane v{}", env!("CARGO_PKG_VERSION")),
+        format!(
+            "HoverPane ({:?}) v{}",
+            user_version,
+            env!("CARGO_PKG_VERSION")
+        ),
         false,
         None,
     );
@@ -993,6 +998,14 @@ impl ApplicationHandler<UserEvent> for App {
                         // self.remove_widget_modifier(widget_id, modifier_id);
                         self.db.delete_widget_modifier(modifier_id.as_str());
                     }
+                    ApiAction::CheckLicence {
+                        user_email,
+                        licence_key,
+                    } => {
+                        info!("Checking licence: {:?}, {:?}", user_email, licence_key);
+                        let user_version = check_user_version(&mut self.app_settings);
+                        info!("User version: {:?}", user_version);
+                    }
                 }
             }
             UserEvent::IpcEvent(ipc_event) => {
@@ -1276,10 +1289,109 @@ fn get_controls_widget_config() -> WidgetConfiguration {
         .with_level(Level::Normal)
 }
 
+const LICENCE_CHECK_URL: &str = "http://localhost:3001/licence/check";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineInfo {
+    pub os: String,
+    pub arch: String,
+    pub machine_id: String,
+}
+
+fn get_machine_info() -> MachineInfo {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    let machine_id = machine_uid::get().unwrap();
+    let hashed_id = blake3::hash(machine_id.as_bytes());
+
+    MachineInfo {
+        machine_id: hashed_id.to_string(),
+        os: os.to_string(),
+        arch: arch.to_string(),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LicenceCheckResponse {
+    Valid {
+        user_id: String,
+        licence_tier: LicenceTier,
+        valid: bool,
+    },
+    Invalid {
+        error: String,
+        message: String,
+    },
+}
+
+fn check_user_version(app_settings: &mut AppSettings) -> Option<LicenceTier> {
+    let client = reqwest::blocking::Client::new();
+    // get some information about the machine
+    // let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string());
+    // let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    let version = std::env::var("VERSION").unwrap_or_else(|_| "unknown".to_string());
+    let machine_id = machine_uid::get().unwrap();
+    let hashed_id = blake3::hash(machine_id.as_bytes());
+
+    let request = json!({
+        "user_email": app_settings.user_email,
+        "licence_key": app_settings.licence_key,
+        "machine_id": hashed_id.to_string(),
+        "os": os,
+        "arch": arch,
+        "version": version,
+    });
+
+    info!("Request: {:?}", request);
+
+    let res = client.post(LICENCE_CHECK_URL).json(&request).send();
+
+    if let Err(e) = res {
+        error!("Failed to send request: {}", e);
+        return None;
+    }
+
+    let body = res.unwrap().text().unwrap();
+    info!("Response body: {}", body);
+    let version_info: Value = match serde_json::from_str(&body) {
+        Ok(version_info) => version_info,
+        Err(e) => {
+            error!("Failed to parse response: {}", e);
+            return None;
+        }
+    };
+
+    if version_info.get("error").is_some() {
+        error!("Error from licence check: {}", version_info);
+        return None;
+    }
+
+    let licence_check_response = match serde_json::from_value::<LicenceCheckResponse>(version_info)
+    {
+        Ok(licence_check_response) => licence_check_response,
+        Err(e) => {
+            error!("Failed to parse licence check response: {}", e);
+            return None;
+        }
+    };
+
+    info!("Response from licence check: {:?}", licence_check_response);
+    match licence_check_response {
+        LicenceCheckResponse::Valid { licence_tier, .. } => Some(licence_tier),
+        LicenceCheckResponse::Invalid { .. } => None,
+    }
+}
+
 fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
     if !settings_filepath.exists() {
         let app_settings = AppSettings {
             show_tray_icon: true,
+            user_email: "".to_string(),
+            licence_key: "".to_string(),
+            machine_id: machine_uid::get().unwrap(),
+            licence_tier: LicenceTier::Free,
         };
         std::fs::create_dir_all(settings_filepath.parent().unwrap()).unwrap();
         let config_file = OpenOptions::new()
@@ -1290,7 +1402,21 @@ fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
         serde_json::to_writer(&config_file, &app_settings).unwrap();
     }
 
-    serde_json::from_reader(File::open(settings_filepath.clone()).unwrap()).unwrap()
+    let app_settings = match serde_json::from_reader(File::open(settings_filepath.clone()).unwrap())
+    {
+        Ok(settings) => settings,
+        Err(e) => {
+            error!("Error loading app settings: {:?}", e);
+            AppSettings {
+                show_tray_icon: true,
+                user_email: "".to_string(),
+                licence_key: "".to_string(),
+                machine_id: machine_uid::get().unwrap(),
+                licence_tier: LicenceTier::Free,
+            }
+        }
+    };
+    app_settings
 }
 
 fn setup_logging(config_dir: &Path) {
@@ -1431,7 +1557,11 @@ fn main() {
         .into_rgba8();
     let (width, height) = img.dimensions();
 
-    let (menu_items, tray_icon) = setup_tray_menu(img.clone(), event_loop_proxy.clone());
+    let (menu_items, tray_icon) = setup_tray_menu(
+        app_settings.licence_tier.clone(),
+        img.clone(),
+        event_loop_proxy.clone(),
+    );
     tray_icon.set_visible(app_settings.show_tray_icon);
 
     let mut app = App {
@@ -1553,4 +1683,17 @@ fn main() {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_machine_info() {
+        let machineid = machine_uid::get().unwrap();
+        println!("Machine ID: {:?}", machineid);
+        let hashed_id = blake3::hash(machineid.as_bytes());
+        println!("Hashed ID: {:?}", hashed_id);
+
+        let machine_info = get_machine_info();
+        println!("Machine info: {:?}", machine_info);
+    }
+}

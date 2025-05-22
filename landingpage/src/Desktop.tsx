@@ -206,11 +206,8 @@ const Desktop: React.FC = () => {
               </button>
             </div>
             <div className="flex gap-6 items-center ml-auto">
-              <span>🔋</span>
-              <span>📶</span>
-              <span>🔊</span>
-              <span>🔍</span>
-              <span>{new Date().toLocaleTimeString()}</span>
+              {/* <span>{new Date().toLocaleTimeString()}</span>*/}
+              <a>Purchase</a>
             </div>
           </div>
           {/* Floating Widgets */}

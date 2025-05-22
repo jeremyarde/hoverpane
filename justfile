@@ -1,6 +1,6 @@
 set dotenv-load
 
-version := "0.6.0"
+version := `cd hoverpane-app && cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version'`
 
 notarize:
     xcrun notarytool submit --apple-id $A_ID --password $PASSWORD --team-id 4JJPCY2A78 hoverpane-{{version}}.dmg --wait
@@ -44,5 +44,5 @@ version:
     cd hoverpane-app && cargo version
 
 
-all: release macos version
+all: final macos version
 

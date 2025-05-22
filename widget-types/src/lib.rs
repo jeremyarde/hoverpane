@@ -13,6 +13,13 @@ pub const DEFAULT_WIDGET_HEIGHT: u32 = 200;
 pub const DEFAULT_WIDGET_X: u32 = 0;
 pub const DEFAULT_WIDGET_Y: u32 = 0;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionInfo {
+    pub version: String,
+    pub licence_key: String,
+    pub user_version: LicenceTier,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
 pub struct ApiError {
@@ -39,8 +46,19 @@ pub struct DragEvent {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
+pub enum LicenceTier {
+    Pro,
+    Free,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
 pub struct AppSettings {
     pub show_tray_icon: bool,
+    pub user_email: String,
+    pub licence_key: String,
+    pub machine_id: String,
+    pub licence_tier: LicenceTier,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -94,6 +112,10 @@ pub enum ApiAction {
     DeleteWidgetModifier {
         widget_id: String,
         modifier_id: String,
+    },
+    CheckLicence {
+        user_email: String,
+        licence_key: String,
     },
 }
 

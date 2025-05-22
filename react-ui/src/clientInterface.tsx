@@ -129,3 +129,24 @@ export const minimizeWidget = async (widgetId: string) => {
   });
   return response;
 };
+
+export const checkLicence = async (
+  widgetId: string,
+  user_email: string,
+  licence_key: string
+) => {
+  const response = await fetch(`${API_URL}/widgets/${widgetId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      type: "checklicence",
+      content: {
+        user_email: user_email,
+        licence_key: licence_key,
+      },
+    } as ApiAction),
+  });
+  return response;
+};

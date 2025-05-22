@@ -5,6 +5,7 @@ import EditWidgets from "./EditWidgets";
 import DataWidget from "./DataWidget";
 import SettingsWidget from "./SettingsWidget";
 import SimpleCreateWidgetForm from "./SimpleCreateWidget";
+// import { Checkout } from "./Checkout";
 
 interface RustMessage {
   data_key: string;
@@ -32,7 +33,7 @@ type Component = "create" | "edit" | "data" | "settings";
 const App = () => {
   const [displayedWidget, setDisplayedWidget] = useState<Component>("create");
   return (
-    <div className="min-h-screen flex justify-center p-4">
+    <div className="flex justify-center p-4 min-h-screen">
       <div className="flex flex-col min-w-[400px]">
         <div className="flex flex-row">
           <button
@@ -81,7 +82,17 @@ const App = () => {
           {displayedWidget === "create" && <SimpleCreateWidgetForm />}
           {displayedWidget === "edit" && <EditWidgets />}
           {displayedWidget === "data" && <DataWidget />}
-          {displayedWidget === "settings" && <SettingsWidget />}
+          {displayedWidget === "settings" && (
+            <div className="p-4">
+              <SettingsWidget />
+              {/* <div className="mt-8">
+                <Checkout
+                  onSuccess={() => console.log("Checkout successful")}
+                  onError={(error) => console.error("Checkout error:", error)}
+                />
+              </div> */}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -9,8 +9,17 @@ export interface ApiError {
 	origin: string;
 }
 
+export enum LicenceTier {
+	Pro = "Pro",
+	Free = "Free",
+}
+
 export interface AppSettings {
 	show_tray_icon: boolean;
+	user_email: string;
+	licence_key: string;
+	machine_id: string;
+	licence_tier: LicenceTier;
 }
 
 export enum Level {
@@ -123,6 +132,10 @@ export type ApiAction =
 	| { type: "deletewidgetmodifier", content: {
 	widget_id: string;
 	modifier_id: string;
+}}
+	| { type: "checklicence", content: {
+	user_email: string;
+	licence_key: string;
 }};
 
 export type IpcEvent = 
