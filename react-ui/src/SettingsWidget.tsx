@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { AppSettings, IpcEvent, LicenceTier } from "./types";
 import { checkLicence } from "./clientInterface";
+import { CREATE_PURCHASE_URL } from "./constants";
 
 // make a default settings object
 const defaultSettings: AppSettings = {
@@ -128,6 +129,34 @@ export default function SettingsWidget() {
                 >
                   Verify Licence
                 </button>
+                {appSettings.licence_tier === LicenceTier.Free && (
+                  <button
+                    className="px-4 py-1 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                    onClick={async () => {
+                      const res = await fetch(CREATE_PURCHASE_URL, {
+                        method: "POST",
+                        body: JSON.stringify({
+                          email: appSettings.user_email,
+                        }),
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        console.log("Purchase successful", data);
+                        if (data.url) {
+                          window.open(data.url, "_blank");
+                        }
+                      } else {
+                        const data = await res.json();
+                        console.error("Failed to purchase licence", data);
+                      }
+                    }}
+                  >
+                    Buy Pro
+                  </button>
+                )}
               </div>
             </div>
           </div>
