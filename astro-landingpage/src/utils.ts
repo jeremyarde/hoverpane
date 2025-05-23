@@ -22,13 +22,17 @@ const getDownloadUrl = async (url: string): Promise<DownloadUrlResponse> => {
 const handleDownload = async () => {
   try {
     const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
-    const newWindow = window.open(data.download_url, "_blank");
-    if (newWindow) {
-      newWindow.opener = null;
-    }
+
+    const link = document.createElement("a");
+    link.href = data.download_url;
+    const filename = data.download_url.split("/").pop() || "hoverpane-download";
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   } catch (error) {
     console.error("Download failed:", error);
   }
 };
 
-export { getDownloadUrl, handleDownload };
+export { handleDownload };

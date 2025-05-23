@@ -14,7 +14,7 @@ const chatGpt = "/gpt.png";
 import trayIcon from "../assets/tray-icon.png";
 import wallpaper from "../assets/wallpaper.png";
 import wallpaperGaus from "../assets/wallpaper-gaus.png";
-import { getDownloadUrl, handleDownload } from "../utils";
+import { handleDownload } from "../utils";
 import { HOVERPANE_DOWNLOAD_URL } from "./constants";
 
 const Desktop: React.FC = () => {

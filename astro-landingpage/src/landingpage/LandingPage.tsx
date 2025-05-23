@@ -9,7 +9,7 @@ import {
   HOVERPANE_DOWNLOAD_URL,
 } from "./constants";
 import wallpaperGaus from "../assets/wallpaper-gaus.png";
-import { getDownloadUrl } from "../utils";
+import { handleDownload } from "../utils";
 
 const LandingPage: React.FC = () => {
   return (
@@ -39,10 +39,7 @@ const LandingPage: React.FC = () => {
             your favorite content always visible and easily accessible.
           </p>
           <button
-            onClick={async () => {
-              const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
-              window.open(data.download_url, "_blank");
-            }}
+            onClick={handleDownload}
             className="inline-block px-8 py-3 font-bold text-indigo-600 bg-white rounded-lg transition-all hover:scale-105 hover:bg-slate-100"
           >
             Get Started
@@ -298,13 +295,10 @@ const LandingPage: React.FC = () => {
               </li>
             </ul>
             <button
-              onClick={async () => {
-                const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
-                window.open(data.download_url, "_blank");
-              }}
+              onClick={handleDownload}
               className="block px-8 py-3 font-bold text-center text-white bg-indigo-600 rounded-lg transition-all hover:bg-indigo-700 hover:scale-105"
             >
-              Download
+              Download for free
             </button>
           </div>
         </div>
@@ -320,10 +314,7 @@ const LandingPage: React.FC = () => {
             Transform your desktop experience today. Try HoverPane for free.
           </p>
           <button
-            onClick={async () => {
-              const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
-              window.open(data.download_url, "_blank");
-            }}
+            onClick={handleDownload}
             className="inline-block px-8 py-3 font-bold text-white bg-indigo-600 rounded-lg transition-all hover:bg-indigo-700 hover:scale-105"
           >
             Download for macOS
