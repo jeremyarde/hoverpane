@@ -1,0 +1,21 @@
+---
+import App from "../landingpage/App.tsx";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/tray-icon.png" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta
+      name="description"
+      content="Transform any website into a sleek desktop widget in seconds. Keep your favorite content always visible and easily accessible."
+    />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>HoverPane - Desktop Widgets Made Simple</title>
+  </head>
+  <body>
+    <App client:only="react" />
+  </body>
+</html>

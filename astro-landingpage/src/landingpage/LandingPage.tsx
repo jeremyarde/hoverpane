@@ -1,21 +1,35 @@
 import React from "react";
-import "./styles.css";
+import "../styles/global.css";
 import {
-  paidEarlyAccessLink,
   IconMinimalist,
   IconPin,
   IconRefresh,
   IconCode,
   IconCheck,
+  HOVERPANE_DOWNLOAD_URL,
 } from "./constants";
+import wallpaperGaus from "../assets/wallpaper-gaus.png";
+import { getDownloadUrl } from "../utils";
 
 const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Hero Section */}
       <header className="overflow-hidden relative px-4 py-24 text-center bg-gradient-to-br from-indigo-600 to-indigo-400 md:py-36">
-        <div className="absolute top-0 left-0 w-64 h-48 bg-indigo-200 rounded-xl opacity-30 -translate-x-1/3 -translate-y-1/3"></div>
-        <div className="absolute right-0 bottom-0 w-80 h-64 bg-indigo-200 rounded-xl opacity-30 translate-x-1/4 translate-y-1/4"></div>
+        {/* <img
+          src={wallpaperGaus.src}
+          alt="wallpaper"
+          className="absolute top-0 left-0 w-full h-full"
+        /> */}
+        <div className="gradient-background">
+          <img
+            src={wallpaperGaus.src}
+            alt="wallpaper"
+            className="absolute top-0 left-0 w-full h-full"
+          />
+        </div>
+        {/* <div className="absolute top-0 left-0 w-64 h-48 bg-indigo-200 rounded-xl opacity-30 -translate-x-1/3 -translate-y-1/3"></div>
+        <div className="absolute right-0 bottom-0 w-80 h-64 bg-indigo-200 rounded-xl opacity-30 translate-x-1/4 translate-y-1/4"></div> */}
         <div className="relative z-10">
           <h1 className="mb-4 text-4xl font-bold text-white md:text-6xl">
             HoverPane
@@ -24,12 +38,15 @@ const LandingPage: React.FC = () => {
             Transform any website into a sleek desktop widget in seconds. Keep
             your favorite content always visible and easily accessible.
           </p>
-          <a
-            href={paidEarlyAccessLink}
+          <button
+            onClick={async () => {
+              const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
+              window.open(data.download_url, "_blank");
+            }}
             className="inline-block px-8 py-3 font-bold text-indigo-600 bg-white rounded-lg transition-all hover:scale-105 hover:bg-slate-100"
           >
             Get Started
-          </a>
+          </button>
           <div className="overflow-hidden mx-auto mt-12 max-w-4xl rounded-xl shadow-2xl bg-slate-800">
             <video
               className="object-cover w-full aspect-video"
@@ -280,12 +297,15 @@ const LandingPage: React.FC = () => {
                 <span>Free updates during early access</span>
               </li>
             </ul>
-            <a
-              href={paidEarlyAccessLink}
+            <button
+              onClick={async () => {
+                const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
+                window.open(data.download_url, "_blank");
+              }}
               className="block px-8 py-3 font-bold text-center text-white bg-indigo-600 rounded-lg transition-all hover:bg-indigo-700 hover:scale-105"
             >
-              Join Early Access
-            </a>
+              Download
+            </button>
           </div>
         </div>
       </section>
@@ -299,19 +319,22 @@ const LandingPage: React.FC = () => {
           <p className="mx-auto mb-8 max-w-2xl text-slate-600">
             Transform your desktop experience today. Try HoverPane for free.
           </p>
-          <a
-            href={paidEarlyAccessLink}
+          <button
+            onClick={async () => {
+              const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
+              window.open(data.download_url, "_blank");
+            }}
             className="inline-block px-8 py-3 font-bold text-white bg-indigo-600 rounded-lg transition-all hover:bg-indigo-700 hover:scale-105"
           >
             Download for macOS
-          </a>
+          </button>
           <p className="mt-8 text-sm text-slate-400">
             Made by{" "}
             <a
               href="https://jeremyarde.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-slate-200 hover:text-slate-100"
+              className="text-slate-800 hover:text-slate-100"
             >
               Jeremy
             </a>

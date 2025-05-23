@@ -145,8 +145,8 @@ export default function SettingsWidget() {
                       if (res.ok) {
                         const data = await res.json();
                         console.log("Purchase successful", data);
-                        if (data.url) {
-                          window.open(data.url, "_blank");
+                        if (data.checkout_session_url) {
+                          window.open(data.checkout_session_url, "_blank");
                         }
                       } else {
                         const data = await res.json();

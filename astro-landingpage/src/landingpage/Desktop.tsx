@@ -1,4 +1,4 @@
-import { MeshGradient } from "@paper-design/shaders-react";
+// import { MeshGradient } from "@paper-design/shaders-react";
 import React, { useState } from "react";
 import FloatingWidget from "./components/FloatingWidget";
 import Dock from "./components/Dock";
@@ -11,8 +11,11 @@ import {
 
 const googleImage = "/google.png";
 const chatGpt = "/gpt.png";
-import trayIcon from "/tray-icon.png";
-import { paidEarlyAccessLink } from "./constants";
+import trayIcon from "../assets/tray-icon.png";
+import wallpaper from "../assets/wallpaper.png";
+import wallpaperGaus from "../assets/wallpaper-gaus.png";
+import { getDownloadUrl } from "../utils";
+import { HOVERPANE_DOWNLOAD_URL } from "./constants";
 
 const Desktop: React.FC = () => {
   const [widgets] = useState<
@@ -105,9 +108,15 @@ const Desktop: React.FC = () => {
                 Transform any website into a sleek desktop widget in seconds.
                 Keep your favorite content always visible and easily accessible.
               </p>
-              <a href={paidEarlyAccessLink} className="text-white hero-button">
+              <button
+                onClick={async () => {
+                  const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
+                  window.open(data.download_url, "_blank");
+                }}
+                className="text-white hero-button"
+              >
                 Get Started
-              </a>
+              </button>
             </div>
           </header>
         </>
@@ -164,7 +173,7 @@ const Desktop: React.FC = () => {
         <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
           <div className="flex fixed top-0 right-0 left-0 z-50 items-center px-6 h-16 text-base text-gray-800 border-b border-gray-200 backdrop-blur-md bg-white/80">
             <div className="flex gap-6 items-center">
-              <img src={trayIcon} alt="tray icon" className="w-6 h-6" />
+              <img src={trayIcon.src} alt="tray icon" className="w-6 h-6" />
               <a href="/" className="font-bold text-gray-800 no-underline">
                 HoverPane
               </a>
@@ -207,7 +216,15 @@ const Desktop: React.FC = () => {
             </div>
             <div className="flex gap-6 items-center ml-auto">
               {/* <span>{new Date().toLocaleTimeString()}</span>*/}
-              <a>Purchase</a>
+              <button
+                onClick={async () => {
+                  const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
+                  window.open(data.download_url, "_blank");
+                }}
+                className="p-2 text-gray-800 no-underline bg-transparent rounded-md border-none cursor-pointer font-inherit hover:text-gray-600 hover:bg-yellow-200"
+              >
+                Download
+              </button>
             </div>
           </div>
           {/* Floating Widgets */}
@@ -228,30 +245,25 @@ const Desktop: React.FC = () => {
             </FloatingWidget>
           ))}
 
-          {/* Add the Dock component */}
-          <Dock items={dockItems} />
-
           <div
+            className=""
             style={{
-              width: "100%",
+              width: "100vw",
               height: "100vh",
-              position: "relative",
+              position: "absolute",
               zIndex: -1,
+              // background: "blue",
+              top: 0,
+              left: 0,
             }}
           >
-            <MeshGradient
-              color1="#FFE4E1"
-              color2="#E6E6FA"
-              color3="#D8BFD8"
-              color4="#DDA0DD"
-              speed={0.0}
-              style={{
-                width: "100%",
-                height: "100%",
-                zIndex: -1,
-              }}
+            <img
+              src={wallpaper.src}
+              alt="tray icon"
+              className="w-full h-full"
             />
           </div>
+          <Dock items={dockItems} />
         </div>
       </section>
     </>

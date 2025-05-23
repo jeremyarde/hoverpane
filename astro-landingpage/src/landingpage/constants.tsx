@@ -15,8 +15,11 @@
 //     ></path>
 //   </svg>
 // );
-export const paidEarlyAccessLink =
-  "https://buy.polar.sh/polar_cl_CInamf8ulWDbVRoLyjWYWI5M8Vkzq2KTjLPDw2wUzQZ";
+
+export const CREATE_PURCHASE_URL =
+  "http://127.0.0.1:3001/stripe/generate-stripe-checkout";
+
+export const HOVERPANE_DOWNLOAD_URL = "/apps/hoverpane/download";
 
 export const IconCode: React.FC<{ className?: string }> = ({ className }) => (
   <svg
