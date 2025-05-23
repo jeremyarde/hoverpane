@@ -14,7 +14,7 @@ const chatGpt = "/gpt.png";
 import trayIcon from "../assets/tray-icon.png";
 import wallpaper from "../assets/wallpaper.png";
 import wallpaperGaus from "../assets/wallpaper-gaus.png";
-import { getDownloadUrl } from "../utils";
+import { getDownloadUrl, handleDownload } from "../utils";
 import { HOVERPANE_DOWNLOAD_URL } from "./constants";
 
 const Desktop: React.FC = () => {
@@ -109,10 +109,7 @@ const Desktop: React.FC = () => {
                 Keep your favorite content always visible and easily accessible.
               </p>
               <button
-                onClick={async () => {
-                  const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
-                  window.open(data.download_url, "_blank");
-                }}
+                onClick={handleDownload}
                 className="text-white hero-button"
               >
                 Get Started
@@ -217,10 +214,7 @@ const Desktop: React.FC = () => {
             <div className="flex gap-6 items-center ml-auto">
               {/* <span>{new Date().toLocaleTimeString()}</span>*/}
               <button
-                onClick={async () => {
-                  const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
-                  window.open(data.download_url, "_blank");
-                }}
+                onClick={handleDownload}
                 className="p-2 text-gray-800 no-underline bg-transparent rounded-md border-none cursor-pointer font-inherit hover:text-gray-600 hover:bg-yellow-200"
               >
                 Download

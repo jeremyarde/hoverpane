@@ -745,6 +745,8 @@ enum UserEvent {
     SaveSettings(AppSettings),
     CheckForUpdates,
     UpdateAvailable(UpdateInfo),
+    UpdateProgress { downloaded: u64, total: u64 },
+    UpdateError(String),
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -1028,8 +1030,6 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::CheckForUpdates => {
                 let proxy = self.proxy.clone();
-                let current_version = env!("CARGO_PKG_VERSION");
-                // let updater = Updater::new(current_version, "https://api.hoverpane.com/updates");
                 let updater = self.updater.clone();
 
                 thread::spawn(move || {
@@ -1038,15 +1038,28 @@ impl ApplicationHandler<UserEvent> for App {
                         match updater.check_for_updates().await {
                             Ok(Some(update_info)) => {
                                 info!("New update available: {:?}", update_info);
+                                // Show update notification to user
                                 proxy
                                     .send_event(UserEvent::UpdateAvailable(update_info))
                                     .unwrap();
                             }
                             Ok(None) => {
                                 info!("No updates available");
+                                // Show "up to date" notification
+                                proxy
+                                    .send_event(UserEvent::UpdateError(
+                                        "Already up to date".to_string(),
+                                    ))
+                                    .unwrap();
                             }
                             Err(e) => {
                                 error!("Failed to check for updates: {}", e);
+                                proxy
+                                    .send_event(UserEvent::UpdateError(format!(
+                                        "Failed to check for updates: {}",
+                                        e
+                                    )))
+                                    .unwrap();
                             }
                         }
                     });
@@ -1054,12 +1067,28 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::UpdateAvailable(update_info) => {
                 let proxy = self.proxy.clone();
-                let updated = self.updater.clone();
+                let updater = self.updater.clone();
                 let quit_id = self.menu_items.quit_id.clone();
+
+                // Show update confirmation dialog
+                let update_confirmed = true; // TODO: Implement proper confirmation dialog
+                if !update_confirmed {
+                    return;
+                }
+
                 thread::spawn(move || {
                     let rt = Runtime::new().unwrap();
                     rt.block_on(async {
-                        match updated.download_update(&update_info).await {
+                        let progress_callback = Box::new(move |downloaded: u64, total: u64| {
+                            proxy
+                                .send_event(UserEvent::UpdateProgress { downloaded, total })
+                                .unwrap();
+                        });
+
+                        match updater
+                            .download_update(&update_info, Some(progress_callback))
+                            .await
+                        {
                             Ok(update_file) => {
                                 info!("Update downloaded to: {:?}", update_file);
 
@@ -1076,6 +1105,12 @@ impl ApplicationHandler<UserEvent> for App {
                                     Ok(output) => output,
                                     Err(e) => {
                                         error!("Failed to mount DMG: {}", e);
+                                        proxy
+                                            .send_event(UserEvent::UpdateError(format!(
+                                                "Failed to mount update: {}",
+                                                e
+                                            )))
+                                            .unwrap();
                                         return;
                                     }
                                 };
@@ -1135,6 +1170,31 @@ impl ApplicationHandler<UserEvent> for App {
                                     let target_path =
                                         applications_dir.join(app_path.file_name().unwrap());
 
+                                    // Create backup of current app
+                                    if target_path.exists() {
+                                        let backup_path = target_path.with_extension("app.backup");
+                                        if let Err(e) = std::process::Command::new("cp")
+                                            .args([
+                                                "-R",
+                                                target_path.to_str().unwrap(),
+                                                backup_path.to_str().unwrap(),
+                                            ])
+                                            .output()
+                                        {
+                                            error!("Failed to create backup: {}", e);
+                                            proxy
+                                                .send_event(UserEvent::UpdateError(
+                                                    "Failed to create backup".to_string(),
+                                                ))
+                                                .unwrap();
+                                            // Try to unmount before returning
+                                            let _ = std::process::Command::new("hdiutil")
+                                                .args(["detach", volume_path])
+                                                .output();
+                                            return;
+                                        }
+                                    }
+
                                     // Remove the old app if it exists
                                     if target_path.exists() {
                                         info!("Removing old app from Applications");
@@ -1185,6 +1245,12 @@ impl ApplicationHandler<UserEvent> for App {
                                         .spawn()
                                     {
                                         error!("Failed to launch new version: {}", e);
+                                        proxy
+                                            .send_event(UserEvent::UpdateError(
+                                                "Failed to launch new version".to_string(),
+                                            ))
+                                            .unwrap();
+                                        return;
                                     }
 
                                     // Give a moment for the new app to start
@@ -1198,6 +1264,11 @@ impl ApplicationHandler<UserEvent> for App {
                                         .unwrap();
                                 } else {
                                     error!("Could not find .app in mounted DMG");
+                                    proxy
+                                        .send_event(UserEvent::UpdateError(
+                                            "Could not find app in update package".to_string(),
+                                        ))
+                                        .unwrap();
                                     // Try to unmount before returning
                                     let _ = std::process::Command::new("hdiutil")
                                         .args(["detach", volume_path])
@@ -1206,10 +1277,24 @@ impl ApplicationHandler<UserEvent> for App {
                             }
                             Err(e) => {
                                 error!("Failed to download update: {}", e);
+                                proxy
+                                    .send_event(UserEvent::UpdateError(format!(
+                                        "Failed to download update: {}",
+                                        e
+                                    )))
+                                    .unwrap();
                             }
                         }
                     });
                 });
+            }
+            UserEvent::UpdateProgress { downloaded, total } => {
+                // TODO: Show progress in UI
+                info!("Update progress: {}/{} bytes", downloaded, total);
+            }
+            UserEvent::UpdateError(error_msg) => {
+                // TODO: Show error in UI
+                error!("Update error: {}", error_msg);
             }
         }
     }

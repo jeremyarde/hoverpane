@@ -18,5 +18,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tailwindcss": "^4.1.7"
+  },
+  "devDependencies": {
+    "eslint-plugin-react-refresh": "^0.4.20"
   }
 }

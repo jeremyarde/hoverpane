@@ -1,3 +1,5 @@
+import { HOVERPANE_DOWNLOAD_URL } from "./landingpage/constants";
+
 type DownloadUrlResponse = {
   download_url: string;
 };
@@ -17,4 +19,16 @@ const getDownloadUrl = async (url: string): Promise<DownloadUrlResponse> => {
   return data;
 };
 
-export { getDownloadUrl };
+const handleDownload = async () => {
+  try {
+    const data = await getDownloadUrl(HOVERPANE_DOWNLOAD_URL);
+    const newWindow = window.open(data.download_url, "_blank");
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+  } catch (error) {
+    console.error("Download failed:", error);
+  }
+};
+
+export { getDownloadUrl, handleDownload };
