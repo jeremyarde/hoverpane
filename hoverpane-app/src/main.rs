@@ -1079,16 +1079,13 @@ impl ApplicationHandler<UserEvent> for App {
                 thread::spawn(move || {
                     let rt = Runtime::new().unwrap();
                     rt.block_on(async {
-                        let progress_callback = Box::new(move |downloaded: u64, total: u64| {
-                            proxy
-                                .send_event(UserEvent::UpdateProgress { downloaded, total })
-                                .unwrap();
-                        });
+                        // let progress_callback = Box::new(move |downloaded: u64, total: u64| {
+                        //     proxy
+                        //         .send_event(UserEvent::UpdateProgress { downloaded, total })
+                        //         .unwrap();
+                        // });
 
-                        match updater
-                            .download_update(&update_info, Some(progress_callback))
-                            .await
-                        {
+                        match updater.download_update(&update_info).await {
                             Ok(update_file) => {
                                 info!("Update downloaded to: {:?}", update_file);
 

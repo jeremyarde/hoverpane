@@ -1732,7 +1732,7 @@ checksum = "fbd780fe5cc30f81464441920d82ac8740e2e46b29a6fad543ddd075229ce37e"
 
 [[package]]
 name = "hoverpane"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum 0.8.3",
  "axum-extra",
