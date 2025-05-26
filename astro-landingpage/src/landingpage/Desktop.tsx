@@ -11,7 +11,7 @@ import {
 
 const googleImage = "/google.png";
 const chatGpt = "/gpt.png";
-import trayIcon from "../assets/tray-icon.png";
+import trayIcon from "../assets/favicon-32.png";
 import wallpaper from "../assets/wallpaper.png";
 import wallpaperGaus from "../assets/wallpaper-gaus.png";
 import { handleDownload } from "../utils";

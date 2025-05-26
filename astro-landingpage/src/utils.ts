@@ -6,9 +6,9 @@ type DownloadUrlResponse = {
 
 const getBaseUrl = () => {
   if (import.meta.env.PROD) {
-    return "https://hoverpane.com";
+    return "https://api.hoverpane.com";
   }
-  return "http://localhost:3001";
+  return "http://localhost:8080";
 };
 
 const getDownloadUrl = async (url: string): Promise<DownloadUrlResponse> => {
