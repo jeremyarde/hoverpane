@@ -278,12 +278,7 @@ JSON.stringify({
         }
     }
 
-    fn create_widget(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        widget_config: WidgetConfiguration,
-        // size: LogicalSize<u32>,
-    ) {
+    fn create_widget(&mut self, event_loop: &ActiveEventLoop, widget_config: WidgetConfiguration) {
         // Check the widget limit, excluding the 'controls' widget
         let current_widget_count = self
             .all_widgets
@@ -344,8 +339,6 @@ JSON.stringify({
                     }),
             )
             .expect("Something failed");
-
-        // set_app_dock_icon(&new_window);
 
         // let scale_factor = new_window.scale_factor();
 
@@ -756,7 +749,6 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Application resumed");
-        // let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
 
         let monitors = event_loop.available_monitors().collect::<Vec<_>>();
         info!("Monitors: {:?}", monitors);
@@ -1555,74 +1547,30 @@ fn main() {
 
     // load db, run migrations, etc
     let app_db = widget_db::Database::from(false).unwrap();
-
+    let mut builder = EventLoop::<UserEvent>::with_user_event();
     #[cfg(target_os = "macos")]
     {
         info!("Initializing Macos App...");
         winit::platform::macos::EventLoopBuilderExtMacOS::with_activation_policy(
-            &mut EventLoop::builder(),
+            &mut builder,
             winit::platform::macos::ActivationPolicy::Accessory,
             // winit::platform::macos::ActivationPolicy::Regular,
         );
 
-        winit::platform::macos::EventLoopBuilderExtMacOS::with_default_menu(
-            &mut EventLoop::builder(),
-            false,
-        );
+        winit::platform::macos::EventLoopBuilderExtMacOS::with_default_menu(&mut builder, false);
     }
 
-    let event_loop = EventLoop::<UserEvent>::with_user_event()
-        .with_default_menu(false)
+    let event_loop = builder
+        // .with_default_menu(false)
         .build()
         .expect("Something failed");
     let event_loop_proxy = event_loop.create_proxy();
     let menu = setup_menu();
     // menu.init_for_nsapp();
 
-    let config: Vec<WidgetConfiguration> = vec![
-        get_controls_widget_config(),
-        // WidgetConfiguration::new()
-        //     .with_widget_id(NanoId("Test SPY".to_string()))
-        //     .with_title("Test SPY".to_string())
-        //     .with_widget_type(WidgetType::Url(UrlConfiguration {
-        //         url: "https://finance.yahoo.com/quote/SPY/".to_string(),
-        //     }))
-        //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_widget_id(NanoId("testdata".to_string()))
-        //     .with_title("Test Data View Widget".to_string())
-        //     .with_widget_type(WidgetType::File(FileConfiguration {
-        //         html: include_str!("../assets/widget_template.html").to_string(),
-        //     }))
-        //     .with_level(Level::Normal),
-        // WidgetConfiguration::new()
-        //     .with_widget_id(NanoId("transparent".to_string()))
-        //     .with_title("Transparent Widget".to_string())
-        //     .with_widget_type(WidgetType::File(FileConfiguration {
-        //         html: include_str!("../assets/widget_transparent.html").to_string(),
-        //     }))
-        //     .with_transparent(true)
-        //     .with_level(Level::Normal),
-    ];
+    let config: Vec<WidgetConfiguration> = vec![get_controls_widget_config()];
 
-    let modifiers: Vec<WidgetModifier> = vec![
-        // WidgetModifier {
-        //     id: 1,
-        //     widget_id: NanoId("Test SPY".to_string()),
-        //     modifier_type: Modifier::Scrape {
-        //         modifier_id: NanoId("scrape1".to_string()),
-        //         selector: r#"#nimbus-app > section > section > section > article > section.container.yf-5hy459 > div.bottom.yf-5hy459 > div.price.yf-5hy459 > section > div > section:nth-child(2) > div.container.yf-16vvaki > div:nth-child(1) > span"#.to_string(),
-        //     },
-        // },
-        // WidgetModifier {
-        //     id: 2,
-        //     widget_id: NanoId("testdata".to_string()),
-        //     modifier_type: Modifier::Refresh {
-        //         modifier_id: NanoId("refresh1".to_string()),
-        //         interval_sec: 5,
-        //     },
-        // },
-    ];
+    let modifiers: Vec<WidgetModifier> = vec![];
 
     info!("Debug Config: {:?}", config.len());
 
@@ -1645,6 +1593,7 @@ fn main() {
         event_loop_proxy.clone(),
     );
     tray_icon.set_visible(app_settings.show_tray_icon);
+    // set_app_dock_icon(&new_window);
 
     let mut app = App {
         updater: Updater::new(
