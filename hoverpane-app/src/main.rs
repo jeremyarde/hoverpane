@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 // mod api;
 
 use env_logger::Builder;
@@ -92,7 +94,7 @@ struct App {
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_widget_id: HashMap<WindowId, NanoId>,
     db: widget_db::Database,
-    app_settings: AppSettings,
+    app_settings: DesktopAppSettings,
     app_settings_path: PathBuf,
 }
 
@@ -513,7 +515,7 @@ JSON.stringify({
             self.tray_icon.set_visible(true);
         }
 
-        self.app_settings = settings;
+        self.app_settings.app_settings = settings;
     }
 
     fn toggle_visibility(
@@ -1023,11 +1025,18 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::CheckForUpdates => {
                 let proxy = self.proxy.clone();
                 let updater = self.updater.clone();
-
+                let app_settings = self.app_settings.clone();
                 thread::spawn(move || {
                     let rt = Runtime::new().unwrap();
                     rt.block_on(async {
-                        match updater.check_for_updates().await {
+                        match updater
+                            .check_for_updates(
+                                &app_settings.app_settings.licence_key,
+                                &app_settings.app_settings.machine_id,
+                                &app_settings.app_settings.user_email,
+                            )
+                            .await
+                        {
                             Ok(Some(update_info)) => {
                                 info!("New update available: {:?}", update_info);
                                 // Show update notification to user
@@ -1363,8 +1372,6 @@ fn get_controls_widget_config() -> WidgetConfiguration {
         .with_level(Level::Normal)
 }
 
-const LICENCE_CHECK_URL: &str = "http://localhost:3001/licence/check";
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MachineInfo {
     pub os: String,
@@ -1398,7 +1405,7 @@ pub enum LicenceCheckResponse {
     },
 }
 
-fn check_user_version(app_settings: &mut AppSettings) -> Option<LicenceTier> {
+fn check_user_version(app_settings: &mut DesktopAppSettings) -> Option<LicenceTier> {
     let client = reqwest::blocking::Client::new();
     // get some information about the machine
     // let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string());
@@ -1410,17 +1417,23 @@ fn check_user_version(app_settings: &mut AppSettings) -> Option<LicenceTier> {
     let hashed_id = blake3::hash(machine_id.as_bytes());
 
     let request = json!({
-        "user_email": app_settings.user_email,
-        "licence_key": app_settings.licence_key,
+        "user_email": app_settings.app_settings.user_email,
+        "licence_key": app_settings.app_settings.licence_key,
         "machine_id": hashed_id.to_string(),
         "os": os,
         "arch": arch,
         "version": version,
     });
 
-    info!("Request: {:?}", request);
+    info!(
+        "Sending licence check request to {}: {:?}",
+        app_settings.licence_check_url, request
+    );
 
-    let res = client.post(LICENCE_CHECK_URL).json(&request).send();
+    let res = client
+        .post(&app_settings.licence_check_url)
+        .json(&request)
+        .send();
 
     if let Err(e) = res {
         error!("Failed to send request: {}", e);
@@ -1458,7 +1471,22 @@ fn check_user_version(app_settings: &mut AppSettings) -> Option<LicenceTier> {
     }
 }
 
-fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesktopAppSettings {
+    pub app_settings: AppSettings,
+    pub licence_check_url: String,
+}
+
+impl DesktopAppSettings {
+    fn new(app_settings: AppSettings, licence_check_url: &str) -> Self {
+        Self {
+            app_settings,
+            licence_check_url: licence_check_url.to_string(),
+        }
+    }
+}
+
+fn load_app_settings(settings_filepath: PathBuf, licence_check_url: &str) -> DesktopAppSettings {
     if !settings_filepath.exists() {
         let app_settings = AppSettings {
             show_tray_icon: true,
@@ -1490,7 +1518,7 @@ fn load_app_settings(settings_filepath: PathBuf) -> AppSettings {
             }
         }
     };
-    app_settings
+    DesktopAppSettings::new(app_settings, licence_check_url)
 }
 
 fn setup_logging(config_dir: &Path) {
@@ -1533,6 +1561,7 @@ fn setup_logging(config_dir: &Path) {
 fn main() {
     // env_logger::init();
     info!("Starting application...");
+    dotenvy::from_filename(".env.dev").ok();
 
     // loading app settings from user directory
     let directory = directories::ProjectDirs::from("com", "jarde", "hoverpane").unwrap();
@@ -1542,8 +1571,13 @@ fn main() {
     // Setup logging before anything else
     setup_logging(&config_dir);
 
-    let app_settings = load_app_settings(settings_filepath);
-    info!("App settings: {:?}", app_settings);
+    let licence_check_url = if dotenvy::var("ENV").unwrap_or("prod".to_string()) == "prod" {
+        "https://api.hoverpane.com/licence/check"
+    } else {
+        "http://localhost:3000/licence/check"
+    };
+    let desktop_settings = load_app_settings(settings_filepath, licence_check_url);
+    info!("App settings: {:?}", desktop_settings);
 
     // load db, run migrations, etc
     let app_db = widget_db::Database::from(false).unwrap();
@@ -1588,22 +1622,21 @@ fn main() {
     let (width, height) = img.dimensions();
 
     let (menu_items, tray_icon) = setup_tray_menu(
-        app_settings.licence_tier.clone(),
+        desktop_settings.app_settings.licence_tier.clone(),
         img.clone(),
         event_loop_proxy.clone(),
     );
-    tray_icon.set_visible(app_settings.show_tray_icon);
-    // set_app_dock_icon(&new_window);
+    tray_icon.set_visible(desktop_settings.app_settings.show_tray_icon);
 
     let mut app = App {
         updater: Updater::new(
             env!("CARGO_PKG_VERSION"),
-            "http://localhost:3001/apps/hoverpane/latest",
+            &format!("{}/apps/hoverpane/latest", licence_check_url),
         ),
         tray_icon,
         app_icon: img,
         db: app_db,
-        app_settings,
+        app_settings: desktop_settings,
         app_settings_path: config_dir.join("settings.json"),
         menu_items,
         current_size: LogicalSize::new(DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_HEIGHT),

@@ -1,6 +1,6 @@
 [package]
 name = "hoverpane"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 
 [features]
@@ -39,6 +39,7 @@ reqwest = { version = "0.11", features = ["json", "blocking"] }
 semver = "1.0"
 machine-uid = "0.5.3"
 blake3 = "1.8.2"
+dotenvy = "0.15.7"
 
 
 # [[bin]]

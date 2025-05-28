@@ -1,14 +1,15 @@
-// use log::{error, info};
 use reqwest;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{cmp::Ordering, path::PathBuf};
+// use thiserror::Error;
 
 #[cfg(not(test))]
-use log::{info, warn};
+use log::{error, info, warn};
 
 #[cfg(test)]
-use std::{println as info, println as warn};
+use std::{println as info, println as warn, println as error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateInfo {
@@ -23,6 +24,23 @@ pub struct Updater {
     update_check_url: String,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct GetLatestVersionPayload {
+    pub licence_key: String,
+    pub user_machine_id: String,
+    pub user_email: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UpdaterError {
+    #[error("User email is empty")]
+    UserEmailEmpty,
+    #[error(transparent)]
+    ReqwestError(#[from] reqwest::Error),
+    #[error(transparent)]
+    SemverError(#[from] semver::Error),
+}
+
 impl Updater {
     pub fn new(current_version: &str, update_check_url: &str) -> Self {
         Self {
@@ -33,11 +51,33 @@ impl Updater {
 
     pub async fn check_for_updates(
         &self,
-    ) -> Result<Option<UpdateInfo>, Box<dyn std::error::Error>> {
-        info!("Checking for updates...");
+        licence_key: &str,
+        user_machine_id: &str,
+        user_email: &str,
+    ) -> Result<Option<UpdateInfo>, UpdaterError> {
+        if user_email.is_empty() {
+            return Err(UpdaterError::UserEmailEmpty);
+        }
 
-        let response = reqwest::get(&self.update_check_url).await?;
-        let update_info: UpdateInfo = response.json().await?;
+        info!("Checking for updates at {}", self.update_check_url);
+
+        let client = reqwest::Client::new();
+
+        let response = client
+            .post(&self.update_check_url)
+            .json(&GetLatestVersionPayload {
+                licence_key: licence_key.to_string(),
+                user_machine_id: user_machine_id.to_string(),
+                user_email: user_email.to_string(),
+            })
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .map_err(UpdaterError::ReqwestError)?
+            .error_for_status()
+            .map_err(UpdaterError::ReqwestError)?;
+
+        let update_info: UpdateInfo = response.json().await.map_err(UpdaterError::ReqwestError)?;
         info!("Update info: {:?}", update_info);
 
         let latest_version = Version::parse(&update_info.version)?;
@@ -80,19 +120,31 @@ impl Updater {
 
 #[cfg(test)]
 mod tests {
+    use crate::DesktopAppSettings;
+
     use super::*;
 
     #[cfg(not(test))]
     use log::{info, warn};
+    use widget_types::AppSettings;
 
     #[cfg(test)]
     use std::{println as info, println as warn};
 
     #[tokio::test]
     async fn test_version_comparison() {
-        let updater = Updater::new("0.4.0", "http://localhost:3001/apps/hoverpane/latest");
+        let updater = Updater::new("0.4.0", "http://localhost:3000/apps/hoverpane/latest");
 
-        let update_info = updater.check_for_updates().await.unwrap();
+        let update_info = match updater
+            .check_for_updates("1234567890", "1234567890", "test@test.com")
+            .await
+        {
+            Ok(update_info) => update_info,
+            Err(e) => {
+                error!("Error: {:?}", e);
+                return;
+            }
+        };
         println!("Update info: {:?}", update_info);
         assert!(update_info.is_some());
     }

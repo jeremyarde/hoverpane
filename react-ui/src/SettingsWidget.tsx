@@ -17,13 +17,37 @@ export default function SettingsWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
 
+  const isEmailValid = appSettings.user_email.trim().length > 0;
+
+  // Fetch settings from the app on mount
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    setAppSettings(defaultSettings);
-    setIsLoading(false);
-    setIsDirty(false);
+    // Handler for receiving settings from Rust backend
+    const handleRustMessage = (element: string) => {
+      try {
+        const msg = JSON.parse(element);
+        // Heuristic: look for settings in message
+        if (msg.data_key === "settings" && msg.message) {
+          const settings = JSON.parse(msg.message) as AppSettings;
+          setAppSettings(settings);
+          setIsLoading(false);
+          setIsDirty(false);
+        }
+      } catch {
+        // Ignore unrelated messages
+      }
+    };
+    // Attach handler
+    window.onRustMessage = handleRustMessage;
+    // Request settings from backend
+    window.ipc.postMessage(JSON.stringify({ type: "getsettings" }));
+    // Cleanup
+    return () => {
+      window.onRustMessage = () => {};
+    };
   }, []);
 
   const handleSettingsChange = useCallback(
@@ -38,6 +62,11 @@ export default function SettingsWidget() {
   );
 
   const handleSave = async () => {
+    setEmailTouched(true);
+    if (!isEmailValid) {
+      setError("Email is required.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     console.log("Saving settings:", appSettings);
@@ -94,8 +123,15 @@ export default function SettingsWidget() {
                   onChange={(e) =>
                     handleSettingsChange({ user_email: e.target.value })
                   }
+                  onBlur={() => setEmailTouched(true)}
+                  required
                 />
               </div>
+              {!isEmailValid && emailTouched && (
+                <div className="mt-1 ml-24 text-sm text-red-500">
+                  Email is required.
+                </div>
+              )}
               <div className="flex items-center">
                 <label htmlFor="licence_key" className="w-24">
                   Licence Key
@@ -163,7 +199,7 @@ export default function SettingsWidget() {
           <div className="flex justify-end mt-4">
             <button
               onClick={handleSave}
-              disabled={isLoading || !isDirty}
+              disabled={isLoading || !isDirty || !isEmailValid}
               className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {isLoading ? "Saving..." : "Save Settings"}

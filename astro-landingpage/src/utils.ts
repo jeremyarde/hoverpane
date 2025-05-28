@@ -8,7 +8,7 @@ const getBaseUrl = () => {
   if (import.meta.env.PROD) {
     return "https://api.hoverpane.com";
   }
-  return "http://localhost:8080";
+  return "http://localhost:3000";
 };
 
 const getDownloadUrl = async (url: string): Promise<DownloadUrlResponse> => {
