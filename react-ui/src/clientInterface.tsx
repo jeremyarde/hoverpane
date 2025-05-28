@@ -1,7 +1,28 @@
 // This is the interface between the backend rust app and the frontend.
 
-import { CreateWidgetRequest, WidgetModifier, ApiAction } from "./types";
+import {
+  CreateWidgetRequest,
+  WidgetModifier,
+  ApiAction,
+  AppSettings,
+} from "./types";
 import { API_URL } from "./constants.tsx";
+
+export const getSettings = async () => {
+  const response = await fetch(`${API_URL}/settings`);
+  return response.json() as Promise<AppSettings>;
+};
+
+export const setSettings = async (settings: AppSettings) => {
+  const response = await fetch(`${API_URL}/settings`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(settings),
+  });
+  return response.json() as Promise<AppSettings>;
+};
 
 export const createWidget = async (request: CreateWidgetRequest) => {
   const response = await fetch(`${API_URL}/widgets`, {

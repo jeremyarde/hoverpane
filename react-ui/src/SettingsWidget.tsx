@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
-import { AppSettings, IpcEvent, LicenceTier } from "./types";
-import { checkLicence } from "./clientInterface";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { AppSettings, LicenceTier } from "./types";
+import { checkLicence, getSettings, setSettings } from "./clientInterface";
 import { CREATE_PURCHASE_URL } from "./constants";
 
 // make a default settings object
@@ -16,39 +16,63 @@ export default function SettingsWidget() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultSettings);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
+  const [licenceTouched, setLicenceTouched] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [pendingLicence, setPendingLicence] = useState<string | null>(null);
 
   const isEmailValid = appSettings.user_email.trim().length > 0;
+  const isLicenceValid = appSettings.licence_key.trim().length > 0;
+  const canSave = isEmailValid && isLicenceValid;
 
   // Fetch settings from the app on mount
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    // Handler for receiving settings from Rust backend
-    const handleRustMessage = (element: string) => {
-      try {
-        const msg = JSON.parse(element);
-        // Heuristic: look for settings in message
-        if (msg.data_key === "settings" && msg.message) {
-          const settings = JSON.parse(msg.message) as AppSettings;
-          setAppSettings(settings);
-          setIsLoading(false);
-          setIsDirty(false);
-        }
-      } catch {
-        // Ignore unrelated messages
-      }
-    };
-    // Attach handler
-    window.onRustMessage = handleRustMessage;
-    // Request settings from backend
-    window.ipc.postMessage(JSON.stringify({ type: "getsettings" }));
-    // Cleanup
-    return () => {
-      window.onRustMessage = () => {};
-    };
+    getSettings()
+      .then((settings) => {
+        setAppSettings(settings);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof Error ? err.message : "Failed to load settings"
+        );
+        setIsLoading(false);
+      });
   }, []);
+
+  // Auto-save effect for all fields except licence_key
+  useEffect(() => {
+    if (!canSave) {
+      if (!isEmailValid && emailTouched) setError("Email is required.");
+      else if (!isLicenceValid && licenceTouched)
+        setError("Licence key is required.");
+      return;
+    }
+    // Only auto-save if licence_key is not being edited (pendingLicence is null)
+    if (pendingLicence !== null) return;
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(async () => {
+      try {
+        await setSettings(appSettings);
+        setSuccess("Settings saved!");
+        setTimeout(() => setSuccess(null), 2000);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("An unknown error occurred");
+        }
+      }
+      setIsLoading(false);
+    }, 500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appSettings, pendingLicence]);
 
   const handleSettingsChange = useCallback(
     (updatedData: Partial<AppSettings>) => {
@@ -56,154 +80,133 @@ export default function SettingsWidget() {
         ...prevSettings,
         ...updatedData,
       }));
-      setIsDirty(true);
     },
     []
   );
 
-  const handleSave = async () => {
-    setEmailTouched(true);
-    if (!isEmailValid) {
-      setError("Email is required.");
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    console.log("Saving settings:", appSettings);
-    try {
-      const ipc_event: IpcEvent = {
-        type: "savesettings",
-        content: appSettings,
-      };
-      window.ipc.postMessage(JSON.stringify(ipc_event));
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-    }
-    setIsLoading(false);
-    setIsDirty(false);
+  // Handler for licence_key input
+  const handleLicenceChange = (value: string) => {
+    setPendingLicence(value);
+    setAppSettings((prev) => ({ ...prev, licence_key: value }));
+  };
+  const handleLicenceBlur = () => {
+    setLicenceTouched(true);
+    setPendingLicence(null);
   };
 
   return (
-    <div className="p-4 mx-auto max-w-lg">
-      <h2 className="mb-4 text-xl font-bold">Application Settings</h2>
-      {isLoading && <p>Loading settings...</p>}
-      {error && <p className="mb-3 text-red-500">Error: {error}</p>}
-      {!isLoading && !error && (
+    <div className="p-1 mx-auto max-w-md text-sm">
+      {/* <h2 className="mb-2 text-lg font-bold">Settings</h2> */}
+      {isLoading && <p>Saving…</p>}
+      {error && <p className="mb-2 text-red-500">Error: {error}</p>}
+      {success && <p className="mb-2 text-green-500">{success}</p>}
+      {!isLoading && (
         <>
-          {/* <AutoForm
-            data={{
-              show_tray_icon: appSettings.show_tray_icon,
-              user_email: appSettings.user_email,
-            }}
-            onChange={handleSettingsChange}
-          /> */}
-          <input
-            type="checkbox"
-            className="mr-2"
-            checked={appSettings.show_tray_icon}
-            onChange={(e) =>
-              handleSettingsChange({ show_tray_icon: e.target.checked })
-            }
-          />
-          <label htmlFor="show_tray_icon">Show Tray Icon</label>
-          <div>
-            <hr className="my-4" />
-            <h3 className="mb-2 text-lg font-bold">Login</h3>
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <label htmlFor="user_email" className="w-24">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  className="flex-1 px-2 py-1 rounded-md border-2 border-gray-300"
-                  value={appSettings.user_email}
-                  onChange={(e) =>
-                    handleSettingsChange({ user_email: e.target.value })
-                  }
-                  onBlur={() => setEmailTouched(true)}
-                  required
-                />
+          <div className="flex items-center mb-2">
+            <input
+              type="checkbox"
+              id="show_tray_icon"
+              className="mr-1 w-4 h-4"
+              checked={appSettings.show_tray_icon}
+              onChange={(e) =>
+                handleSettingsChange({ show_tray_icon: e.target.checked })
+              }
+            />
+            <label htmlFor="show_tray_icon" className="cursor-pointer">
+              Show Tray Icon
+            </label>
+          </div>
+          <div className="grid grid-cols-1 gap-2 pt-2 border-t">
+            <div className="flex gap-2 items-center">
+              <label htmlFor="user_email" className="w-20">
+                Email
+              </label>
+              <input
+                type="email"
+                id="user_email"
+                className="flex-1 px-1 py-0.5 rounded border border-gray-300 text-xs"
+                value={appSettings.user_email}
+                onChange={(e) =>
+                  handleSettingsChange({ user_email: e.target.value })
+                }
+                onBlur={() => setEmailTouched(true)}
+                required
+              />
+            </div>
+            {!isEmailValid && emailTouched && (
+              <div className="ml-20 text-xs text-red-500">
+                Email is required.
               </div>
-              {!isEmailValid && emailTouched && (
-                <div className="mt-1 ml-24 text-sm text-red-500">
-                  Email is required.
-                </div>
-              )}
-              <div className="flex items-center">
-                <label htmlFor="licence_key" className="w-24">
-                  Licence Key
-                </label>
-                <input
-                  type="text"
-                  className="flex-1 px-2 py-1 rounded-md border-2 border-gray-300"
-                  value={appSettings.licence_key}
-                  onChange={(e) =>
-                    handleSettingsChange({ licence_key: e.target.value })
-                  }
-                />
+            )}
+            <div className="flex gap-2 items-center">
+              <label htmlFor="licence_key" className="w-20">
+                Licence
+              </label>
+              <input
+                type="text"
+                id="licence_key"
+                className="flex-1 px-1 py-0.5 rounded border border-gray-300 text-xs"
+                value={appSettings.licence_key}
+                onChange={(e) => handleLicenceChange(e.target.value)}
+                onBlur={handleLicenceBlur}
+              />
+            </div>
+            {!isLicenceValid && licenceTouched && (
+              <div className="ml-20 text-xs text-red-500">
+                Licence key is required.
               </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Current Tier:</span>
-                  <span className="px-2 py-1 text-sm font-medium bg-gray-100 rounded">
-                    {appSettings.licence_tier}
-                  </span>
-                </div>
-                <button
-                  className="px-4 py-1 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-                  onClick={() => {
-                    console.log("Checking licence");
-                    checkLicence(
+            )}
+            <div className="flex gap-2 items-center">
+              <span className="text-gray-600">Tier:</span>
+              <span className="px-1 py-0.5 text-xs font-medium bg-gray-100 rounded">
+                {appSettings.licence_tier}
+              </span>
+              <button
+                className="px-2 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    const res = await checkLicence(
                       window.WIDGET_ID,
                       appSettings.user_email,
                       appSettings.licence_key
                     );
+                    if (!res.ok) {
+                      const data = await res.json();
+                      setError(data?.message || "Failed to verify licence");
+                    }
+                  } catch (err: unknown) {
+                    if (err instanceof Error) {
+                      setError(err.message);
+                    } else {
+                      setError("An unknown error occurred");
+                    }
+                  }
+                }}
+              >
+                Verify
+              </button>
+              {appSettings.licence_tier === LicenceTier.Free && (
+                <button
+                  className="px-2 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                  onClick={async () => {
+                    const res = await fetch(CREATE_PURCHASE_URL, {
+                      method: "POST",
+                      body: JSON.stringify({ email: appSettings.user_email }),
+                      headers: { "Content-Type": "application/json" },
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      if (data.checkout_session_url) {
+                        window.open(data.checkout_session_url, "_blank");
+                      }
+                    }
                   }}
                 >
-                  Verify Licence
+                  Buy Pro
                 </button>
-                {appSettings.licence_tier === LicenceTier.Free && (
-                  <button
-                    className="px-4 py-1 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-                    onClick={async () => {
-                      const res = await fetch(CREATE_PURCHASE_URL, {
-                        method: "POST",
-                        body: JSON.stringify({
-                          email: appSettings.user_email,
-                        }),
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                      });
-                      if (res.ok) {
-                        const data = await res.json();
-                        console.log("Purchase successful", data);
-                        if (data.checkout_session_url) {
-                          window.open(data.checkout_session_url, "_blank");
-                        }
-                      } else {
-                        const data = await res.json();
-                        console.error("Failed to purchase licence", data);
-                      }
-                    }}
-                  >
-                    Buy Pro
-                  </button>
-                )}
-              </div>
+              )}
             </div>
-          </div>
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={handleSave}
-              disabled={isLoading || !isDirty || !isEmailValid}
-              className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isLoading ? "Saving..." : "Save Settings"}
-            </button>
           </div>
         </>
       )}

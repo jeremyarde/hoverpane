@@ -6,8 +6,8 @@ pub mod api {
     use tokio::sync::Mutex;
     use tower_http::trace::TraceLayer;
     use widget_types::{
-        ApiAction, EventSender, MonitorPosition, WidgetBounds, API_PORT, DEFAULT_WIDGET_HEIGHT,
-        DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
+        ApiAction, AppSettings, EventSender, MonitorPosition, WidgetBounds, API_PORT,
+        DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
     };
     use widget_types::{
         CreateWidgetRequest, FileConfiguration, Modifier, UrlConfiguration, WidgetConfiguration,
@@ -76,6 +76,7 @@ pub mod api {
                 "/widgets/{widget_id}/modifiers/{modifier_id}",
                 delete(delete_widget_modifier),
             )
+            .route("/settings", get(get_settings))
             .layer(TraceLayer::new_for_http())
             .layer(cors_layer)
             // .layer(axum::middleware::from_fn(logging_middleware))
@@ -347,7 +348,7 @@ pub mod api {
             ));
         }
 
-        let mut db = state.db.lock().await;
+        let db = state.db.lock().await;
         db.delete_widget_modifier(&modifier_id)?;
         Ok(StatusCode::NO_CONTENT)
     }
@@ -387,8 +388,17 @@ pub mod api {
             },
         };
 
-        let mut db = state.db.lock().await;
+        let db = state.db.lock().await;
         db.insert_widget_modifier(widget_modifier.clone())?;
         Ok((StatusCode::CREATED, Json(widget_modifier)))
+    }
+
+    #[axum::debug_handler]
+    pub(crate) async fn get_settings(
+        State(state): State<ApiState>,
+    ) -> Result<Json<AppSettings>, ApiError> {
+        let db = state.db.lock().await;
+        let settings = db.get_settings()?;
+        Ok(Json(settings))
     }
 }

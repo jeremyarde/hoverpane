@@ -10,8 +10,9 @@ pub mod db {
     use std::fs;
     use std::path::PathBuf;
     use widget_types::{
-        ConfigInformation, Level, MonitorPosition, NanoId, ScrapedData, WidgetBounds,
-        WidgetConfiguration, WidgetModifier, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+        AppSettings, ConfigInformation, Level, LicenceTier, MonitorPosition, NanoId, ScrapedData,
+        WidgetBounds, WidgetConfiguration, WidgetModifier, DEFAULT_WIDGET_HEIGHT,
+        DEFAULT_WIDGET_WIDTH,
     };
 
     fn get_db_path() -> PathBuf {
@@ -132,15 +133,47 @@ pub mod db {
             conn.pragma_update_and_check(None, "journal_mode", &"WAL", |_| Ok(()))
                 .unwrap();
 
-            let migrations = Migrations::new(vec![
-                M::up(include_str!("../migrations/20240318000000_initial.sql")),
-                // M::up(WidgetConfiguration::get_create_table_sql()),
-                // M::up(WidgetModifier::get_create_table_sql()),
-                // M::up(ScrapedData::get_create_table_sql()),
-            ]);
+            let migrations = Migrations::new(vec![M::up(include_str!(
+                "../migrations/20240318000000_initial.sql"
+            ))]);
             migrations.to_latest(&mut conn).unwrap();
 
             Ok(Self { conn })
+        }
+
+        pub fn set_settings(&self, settings: &AppSettings) -> SqliteResult<()> {
+            let json = serde_json::to_string(settings).unwrap();
+            // Upsert: delete all and insert new
+            self.conn.execute("DELETE FROM config", [])?;
+            self.conn
+                .execute("INSERT INTO config (json) VALUES (?)", [&json])?;
+            Ok(())
+        }
+
+        pub fn get_settings(&self) -> SqliteResult<AppSettings> {
+            let mut stmt = self.conn.prepare("SELECT json FROM config LIMIT 1")?;
+            let mut rows = stmt.query([])?;
+            if let Some(row) = rows.next()? {
+                let json: String = row.get(0)?;
+                let settings: AppSettings = match serde_json::from_str(&json) {
+                    Ok(settings) => settings,
+                    Err(e) => {
+                        error!("Failed to parse settings: {:?}", e);
+                        let defaults = AppSettings {
+                            show_tray_icon: true,
+                            user_email: "".to_string(),
+                            licence_key: "".to_string(),
+                            machine_id: "".to_string(),
+                            licence_tier: LicenceTier::Free,
+                        };
+                        self.set_settings(&defaults)?;
+                        defaults
+                    }
+                };
+                Ok(settings)
+            } else {
+                Err(rusqlite::Error::QueryReturnedNoRows)
+            }
         }
 
         pub fn get_widget_configuration_by_id(

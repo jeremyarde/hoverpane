@@ -94,8 +94,7 @@ struct App {
     widget_id_to_window_id: HashMap<NanoId, WindowId>,
     window_id_to_widget_id: HashMap<WindowId, NanoId>,
     db: widget_db::Database,
-    app_settings: DesktopAppSettings,
-    app_settings_path: PathBuf,
+    settings: DesktopAppSettings,
 }
 
 struct WidgetView {
@@ -501,21 +500,17 @@ JSON.stringify({
 
     fn update_app_settings(&mut self, settings: AppSettings) {
         info!("Updating app settings: {:?}", settings);
-        // self.app_settings = settings;
-        // save the settings to the file
-        let settings_json = serde_json::to_string(&settings).unwrap();
-        std::fs::write(self.app_settings_path.clone(), settings_json).unwrap();
+        // Save to database
+        if let Err(e) = self.db.set_settings(&settings) {
+            error!("Failed to save settings to db: {:?}", e);
+        }
         // update the tray icon
-        // (&self.app_settings.show_tray_icon);
         if !settings.show_tray_icon {
-            // self.tray_menu_quit_id = None;
-            // self.tray_menu_show_controls_id = None;
             self.tray_icon.set_visible(false);
         } else {
             self.tray_icon.set_visible(true);
         }
-
-        self.app_settings.app_settings = settings;
+        self.settings.app_settings = settings;
     }
 
     fn toggle_visibility(
@@ -999,8 +994,15 @@ impl ApplicationHandler<UserEvent> for App {
                         licence_key,
                     } => {
                         info!("Checking licence: {:?}, {:?}", user_email, licence_key);
-                        let user_version = check_user_version(&mut self.app_settings);
+                        let user_version =
+                            check_user_version(&mut self.settings, &user_email, &licence_key);
                         info!("User version: {:?}", user_version);
+                        if let Some(user_version) = user_version {
+                            self.settings.app_settings.licence_tier = user_version;
+                            self.settings.app_settings.licence_key = licence_key;
+                            self.settings.app_settings.user_email = user_email;
+                            self.update_app_settings(self.settings.app_settings.clone());
+                        }
                     }
                 }
             }
@@ -1025,7 +1027,7 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::CheckForUpdates => {
                 let proxy = self.proxy.clone();
                 let updater = self.updater.clone();
-                let app_settings = self.app_settings.clone();
+                let app_settings = self.settings.clone();
                 thread::spawn(move || {
                     let rt = Runtime::new().unwrap();
                     rt.block_on(async {
@@ -1393,19 +1395,17 @@ fn get_machine_info() -> MachineInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LicenceCheckResponse {
-    Valid {
-        user_id: String,
-        licence_tier: LicenceTier,
-        valid: bool,
-    },
-    Invalid {
-        error: String,
-        message: String,
-    },
+pub struct LicenceCheckResponse {
+    user_id: String,
+    licence_tier: LicenceTier,
+    valid: bool,
 }
 
-fn check_user_version(app_settings: &mut DesktopAppSettings) -> Option<LicenceTier> {
+fn check_user_version(
+    app_settings: &mut DesktopAppSettings,
+    user_email: &str,
+    licence_key: &str,
+) -> Option<LicenceTier> {
     let client = reqwest::blocking::Client::new();
     // get some information about the machine
     // let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string());
@@ -1417,8 +1417,8 @@ fn check_user_version(app_settings: &mut DesktopAppSettings) -> Option<LicenceTi
     let hashed_id = blake3::hash(machine_id.as_bytes());
 
     let request = json!({
-        "user_email": app_settings.app_settings.user_email,
-        "licence_key": app_settings.app_settings.licence_key,
+        "user_email": user_email,
+        "licence_key": licence_key,
         "machine_id": hashed_id.to_string(),
         "os": os,
         "arch": arch,
@@ -1465,10 +1465,7 @@ fn check_user_version(app_settings: &mut DesktopAppSettings) -> Option<LicenceTi
     };
 
     info!("Response from licence check: {:?}", licence_check_response);
-    match licence_check_response {
-        LicenceCheckResponse::Valid { licence_tier, .. } => Some(licence_tier),
-        LicenceCheckResponse::Invalid { .. } => None,
-    }
+    Some(licence_check_response.licence_tier)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1486,36 +1483,20 @@ impl DesktopAppSettings {
     }
 }
 
-fn load_app_settings(settings_filepath: PathBuf, licence_check_url: &str) -> DesktopAppSettings {
-    if !settings_filepath.exists() {
-        let app_settings = AppSettings {
-            show_tray_icon: true,
-            user_email: "".to_string(),
-            licence_key: "".to_string(),
-            machine_id: machine_uid::get().unwrap(),
-            licence_tier: LicenceTier::Free,
-        };
-        std::fs::create_dir_all(settings_filepath.parent().unwrap()).unwrap();
-        let config_file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(settings_filepath.clone())
-            .unwrap();
-        serde_json::to_writer(&config_file, &app_settings).unwrap();
-    }
-
-    let app_settings = match serde_json::from_reader(File::open(settings_filepath.clone()).unwrap())
-    {
+fn load_app_settings(db: &widget_db::Database, licence_check_url: &str) -> DesktopAppSettings {
+    let app_settings = match db.get_settings() {
         Ok(settings) => settings,
-        Err(e) => {
-            error!("Error loading app settings: {:?}", e);
-            AppSettings {
+        Err(_) => {
+            // Insert default settings if not present
+            let default = AppSettings {
                 show_tray_icon: true,
                 user_email: "".to_string(),
                 licence_key: "".to_string(),
                 machine_id: machine_uid::get().unwrap(),
                 licence_tier: LicenceTier::Free,
-            }
+            };
+            let _ = db.set_settings(&default);
+            default
         }
     };
     DesktopAppSettings::new(app_settings, licence_check_url)
@@ -1566,7 +1547,6 @@ fn main() {
     // loading app settings from user directory
     let directory = directories::ProjectDirs::from("com", "jarde", "hoverpane").unwrap();
     let config_dir = directory.config_dir();
-    let settings_filepath = config_dir.join("settings.json");
 
     // Setup logging before anything else
     setup_logging(&config_dir);
@@ -1576,7 +1556,8 @@ fn main() {
     } else {
         "http://localhost:3000/licence/check"
     };
-    let desktop_settings = load_app_settings(settings_filepath, licence_check_url);
+    let app_db = widget_db::Database::from(false).unwrap();
+    let desktop_settings = load_app_settings(&app_db, licence_check_url);
     info!("App settings: {:?}", desktop_settings);
 
     // load db, run migrations, etc
@@ -1636,8 +1617,7 @@ fn main() {
         tray_icon,
         app_icon: img,
         db: app_db,
-        app_settings: desktop_settings,
-        app_settings_path: config_dir.join("settings.json"),
+        settings: desktop_settings,
         menu_items,
         current_size: LogicalSize::new(DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_HEIGHT),
         current_modifiers: Modifiers::default(),
