@@ -6,7 +6,7 @@ import {
   getSettings,
   setSettings,
 } from "./clientInterface";
-import { CREATE_PURCHASE_URL } from "./constants";
+// import { API_URL, CREATE_PURCHASE_PATH } from "./constants";
 
 // make a default settings object
 const defaultSettings: AppSettings = {
@@ -26,7 +26,6 @@ export default function SettingsWidget() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultSettings);
   const [appUiState, setAppUiState] = useState<AppUiState>(defaultAppUiState);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const [licenceTouched, setLicenceTouched] = useState(false);
 
@@ -37,17 +36,13 @@ export default function SettingsWidget() {
   // Fetch settings from the app on mount
   useEffect(() => {
     setIsLoading(true);
-    setError(null);
     Promise.all([getSettings(), getAppUiState()])
       .then(([settings, appUiState]) => {
         setAppSettings(settings);
         setAppUiState(appUiState);
         setIsLoading(false);
       })
-      .catch((err) => {
-        setError(
-          err instanceof Error ? err.message : "Failed to load settings"
-        );
+      .catch(() => {
         setIsLoading(false);
       });
   }, []);
@@ -74,7 +69,7 @@ export default function SettingsWidget() {
     <div className="p-1 mx-auto max-w-md text-sm">
       {/* <h2 className="mb-2 text-lg font-bold">Settings</h2> */}
       {/* {isLoading && <p>Saving…</p>} */}
-      {error && <p className="mb-2 text-red-500">Error: {error}</p>}
+      {/* {error && <p className="mb-2 text-red-500">Error: {error}</p>} */}
       {appUiState.messages?.map((message) => (
         <p className="mb-2 text-green-500" key={message}>
           {message}
@@ -144,7 +139,6 @@ export default function SettingsWidget() {
               <button
                 className="px-2 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
                 onClick={async () => {
-                  setError(null);
                   try {
                     const res = await checkLicence(
                       window.WIDGET_ID,
@@ -153,14 +147,10 @@ export default function SettingsWidget() {
                     );
                     if (!res.ok) {
                       const data = await res.json();
-                      setError(data?.message || "Failed to verify licence");
+                      console.log("data", data);
                     }
-                  } catch (err: unknown) {
-                    if (err instanceof Error) {
-                      setError(err.message);
-                    } else {
-                      setError("An unknown error occurred");
-                    }
+                  } catch {
+                    console.log("Error verifying licence");
                   }
                 }}
               >
@@ -170,17 +160,16 @@ export default function SettingsWidget() {
                 <button
                   className="px-2 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
                   onClick={async () => {
-                    const res = await fetch(CREATE_PURCHASE_URL, {
-                      method: "POST",
-                      body: JSON.stringify({ email: appSettings.user_email }),
-                      headers: { "Content-Type": "application/json" },
-                    });
-                    if (res.ok) {
-                      const data = await res.json();
-                      if (data.checkout_session_url) {
-                        window.open(data.checkout_session_url, "_blank");
-                      }
-                    }
+                    window.ipc.postMessage(
+                      JSON.stringify({
+                        type: "buylicence",
+                        content: {
+                          user_email: appSettings.user_email,
+                        },
+                      })
+                    );
+                    const appUiState = await getAppUiState();
+                    setAppUiState(appUiState);
                   }}
                 >
                   Buy Pro
@@ -193,16 +182,11 @@ export default function SettingsWidget() {
               className="px-3 py-1 text-xs text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
               disabled={!canSave || isLoading}
               onClick={async () => {
-                setError(null);
                 setIsLoading(true);
                 try {
                   await setSettings(appSettings);
-                } catch (err: unknown) {
-                  if (err instanceof Error) {
-                    setError(err.message);
-                  } else {
-                    setError("An unknown error occurred");
-                  }
+                } catch {
+                  console.log("Error saving settings");
                 }
                 setIsLoading(false);
               }}

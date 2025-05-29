@@ -36,6 +36,19 @@ pub enum IpcEvent {
     SaveSettings(AppSettings),
     ExtractResult(ScrapedData),
     DragEvent(DragEvent),
+    BuyLicence(UserEmail),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct UserEmail {
+    pub user_email: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct CreateCheckoutSessionResponse {
+    pub checkout_session_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

@@ -1,8 +1,8 @@
 #![allow(warnings)]
 
 // mod api;
-
 use env_logger::Builder;
+
 // use db::db::Database;
 use log::{error, info, warn, LevelFilter};
 use muda::{accelerator::Modifiers, Menu, MenuId, PredefinedMenuItem, Submenu};
@@ -19,10 +19,11 @@ use std::{
 };
 use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
-    ApiAction, AppSettings, AppUiState, ConfigInformation, CreateWidgetRequest, FileConfiguration,
-    IpcEvent, Level, LicenceTier, Modifier, MonitorPosition, ScrapedData, UrlConfiguration,
-    VersionInfo, WidgetBounds, WidgetConfiguration, WidgetModifier, WidgetType, API_PORT,
-    DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
+    ApiAction, AppSettings, AppUiState, ConfigInformation, CreateCheckoutSessionResponse,
+    CreateWidgetRequest, FileConfiguration, IpcEvent, Level, LicenceTier, Modifier,
+    MonitorPosition, ScrapedData, UrlConfiguration, VersionInfo, WidgetBounds, WidgetConfiguration,
+    WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH,
+    DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
 };
 use winit::{
     application::ApplicationHandler,
@@ -36,6 +37,12 @@ use cocoa::base::nil;
 use cocoa::foundation::NSString;
 use cocoa::{appkit::*, foundation::NSData};
 
+#[derive(thiserror::Error, Debug, Serialize, Deserialize)]
+pub enum AppError {
+    #[error("Failed to get checkout session url: {0}")]
+    CheckoutSessionUrl(String),
+}
+
 const DOCK_ICON: &[u8] = include_bytes!("../build_assets/icon.png");
 const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
 
@@ -48,7 +55,7 @@ use wry::{
 
 // mod db;
 
-use image::{self, ImageBuffer};
+use image::ImageBuffer;
 
 pub const RESIZE_DEBOUNCE_TIME: u128 = 50;
 pub const DEFAULT_SCRAPE_INTERVAL: u64 = 5;
@@ -352,6 +359,7 @@ JSON.stringify({
             // .with_drag_drop_handler(false)
             .with_transparent(widget_config.transparent)
             .with_ipc_handler({
+                info!("Recieved ipc message");
                 let proxy_clone = self.proxy.clone();
                 move |message| {
                     App::ipc_handler(message.body(), proxy_clone.clone());
@@ -456,6 +464,11 @@ JSON.stringify({
         let user_event = match serde_json::from_value::<IpcEvent>(val) {
             Ok(event) => event,
             Err(e) => {
+                // let mut app_ui_state = self.db.get_app_ui_state().unwrap().clone();
+                // app_ui_state
+                //     .messages
+                //     .push(format!("Failed to deserialize ipc event: {:?}", e));
+                // self.db.set_app_ui_state(&app_ui_state).unwrap();
                 error!("Failed to deserialize ipc event: {:?}", e);
                 return;
             }
@@ -605,6 +618,36 @@ JSON.stringify({
                 drag_event.widget_id
             );
         }
+    }
+
+    fn open_external_browser(&self, checkout_url: String) {
+        let url = format!("https://hoverpane.com/buy?email={}", checkout_url);
+        info!("Opening external browser to: {}", url);
+        let _ = open::that(url).unwrap();
+    }
+
+    fn get_checkout_session_url(&self, user_email: String) -> Result<String, AppError> {
+        let checkout_url = format!(
+            "{}/stripe/generate-stripe-checkout",
+            self.settings.api_base_url
+        );
+        let request = json!({ "email": user_email });
+        info!("Request: {:?}", request);
+
+        let checkout_session_response = reqwest::blocking::Client::new()
+            .post(checkout_url)
+            .json(&request)
+            .send()
+            .map_err(|e| {
+                error!("Failed to get checkout session url: {:?}", e);
+                return AppError::CheckoutSessionUrl(e.to_string());
+            })?
+            .json::<CreateCheckoutSessionResponse>()
+            .map_err(|e| {
+                error!("Failed to deserialize response: {:?}", e);
+                return AppError::CheckoutSessionUrl(e.to_string());
+            })?;
+        Ok(checkout_session_response.checkout_session_url)
     }
 
     // fn remove_widget_modifier(&self, widget_id: String, modifier_id: String) -> Result<(), ()> {
@@ -1024,6 +1067,23 @@ impl ApplicationHandler<UserEvent> for App {
                         self.add_scrape_result(scraped_data);
                     }
                     IpcEvent::DragEvent(drag_event) => self.handle_drag_event(drag_event),
+                    IpcEvent::BuyLicence(user_email) => {
+                        info!("Buying licence for: {:?}", user_email);
+                        let checkout_url = self.get_checkout_session_url(user_email.user_email);
+                        match checkout_url {
+                            Ok(checkout_url) => {
+                                open::that(checkout_url).unwrap();
+                            }
+                            Err(e) => {
+                                let mut app_ui_state = self.db.get_app_ui_state().unwrap().clone();
+                                app_ui_state
+                                    .messages
+                                    .push(format!("Failed to get checkout session url: {:?}", e));
+                                self.db.set_app_ui_state(&app_ui_state).unwrap();
+                                error!("Failed to get checkout session url: {:?}", e);
+                            }
+                        }
+                    }
                 }
             }
             UserEvent::ExtractResult(scraped_data) => {
@@ -1480,18 +1540,24 @@ fn check_user_version(
 pub struct DesktopAppSettings {
     pub app_settings: AppSettings,
     pub licence_check_url: String,
+    pub api_base_url: String,
 }
 
 impl DesktopAppSettings {
-    fn new(app_settings: AppSettings, licence_check_url: &str) -> Self {
+    fn new(app_settings: AppSettings, licence_check_url: &str, api_base_url: &str) -> Self {
         Self {
             app_settings,
             licence_check_url: licence_check_url.to_string(),
+            api_base_url: api_base_url.to_string(),
         }
     }
 }
 
-fn load_app_settings(db: &widget_db::Database, licence_check_url: &str) -> DesktopAppSettings {
+fn load_app_settings(
+    db: &widget_db::Database,
+    licence_check_url: &str,
+    api_base_url: &str,
+) -> DesktopAppSettings {
     let app_settings = match db.get_settings() {
         Ok(settings) => settings,
         Err(_) => {
@@ -1507,7 +1573,7 @@ fn load_app_settings(db: &widget_db::Database, licence_check_url: &str) -> Deskt
             default
         }
     };
-    DesktopAppSettings::new(app_settings, licence_check_url)
+    DesktopAppSettings::new(app_settings, licence_check_url, api_base_url)
 }
 
 fn setup_logging(config_dir: &Path) {
@@ -1564,8 +1630,13 @@ fn main() {
     } else {
         "http://localhost:3000/licence/check"
     };
+    let api_base_url = if dotenvy::var("ENV").unwrap_or("prod".to_string()) == "prod" {
+        "https://api.hoverpane.com"
+    } else {
+        "http://localhost:3000"
+    };
     let app_db = widget_db::Database::from(false).unwrap();
-    let desktop_settings = load_app_settings(&app_db, licence_check_url);
+    let desktop_settings = load_app_settings(&app_db, licence_check_url, api_base_url);
     info!("App settings: {:?}", desktop_settings);
 
     // load db, run migrations, etc

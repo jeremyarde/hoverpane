@@ -16,9 +16,9 @@
 //   </svg>
 // );
 
-export const CREATE_PURCHASE_URL =
-  "http://127.0.0.1:3001/stripe/generate-stripe-checkout";
-
+// export const CREATE_PURCHASE_URL =
+//   "http://127.0.0.1:3000/stripe/generate-stripe-checkout";
+export const CREATE_PURCHASE_URL = "/stripe/generate-stripe-checkout";
 export const HOVERPANE_DOWNLOAD_URL = "/apps/hoverpane/download";
 
 export const IconCode: React.FC<{ className?: string }> = ({ className }) => (

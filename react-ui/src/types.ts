@@ -27,6 +27,10 @@ export interface AppUiState {
 	messages: string[];
 }
 
+export interface CreateCheckoutSessionResponse {
+	checkout_session_url: string;
+}
+
 export enum Level {
 	AlwaysOnTop = "alwaysontop",
 	Normal = "normal",
@@ -90,6 +94,10 @@ export interface UrlConfiguration {
 	url: string;
 }
 
+export interface UserEmail {
+	user_email: string;
+}
+
 export interface Widget {
 	id: string;
 	name: string;
@@ -146,5 +154,6 @@ export type ApiAction =
 export type IpcEvent = 
 	| { type: "savesettings", content: AppSettings }
 	| { type: "extractresult", content: ScrapedData }
-	| { type: "dragevent", content: DragEvent };
+	| { type: "dragevent", content: DragEvent }
+	| { type: "buylicence", content: UserEmail };
 

@@ -4,7 +4,7 @@ type DownloadUrlResponse = {
   download_url: string;
 };
 
-const getBaseUrl = () => {
+export const getBaseUrl = () => {
   if (import.meta.env.PROD) {
     return "https://api.hoverpane.com";
   }
