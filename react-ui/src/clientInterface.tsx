@@ -5,8 +5,14 @@ import {
   WidgetModifier,
   ApiAction,
   AppSettings,
+  AppUiState,
 } from "./types";
 import { API_URL } from "./constants.tsx";
+
+export const getAppUiState = async () => {
+  const response = await fetch(`${API_URL}/app-ui-state`);
+  return response.json() as Promise<AppUiState>;
+};
 
 export const getSettings = async () => {
   const response = await fetch(`${API_URL}/settings`);

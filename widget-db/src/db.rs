@@ -10,8 +10,8 @@ pub mod db {
     use std::fs;
     use std::path::PathBuf;
     use widget_types::{
-        AppSettings, ConfigInformation, Level, LicenceTier, MonitorPosition, NanoId, ScrapedData,
-        WidgetBounds, WidgetConfiguration, WidgetModifier, DEFAULT_WIDGET_HEIGHT,
+        AppSettings, AppUiState, ConfigInformation, Level, LicenceTier, MonitorPosition, NanoId,
+        ScrapedData, WidgetBounds, WidgetConfiguration, WidgetModifier, DEFAULT_WIDGET_HEIGHT,
         DEFAULT_WIDGET_WIDTH,
     };
 
@@ -171,6 +171,18 @@ pub mod db {
                     }
                 };
                 Ok(settings)
+            } else {
+                Err(rusqlite::Error::QueryReturnedNoRows)
+            }
+        }
+
+        pub fn get_app_ui_state(&self) -> SqliteResult<AppUiState> {
+            let mut stmt = self.conn.prepare("SELECT json FROM app_ui_state LIMIT 1")?;
+            let mut rows = stmt.query([])?;
+            if let Some(row) = rows.next()? {
+                let json: String = row.get(0)?;
+                let app_ui_state: AppUiState = serde_json::from_str(&json).unwrap();
+                Ok(app_ui_state)
             } else {
                 Err(rusqlite::Error::QueryReturnedNoRows)
             }

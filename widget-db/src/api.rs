@@ -6,7 +6,7 @@ pub mod api {
     use tokio::sync::Mutex;
     use tower_http::trace::TraceLayer;
     use widget_types::{
-        ApiAction, AppSettings, EventSender, MonitorPosition, WidgetBounds, API_PORT,
+        ApiAction, AppSettings, AppUiState, EventSender, MonitorPosition, WidgetBounds, API_PORT,
         DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
     };
     use widget_types::{
@@ -76,7 +76,8 @@ pub mod api {
                 "/widgets/{widget_id}/modifiers/{modifier_id}",
                 delete(delete_widget_modifier),
             )
-            .route("/settings", get(get_settings))
+            .route("/settings", get(get_settings).post(set_settings))
+            .route("/app-ui-state", get(get_app_ui_state))
             .layer(TraceLayer::new_for_http())
             .layer(cors_layer)
             // .layer(axum::middleware::from_fn(logging_middleware))
@@ -400,5 +401,24 @@ pub mod api {
         let db = state.db.lock().await;
         let settings = db.get_settings()?;
         Ok(Json(settings))
+    }
+
+    #[axum::debug_handler]
+    pub(crate) async fn set_settings(
+        State(state): State<ApiState>,
+        Json(settings): Json<AppSettings>,
+    ) -> Result<Json<AppSettings>, ApiError> {
+        let db = state.db.lock().await;
+        db.set_settings(&settings)?;
+        Ok(Json(settings))
+    }
+
+    #[axum::debug_handler]
+    pub(crate) async fn get_app_ui_state(
+        State(state): State<ApiState>,
+    ) -> Result<Json<AppUiState>, ApiError> {
+        let db = state.db.lock().await;
+        let app_ui_state = db.get_app_ui_state()?;
+        Ok(Json(app_ui_state))
     }
 }

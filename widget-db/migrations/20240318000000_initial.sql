@@ -29,3 +29,7 @@ CREATE TABLE IF NOT EXISTS config (
     id INTEGER PRIMARY KEY,
     json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS app_ui_state (
+    json TEXT NOT NULL
+);

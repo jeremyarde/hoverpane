@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use nanoid::nanoid_gen;
 
 use serde::{Deserialize, Serialize};
@@ -49,6 +51,13 @@ pub struct DragEvent {
 pub enum LicenceTier {
     Pro,
     Free,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct AppUiState {
+    pub app_settings: AppSettings,
+    pub messages: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

@@ -19,10 +19,10 @@ use std::{
 };
 use tokio::{runtime::Runtime, sync::Mutex};
 use widget_types::{
-    ApiAction, AppSettings, ConfigInformation, CreateWidgetRequest, FileConfiguration, IpcEvent,
-    Level, LicenceTier, Modifier, MonitorPosition, ScrapedData, UrlConfiguration, VersionInfo,
-    WidgetBounds, WidgetConfiguration, WidgetModifier, WidgetType, API_PORT, DEFAULT_WIDGET_HEIGHT,
-    DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
+    ApiAction, AppSettings, AppUiState, ConfigInformation, CreateWidgetRequest, FileConfiguration,
+    IpcEvent, Level, LicenceTier, Modifier, MonitorPosition, ScrapedData, UrlConfiguration,
+    VersionInfo, WidgetBounds, WidgetConfiguration, WidgetModifier, WidgetType, API_PORT,
+    DEFAULT_WIDGET_HEIGHT, DEFAULT_WIDGET_WIDTH, DEFAULT_WIDGET_X, DEFAULT_WIDGET_Y,
 };
 use winit::{
     application::ApplicationHandler,
@@ -95,6 +95,7 @@ struct App {
     window_id_to_widget_id: HashMap<WindowId, NanoId>,
     db: widget_db::Database,
     settings: DesktopAppSettings,
+    ui_state: AppUiState,
 }
 
 struct WidgetView {
@@ -1610,6 +1611,10 @@ fn main() {
     tray_icon.set_visible(desktop_settings.app_settings.show_tray_icon);
 
     let mut app = App {
+        ui_state: AppUiState {
+            app_settings: desktop_settings.app_settings.clone(),
+            messages: vec![],
+        },
         updater: Updater::new(
             env!("CARGO_PKG_VERSION"),
             &format!("{}/apps/hoverpane/latest", licence_check_url),

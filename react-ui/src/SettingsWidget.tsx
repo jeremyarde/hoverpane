@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { AppSettings, LicenceTier } from "./types";
-import { checkLicence, getSettings, setSettings } from "./clientInterface";
+import { AppSettings, AppUiState, LicenceTier } from "./types";
+import {
+  checkLicence,
+  getAppUiState,
+  getSettings,
+  setSettings,
+} from "./clientInterface";
 import { CREATE_PURCHASE_URL } from "./constants";
 
 // make a default settings object
@@ -12,13 +17,18 @@ const defaultSettings: AppSettings = {
   licence_tier: LicenceTier.Free,
 };
 
+const defaultAppUiState: AppUiState = {
+  app_settings: defaultSettings,
+  messages: [],
+};
+
 export default function SettingsWidget() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultSettings);
+  const [appUiState, setAppUiState] = useState<AppUiState>(defaultAppUiState);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const [licenceTouched, setLicenceTouched] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
   const [pendingLicence, setPendingLicence] = useState<string | null>(null);
 
@@ -30,9 +40,10 @@ export default function SettingsWidget() {
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    getSettings()
-      .then((settings) => {
+    Promise.all([getSettings(), getAppUiState()])
+      .then(([settings, appUiState]) => {
         setAppSettings(settings);
+        setAppUiState(appUiState);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -54,14 +65,11 @@ export default function SettingsWidget() {
     // Only auto-save if licence_key is not being edited (pendingLicence is null)
     if (pendingLicence !== null) return;
     setError(null);
-    setSuccess(null);
     setIsLoading(true);
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(async () => {
       try {
         await setSettings(appSettings);
-        setSuccess("Settings saved!");
-        setTimeout(() => setSuccess(null), 2000);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -97,9 +105,13 @@ export default function SettingsWidget() {
   return (
     <div className="p-1 mx-auto max-w-md text-sm">
       {/* <h2 className="mb-2 text-lg font-bold">Settings</h2> */}
-      {isLoading && <p>Saving…</p>}
+      {/* {isLoading && <p>Saving…</p>} */}
       {error && <p className="mb-2 text-red-500">Error: {error}</p>}
-      {success && <p className="mb-2 text-green-500">{success}</p>}
+      {appUiState.messages.map((message) => (
+        <p className="mb-2 text-green-500" key={message}>
+          {message}
+        </p>
+      ))}
       {!isLoading && (
         <>
           <div className="flex items-center mb-2">

@@ -22,6 +22,11 @@ export interface AppSettings {
 	licence_tier: LicenceTier;
 }
 
+export interface AppUiState {
+	app_settings: AppSettings;
+	messages: string[];
+}
+
 export enum Level {
 	AlwaysOnTop = "alwaysontop",
 	Normal = "normal",
