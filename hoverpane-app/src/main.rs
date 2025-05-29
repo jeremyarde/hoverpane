@@ -1003,6 +1003,14 @@ impl ApplicationHandler<UserEvent> for App {
                             self.settings.app_settings.licence_key = licence_key;
                             self.settings.app_settings.user_email = user_email;
                             self.update_app_settings(self.settings.app_settings.clone());
+                            self.db.set_app_ui_state(&AppUiState {
+                                app_settings: self.settings.app_settings.clone(),
+                                messages: self
+                                    .ui_state
+                                    .messages
+                                    .clone()
+                                    .push("Licence check successful".to_string()),
+                            });
                         }
                     }
                 }
