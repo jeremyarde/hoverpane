@@ -27,8 +27,8 @@ pub struct Updater {
 #[derive(Deserialize, Serialize)]
 pub struct GetLatestVersionPayload {
     pub licence_key: String,
-    pub user_machine_id: String,
-    pub user_email: String,
+    pub machine_id: String,
+    pub email: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,10 +52,10 @@ impl Updater {
     pub async fn check_for_updates(
         &self,
         licence_key: &str,
-        user_machine_id: &str,
-        user_email: &str,
+        machine_id: &str,
+        email: &str,
     ) -> Result<Option<UpdateInfo>, UpdaterError> {
-        if user_email.is_empty() {
+        if email.is_empty() {
             return Err(UpdaterError::UserEmailEmpty);
         }
 
@@ -67,8 +67,8 @@ impl Updater {
             .post(&self.update_check_url)
             .json(&GetLatestVersionPayload {
                 licence_key: licence_key.to_string(),
-                user_machine_id: user_machine_id.to_string(),
-                user_email: user_email.to_string(),
+                machine_id: machine_id.to_string(),
+                email: email.to_string(),
             })
             .header("Content-Type", "application/json")
             .send()

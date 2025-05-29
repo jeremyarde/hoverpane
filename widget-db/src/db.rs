@@ -161,7 +161,7 @@ pub mod db {
                         error!("Failed to parse settings: {:?}", e);
                         let defaults = AppSettings {
                             show_tray_icon: true,
-                            user_email: "".to_string(),
+                            email: "".to_string(),
                             licence_key: "".to_string(),
                             machine_id: "".to_string(),
                             licence_tier: LicenceTier::Free,
@@ -181,7 +181,16 @@ pub mod db {
             let mut rows = stmt.query([])?;
             if let Some(row) = rows.next()? {
                 let json: String = row.get(0)?;
-                let app_ui_state: AppUiState = serde_json::from_str(&json).unwrap();
+                let app_ui_state: AppUiState = serde_json::from_str(&json).unwrap_or(AppUiState {
+                    app_settings: AppSettings {
+                        show_tray_icon: true,
+                        email: "".to_string(),
+                        licence_key: "".to_string(),
+                        machine_id: "".to_string(),
+                        licence_tier: LicenceTier::Free,
+                    },
+                    messages: vec!["Failed to load app UI state".to_string()],
+                });
                 Ok(app_ui_state)
             } else {
                 Err(rusqlite::Error::QueryReturnedNoRows)

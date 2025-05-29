@@ -1,17 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { AppSettings, AppUiState, LicenceTier } from "./types";
-import {
-  checkLicence,
-  getAppUiState,
-  getSettings,
-  setSettings,
-} from "./clientInterface";
+import { getAppUiState, getSettings, setSettings } from "./clientInterface";
 // import { API_URL, CREATE_PURCHASE_PATH } from "./constants";
 
 // make a default settings object
 const defaultSettings: AppSettings = {
   show_tray_icon: true,
-  user_email: "",
+  email: "",
   licence_key: "",
   machine_id: "",
   licence_tier: LicenceTier.Free,
@@ -29,7 +24,7 @@ export default function SettingsWidget() {
   const [emailTouched, setEmailTouched] = useState(false);
   const [licenceTouched, setLicenceTouched] = useState(false);
 
-  const isEmailValid = appSettings.user_email.trim().length > 0;
+  const isEmailValid = appSettings.email.trim().length > 0;
   const isLicenceValid = appSettings.licence_key.trim().length > 0;
   const canSave = isEmailValid && isLicenceValid;
 
@@ -100,9 +95,9 @@ export default function SettingsWidget() {
                 type="email"
                 id="user_email"
                 className="flex-1 px-1 py-0.5 rounded border border-gray-300 text-xs"
-                value={appSettings.user_email}
+                value={appSettings.email}
                 onChange={(e) =>
-                  handleSettingsChange({ user_email: e.target.value })
+                  handleSettingsChange({ email: e.target.value })
                 }
                 onBlur={() => setEmailTouched(true)}
                 required
@@ -139,19 +134,17 @@ export default function SettingsWidget() {
               <button
                 className="px-2 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
                 onClick={async () => {
-                  try {
-                    const res = await checkLicence(
-                      window.WIDGET_ID,
-                      appSettings.user_email,
-                      appSettings.licence_key
-                    );
-                    if (!res.ok) {
-                      const data = await res.json();
-                      console.log("data", data);
-                    }
-                  } catch {
-                    console.log("Error verifying licence");
-                  }
+                  window.ipc.postMessage(
+                    JSON.stringify({
+                      type: "checklicence",
+                      content: {
+                        email: appSettings.email,
+                        licence_key: appSettings.licence_key,
+                      },
+                    })
+                  );
+                  const appUiState = await getAppUiState();
+                  setAppUiState(appUiState);
                 }}
               >
                 Verify
@@ -164,7 +157,7 @@ export default function SettingsWidget() {
                       JSON.stringify({
                         type: "buylicence",
                         content: {
-                          user_email: appSettings.user_email,
+                          email: appSettings.email,
                         },
                       })
                     );

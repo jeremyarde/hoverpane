@@ -7,20 +7,20 @@ import {
   AppSettings,
   AppUiState,
 } from "./types";
-import { API_URL } from "./constants.tsx";
+import { LOCAL_API_URL } from "./constants.tsx";
 
 export const getAppUiState = async () => {
-  const response = await fetch(`${API_URL}/app-ui-state`);
+  const response = await fetch(`${LOCAL_API_URL}/app-ui-state`);
   return response.json() as Promise<AppUiState>;
 };
 
 export const getSettings = async () => {
-  const response = await fetch(`${API_URL}/settings`);
+  const response = await fetch(`${LOCAL_API_URL}/settings`);
   return response.json() as Promise<AppSettings>;
 };
 
 export const setSettings = async (settings: AppSettings) => {
-  const response = await fetch(`${API_URL}/settings`, {
+  const response = await fetch(`${LOCAL_API_URL}/settings`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -31,7 +31,7 @@ export const setSettings = async (settings: AppSettings) => {
 };
 
 export const createWidget = async (request: CreateWidgetRequest) => {
-  const response = await fetch(`${API_URL}/widgets`, {
+  const response = await fetch(`${LOCAL_API_URL}/widgets`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -42,19 +42,21 @@ export const createWidget = async (request: CreateWidgetRequest) => {
 };
 
 export const getWidgets = async () => {
-  const response = await fetch(`${API_URL}/widgets`);
+  const response = await fetch(`${LOCAL_API_URL}/widgets`);
   return response;
 };
 
 export const deleteWidget = async (id: string) => {
-  const response = await fetch(`${API_URL}/widgets/${id}`, {
+  const response = await fetch(`${LOCAL_API_URL}/widgets/${id}`, {
     method: "DELETE",
   });
   return response;
 };
 
 export const getWidgetModifiers = async (widgetId: string) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}/modifiers`);
+  const response = await fetch(
+    `${LOCAL_API_URL}/widgets/${widgetId}/modifiers`
+  );
   return response;
 };
 
@@ -62,13 +64,16 @@ export const addWidgetModifier = async (
   widgetId: string,
   modifier: WidgetModifier
 ) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}/modifiers`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(modifier),
-  });
+  const response = await fetch(
+    `${LOCAL_API_URL}/widgets/${widgetId}/modifiers`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(modifier),
+    }
+  );
   return response;
 };
 
@@ -77,7 +82,7 @@ export const deleteWidgetModifier = async (
   modifierId: string
 ) => {
   const response = await fetch(
-    `${API_URL}/widgets/${widgetId}/modifiers/${modifierId}`,
+    `${LOCAL_API_URL}/widgets/${widgetId}/modifiers/${modifierId}`,
     {
       method: "DELETE",
     }
@@ -89,7 +94,7 @@ export const updateWidgetBounds = async (
   widgetId: string,
   bounds: { x: number; y: number; width: number; height: number }
 ) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}`, {
+  const response = await fetch(`${LOCAL_API_URL}/widgets/${widgetId}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -109,7 +114,7 @@ export const toggleWidgetVisibility = async (
   widgetId: string,
   visible: boolean
 ) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}`, {
+  const response = await fetch(`${LOCAL_API_URL}/widgets/${widgetId}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -126,7 +131,7 @@ export const toggleWidgetVisibility = async (
 };
 
 export const maximizeWidget = async (widgetId: string) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}`, {
+  const response = await fetch(`${LOCAL_API_URL}/widgets/${widgetId}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -142,7 +147,7 @@ export const maximizeWidget = async (widgetId: string) => {
 };
 
 export const minimizeWidget = async (widgetId: string) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}`, {
+  const response = await fetch(`${LOCAL_API_URL}/widgets/${widgetId}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -151,27 +156,6 @@ export const minimizeWidget = async (widgetId: string) => {
       type: "minimizewidget",
       content: {
         widget_id: widgetId,
-      },
-    } as ApiAction),
-  });
-  return response;
-};
-
-export const checkLicence = async (
-  widgetId: string,
-  user_email: string,
-  licence_key: string
-) => {
-  const response = await fetch(`${API_URL}/widgets/${widgetId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      type: "checklicence",
-      content: {
-        user_email: user_email,
-        licence_key: licence_key,
       },
     } as ApiAction),
   });

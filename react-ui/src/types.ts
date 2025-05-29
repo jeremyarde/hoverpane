@@ -16,7 +16,7 @@ export enum LicenceTier {
 
 export interface AppSettings {
 	show_tray_icon: boolean;
-	user_email: string;
+	email: string;
 	licence_key: string;
 	machine_id: string;
 	licence_tier: LicenceTier;
@@ -25,6 +25,11 @@ export interface AppSettings {
 export interface AppUiState {
 	app_settings: AppSettings;
 	messages: string[];
+}
+
+export interface CheckLicenceRequest {
+	email: string;
+	licence_key: string;
 }
 
 export interface CreateCheckoutSessionResponse {
@@ -75,6 +80,10 @@ export interface FileConfiguration {
 	html: string;
 }
 
+export interface LicenceKey {
+	licence_key: string;
+}
+
 export interface MonitorPosition {
 	x: number;
 	y: number;
@@ -95,7 +104,7 @@ export interface UrlConfiguration {
 }
 
 export interface UserEmail {
-	user_email: string;
+	email: string;
 }
 
 export interface Widget {
@@ -155,5 +164,6 @@ export type IpcEvent =
 	| { type: "savesettings", content: AppSettings }
 	| { type: "extractresult", content: ScrapedData }
 	| { type: "dragevent", content: DragEvent }
-	| { type: "buylicence", content: UserEmail };
+	| { type: "buylicence", content: UserEmail }
+	| { type: "checklicence", content: CheckLicenceRequest };
 

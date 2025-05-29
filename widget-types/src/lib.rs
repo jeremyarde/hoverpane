@@ -37,12 +37,26 @@ pub enum IpcEvent {
     ExtractResult(ScrapedData),
     DragEvent(DragEvent),
     BuyLicence(UserEmail),
+    CheckLicence(CheckLicenceRequest),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[typeshare]
 pub struct UserEmail {
-    pub user_email: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct CheckLicenceRequest {
+    pub email: String,
+    pub licence_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[typeshare]
+pub struct LicenceKey {
+    pub licence_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -77,7 +91,7 @@ pub struct AppUiState {
 #[typeshare]
 pub struct AppSettings {
     pub show_tray_icon: bool,
-    pub user_email: String,
+    pub email: String,
     pub licence_key: String,
     pub machine_id: String,
     pub licence_tier: LicenceTier,

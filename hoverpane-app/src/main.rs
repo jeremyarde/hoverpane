@@ -1044,7 +1044,7 @@ impl ApplicationHandler<UserEvent> for App {
                         if let Some(user_version) = user_version {
                             self.settings.app_settings.licence_tier = user_version;
                             self.settings.app_settings.licence_key = licence_key;
-                            self.settings.app_settings.user_email = user_email;
+                            self.settings.app_settings.email = user_email;
                             self.update_app_settings(self.settings.app_settings.clone());
 
                             let mut all_messages = self.ui_state.messages.clone();
@@ -1067,9 +1067,9 @@ impl ApplicationHandler<UserEvent> for App {
                         self.add_scrape_result(scraped_data);
                     }
                     IpcEvent::DragEvent(drag_event) => self.handle_drag_event(drag_event),
-                    IpcEvent::BuyLicence(user_email) => {
-                        info!("Buying licence for: {:?}", user_email);
-                        let checkout_url = self.get_checkout_session_url(user_email.user_email);
+                    IpcEvent::BuyLicence(email) => {
+                        info!("Buying licence for: {:?}", email);
+                        let checkout_url = self.get_checkout_session_url(email.email);
                         match checkout_url {
                             Ok(checkout_url) => {
                                 open::that(checkout_url).unwrap();
@@ -1082,6 +1082,35 @@ impl ApplicationHandler<UserEvent> for App {
                                 self.db.set_app_ui_state(&app_ui_state).unwrap();
                                 error!("Failed to get checkout session url: {:?}", e);
                             }
+                        }
+                    }
+                    IpcEvent::CheckLicence(check_licence_request) => {
+                        info!("Checking licence: {:?}", check_licence_request);
+                        let user_version = check_user_version(
+                            &mut self.settings,
+                            &check_licence_request.email,
+                            &check_licence_request.licence_key,
+                        );
+                        info!("User version: {:?}", user_version);
+                        if let Some(user_version) = user_version {
+                            self.settings.app_settings.licence_tier = user_version;
+                            self.settings.app_settings.licence_key =
+                                check_licence_request.licence_key;
+                            self.settings.app_settings.email = check_licence_request.email;
+                            self.update_app_settings(self.settings.app_settings.clone());
+
+                            let mut all_messages = self.ui_state.messages.clone();
+                            all_messages.push("Licence check successful".to_string());
+                            self.db.set_app_ui_state(&AppUiState {
+                                app_settings: self.settings.app_settings.clone(),
+                                messages: all_messages,
+                            });
+                        } else {
+                            let mut app_ui_state = self.db.get_app_ui_state().unwrap().clone();
+                            app_ui_state
+                                .messages
+                                .push("Licence check failed".to_string());
+                            self.db.set_app_ui_state(&app_ui_state).unwrap();
                         }
                     }
                 }
@@ -1103,7 +1132,7 @@ impl ApplicationHandler<UserEvent> for App {
                             .check_for_updates(
                                 &app_settings.app_settings.licence_key,
                                 &app_settings.app_settings.machine_id,
-                                &app_settings.app_settings.user_email,
+                                &app_settings.app_settings.email,
                             )
                             .await
                         {
@@ -1471,7 +1500,7 @@ pub struct LicenceCheckResponse {
 
 fn check_user_version(
     app_settings: &mut DesktopAppSettings,
-    user_email: &str,
+    email: &str,
     licence_key: &str,
 ) -> Option<LicenceTier> {
     let client = reqwest::blocking::Client::new();
@@ -1485,7 +1514,7 @@ fn check_user_version(
     let hashed_id = blake3::hash(machine_id.as_bytes());
 
     let request = json!({
-        "user_email": user_email,
+        "email": email,
         "licence_key": licence_key,
         "machine_id": hashed_id.to_string(),
         "os": os,
@@ -1564,7 +1593,7 @@ fn load_app_settings(
             // Insert default settings if not present
             let default = AppSettings {
                 show_tray_icon: true,
-                user_email: "".to_string(),
+                email: "".to_string(),
                 licence_key: "".to_string(),
                 machine_id: machine_uid::get().unwrap(),
                 licence_tier: LicenceTier::Free,
