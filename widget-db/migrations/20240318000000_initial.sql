@@ -27,9 +27,9 @@ CREATE TABLE IF NOT EXISTS scraped_data (
 
 CREATE TABLE IF NOT EXISTS config (
     id INTEGER PRIMARY KEY,
-    json TEXT NOT NULL
+    json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS app_ui_state (
-    json TEXT NOT NULL
+    json TEXT NOT NULL DEFAULT '{}'
 );

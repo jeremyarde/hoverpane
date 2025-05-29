@@ -188,6 +188,14 @@ pub mod db {
             }
         }
 
+        pub fn set_app_ui_state(&self, app_ui_state: &AppUiState) -> SqliteResult<()> {
+            let json = serde_json::to_string(app_ui_state).unwrap();
+            self.conn.execute("DELETE FROM app_ui_state", [])?;
+            self.conn
+                .execute("INSERT INTO app_ui_state (json) VALUES (?)", [&json])?;
+            Ok(())
+        }
+
         pub fn get_widget_configuration_by_id(
             &self,
             widget_id: &str,

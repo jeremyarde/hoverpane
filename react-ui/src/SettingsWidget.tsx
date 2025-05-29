@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { AppSettings, AppUiState, LicenceTier } from "./types";
 import {
   checkLicence,
@@ -29,8 +29,6 @@ export default function SettingsWidget() {
   const [error, setError] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const [licenceTouched, setLicenceTouched] = useState(false);
-  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
-  const [pendingLicence, setPendingLicence] = useState<string | null>(null);
 
   const isEmailValid = appSettings.user_email.trim().length > 0;
   const isLicenceValid = appSettings.licence_key.trim().length > 0;
@@ -54,34 +52,6 @@ export default function SettingsWidget() {
       });
   }, []);
 
-  // Auto-save effect for all fields except licence_key
-  useEffect(() => {
-    if (!canSave) {
-      if (!isEmailValid && emailTouched) setError("Email is required.");
-      else if (!isLicenceValid && licenceTouched)
-        setError("Licence key is required.");
-      return;
-    }
-    // Only auto-save if licence_key is not being edited (pendingLicence is null)
-    if (pendingLicence !== null) return;
-    setError(null);
-    setIsLoading(true);
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(async () => {
-      try {
-        await setSettings(appSettings);
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError("An unknown error occurred");
-        }
-      }
-      setIsLoading(false);
-    }, 500);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appSettings, pendingLicence]);
-
   const handleSettingsChange = useCallback(
     (updatedData: Partial<AppSettings>) => {
       setAppSettings((prevSettings) => ({
@@ -94,12 +64,10 @@ export default function SettingsWidget() {
 
   // Handler for licence_key input
   const handleLicenceChange = (value: string) => {
-    setPendingLicence(value);
     setAppSettings((prev) => ({ ...prev, licence_key: value }));
   };
   const handleLicenceBlur = () => {
     setLicenceTouched(true);
-    setPendingLicence(null);
   };
 
   return (
@@ -107,7 +75,7 @@ export default function SettingsWidget() {
       {/* <h2 className="mb-2 text-lg font-bold">Settings</h2> */}
       {/* {isLoading && <p>Saving…</p>} */}
       {error && <p className="mb-2 text-red-500">Error: {error}</p>}
-      {appUiState.messages.map((message) => (
+      {appUiState.messages?.map((message) => (
         <p className="mb-2 text-green-500" key={message}>
           {message}
         </p>
@@ -219,6 +187,28 @@ export default function SettingsWidget() {
                 </button>
               )}
             </div>
+          </div>
+          <div className="flex justify-end mt-4">
+            <button
+              className="px-3 py-1 text-xs text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
+              disabled={!canSave || isLoading}
+              onClick={async () => {
+                setError(null);
+                setIsLoading(true);
+                try {
+                  await setSettings(appSettings);
+                } catch (err: unknown) {
+                  if (err instanceof Error) {
+                    setError(err.message);
+                  } else {
+                    setError("An unknown error occurred");
+                  }
+                }
+                setIsLoading(false);
+              }}
+            >
+              {isLoading ? "Saving…" : "Save"}
+            </button>
           </div>
         </>
       )}
