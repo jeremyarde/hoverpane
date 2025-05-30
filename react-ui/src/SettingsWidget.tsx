@@ -9,7 +9,7 @@ const defaultSettings: AppSettings = {
   email: "",
   licence_key: "",
   machine_id: "",
-  licence_tier: LicenceTier.Free,
+  licence_tier: LicenceTier.None,
 };
 
 const defaultAppUiState: AppUiState = {
@@ -65,11 +65,11 @@ export default function SettingsWidget() {
       {/* <h2 className="mb-2 text-lg font-bold">Settings</h2> */}
       {/* {isLoading && <p>Saving…</p>} */}
       {/* {error && <p className="mb-2 text-red-500">Error: {error}</p>} */}
-      {appUiState.messages?.map((message) => (
+      {/* {appUiState.messages?.map((message) => (
         <p className="mb-2 text-green-500" key={message}>
           {message}
         </p>
-      ))}
+      ))} */}
       {!isLoading && (
         <>
           <div className="flex items-center mb-2">
@@ -149,7 +149,8 @@ export default function SettingsWidget() {
               >
                 Verify
               </button>
-              {appSettings.licence_tier === LicenceTier.Free && (
+              {(appSettings.licence_tier === LicenceTier.None ||
+                appSettings.licence_tier === LicenceTier.Free) && (
                 <button
                   className="px-2 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
                   onClick={async () => {

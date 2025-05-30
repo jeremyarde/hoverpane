@@ -12,6 +12,7 @@ export interface ApiError {
 export enum LicenceTier {
 	Pro = "Pro",
 	Free = "Free",
+	None = "None",
 }
 
 export interface AppSettings {

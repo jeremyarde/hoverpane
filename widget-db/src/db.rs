@@ -164,7 +164,7 @@ pub mod db {
                             email: "".to_string(),
                             licence_key: "".to_string(),
                             machine_id: "".to_string(),
-                            licence_tier: LicenceTier::Free,
+                            licence_tier: LicenceTier::None,
                         };
                         self.set_settings(&defaults)?;
                         defaults
@@ -187,7 +187,7 @@ pub mod db {
                         email: "".to_string(),
                         licence_key: "".to_string(),
                         machine_id: "".to_string(),
-                        licence_tier: LicenceTier::Free,
+                        licence_tier: LicenceTier::None,
                     },
                     messages: vec!["Failed to load app UI state".to_string()],
                 });

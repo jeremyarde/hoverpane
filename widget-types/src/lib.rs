@@ -78,6 +78,7 @@ pub struct DragEvent {
 pub enum LicenceTier {
     Pro,
     Free,
+    None,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

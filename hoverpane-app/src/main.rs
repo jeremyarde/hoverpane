@@ -1596,7 +1596,7 @@ fn load_app_settings(
                 email: "".to_string(),
                 licence_key: "".to_string(),
                 machine_id: machine_uid::get().unwrap(),
-                licence_tier: LicenceTier::Free,
+                licence_tier: LicenceTier::None,
             };
             let _ = db.set_settings(&default);
             default
