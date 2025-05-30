@@ -17,7 +17,6 @@ const Dock: React.FC<DockProps> = ({ items }) => {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      console.log(currentScrollY);
       const isScrollingDown = currentScrollY > lastScrollY.current;
       lastScrollY.current = currentScrollY;
 
@@ -43,9 +42,9 @@ const Dock: React.FC<DockProps> = ({ items }) => {
         <div
           key={index}
           onClick={item.onClick}
-          className="w-12 h-12 flex flex-col items-center cursor-pointer transition-transform duration-200 ease-in-out hover:scale-105"
+          className="flex flex-col items-center w-12 h-12 transition-transform duration-200 ease-in-out cursor-pointer hover:scale-105"
         >
-          <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow hover:shadow-lg transition-all duration-200">
+          <div className="flex justify-center items-center w-10 h-10 bg-white rounded-lg shadow transition-all duration-200 hover:shadow-lg">
             {item.icon}
           </div>
           <span className="text-[10px] text-gray-700 mt-1 text-center">
