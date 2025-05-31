@@ -44,9 +44,10 @@ pub enum AppError {
 }
 
 const DOCK_ICON: &[u8] = include_bytes!("../build_assets/icon.png");
-const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
+// const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
+const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon-white.png");
 
-use tray_icon::{TrayIcon, TrayIconBuilder};
+use tray_icon::{TrayIcon, TrayIconAttributes, TrayIconBuilder};
 
 use wry::{
     dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
@@ -90,6 +91,7 @@ struct ViewSize {
 struct App {
     updater: Updater,
     tray_icon: TrayIcon,
+    // tray_icon_white: TrayIcon,
     app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     menu_items: MenuItems,
     current_size: LogicalSize<u32>,
@@ -714,6 +716,7 @@ fn setup_tray_menu(
     let tray_reset_database_id = reset_database_item.id().0.clone();
     let tray_check_updates_id = check_updates_item.id().0.clone();
     let (width, height) = app_icon.dimensions();
+
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("HoverPane")
         .with_icon(tray_icon::Icon::from_rgba(app_icon.into_raw(), width, height).unwrap())
