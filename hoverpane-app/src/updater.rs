@@ -1,9 +1,9 @@
+use cargo_packager_updater::{check_update, Config, Update};
 use reqwest;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{cmp::Ordering, path::PathBuf};
-// use thiserror::Error;
 
 #[cfg(not(test))]
 use log::{error, info, warn};
@@ -21,7 +21,8 @@ pub struct UpdateInfo {
 #[derive(Debug, Clone)]
 pub struct Updater {
     current_version: Version,
-    update_check_url: String,
+    // update_check_url: String,
+    updater_config: Config,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -39,63 +40,54 @@ pub enum UpdaterError {
     ReqwestError(#[from] reqwest::Error),
     #[error(transparent)]
     SemverError(#[from] semver::Error),
+    #[error(transparent)]
+    CargoPackagerError(#[from] cargo_packager_updater::Error),
 }
 
 impl Updater {
-    pub fn new(current_version: &str, update_check_url: &str) -> Self {
+    pub fn new(current_version: &str, api_url: &str) -> Self {
         Self {
             current_version: Version::parse(current_version).expect("Invalid version format"),
-            update_check_url: update_check_url.to_string(),
+            // update_check_url: update_check_url.to_string(),
+            updater_config: Config {
+                endpoints: vec![api_url.parse().unwrap()],
+                // endpoints: vec!["https://api.hoverpane.com/apps/hoverpane/updates".parse().unwrap()],
+                pubkey: include_str!("../packager_public.pub").to_string(),
+                ..Default::default()
+            },
         }
     }
 
-    pub async fn check_for_updates(
+    pub fn check_for_updates(
         &self,
-        licence_key: &str,
-        machine_id: &str,
-        email: &str,
-    ) -> Result<Option<UpdateInfo>, UpdaterError> {
-        if email.is_empty() {
-            return Err(UpdaterError::UserEmailEmpty);
-        }
+        // licence_key: &str,
+        // machine_id: &str,
+        // email: &str,
+        install: bool,
+    ) -> Result<(), UpdaterError> {
+        // info!("Checking for updates at {}", self.update_check_url);
 
-        info!("Checking for updates at {}", self.update_check_url);
-
-        let client = reqwest::Client::new();
-
-        let response = client
-            .post(&self.update_check_url)
-            .json(&GetLatestVersionPayload {
-                licence_key: licence_key.to_string(),
-                machine_id: machine_id.to_string(),
-                email: email.to_string(),
-            })
-            .header("Content-Type", "application/json")
-            .send()
-            .await
-            .map_err(UpdaterError::ReqwestError)?
-            .error_for_status()
-            .map_err(UpdaterError::ReqwestError)?;
-
-        let update_info: UpdateInfo = response.json().await.map_err(UpdaterError::ReqwestError)?;
-        info!("Update info: {:?}", update_info);
-
-        let latest_version = Version::parse(&update_info.version)?;
-
-        match latest_version.cmp(&self.current_version) {
-            Ordering::Greater => {
-                info!("New version available: {}", latest_version);
-                Ok(Some(update_info))
+        info!("Checking for updates at {:?}", self.updater_config);
+        match check_update(self.current_version.clone(), self.updater_config.clone()) {
+            Ok(Some(update)) => {
+                info!("Update info: {:?}", update);
+                update.download_and_install()?;
             }
-            Ordering::Equal => {
-                info!("Already using the latest version");
-                Ok(None)
+            Err(e) => {
+                error!("Error checking for updates: {:?}", e);
             }
-            Ordering::Less => {
-                info!("Current version is newer than the latest version");
-                Ok(None)
+            _ => {
+                info!("No update found");
             }
         }
+        // if let Ok(Some(update)) =
+        //     check_update(self.current_version.clone(), self.updater_config.clone())
+        // {
+        //     info!("Update info: {:?}", update);
+        //     update.download_and_install()?;
+        // }
+
+        Ok(())
     }
 
     pub async fn download_update(
@@ -133,19 +125,32 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_comparison() {
-        let updater = Updater::new("0.4.0", "http://localhost:3000/apps/hoverpane/latest");
+        let updater = Updater::new("0.4.0", "http://localhost:3000/apps/hoverpane/updates");
 
-        let update_info = match updater
-            .check_for_updates("1234567890", "1234567890", "test@test.com")
-            .await
-        {
-            Ok(update_info) => update_info,
+        match updater.check_for_updates(false) {
+            Ok(()) => {
+                println!("Update found");
+            }
             Err(e) => {
                 error!("Error: {:?}", e);
                 return;
             }
         };
-        println!("Update info: {:?}", update_info);
-        assert!(update_info.is_some());
+    }
+
+    #[test]
+    fn test_download_update() {
+        let updater = Updater::new("0.10.0", "http://localhost:3000/apps/hoverpane/updates");
+        match updater.check_for_updates(false) {
+            Ok(()) => {
+                println!("Update found");
+            }
+            Err(e) => {
+                println!("Error: {:?}", e);
+            }
+            _ => {
+                println!("No update found");
+            }
+        }
     }
 }

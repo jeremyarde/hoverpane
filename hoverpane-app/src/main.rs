@@ -1,9 +1,7 @@
 #![allow(warnings)]
 
-// mod api;
 use env_logger::Builder;
 
-// use db::db::Database;
 use log::{error, info, warn, LevelFilter};
 use muda::{accelerator::Modifiers, Menu, MenuId, PredefinedMenuItem, Submenu};
 use serde::{Deserialize, Serialize};
@@ -33,9 +31,13 @@ use winit::{
     window::{self, Window, WindowId, WindowLevel},
 };
 
-use cocoa::base::nil;
-use cocoa::foundation::NSString;
-use cocoa::{appkit::*, foundation::NSData};
+// use cocoa::{
+//     appkit::{NSApp, NSObject},
+//     base::nil,
+//     foundation::{NSAutoreleasePool, NSData, NSString, NSUserDefaults},
+// };
+// use cocoa::foundation::NSString;
+// use cocoa::{appkit::*, foundation::NSData};
 
 #[derive(thiserror::Error, Debug, Serialize, Deserialize)]
 pub enum AppError {
@@ -44,8 +46,8 @@ pub enum AppError {
 }
 
 const DOCK_ICON: &[u8] = include_bytes!("../build_assets/icon.png");
-// const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
-const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon-white.png");
+const TRAY_ICON: &[u8] = include_bytes!("../build_assets/tray-icon.png");
+// const TRAY_ICON_WHITE: &[u8] = include_bytes!("../build_assets/tray-icon-white.png");
 
 use tray_icon::{TrayIcon, TrayIconAttributes, TrayIconBuilder};
 
@@ -88,11 +90,47 @@ struct ViewSize {
 //     show_tray_icon: bool,
 // }
 
+// #[derive(Debug, Clone, Deserialize, Serialize)]
+// enum Theme {
+//     Light,
+//     Dark,
+// }
+
+// struct AppTheme {
+//     mode: Mode,
+//     light_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+//     dark_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+// }
+
+// impl AppTheme {
+//     fn new() -> Self {
+//         // let mode = dark_light::detect().unwrap_or(Mode::Light);
+//         // let light_icon = image::load_from_memory(TRAY_ICON)
+//         //     .expect("Failed to load icon")
+//         //     .into_rgba8();
+//         // // let dark_icon = image::load_from_memory(TRAY_ICON_WHITE)
+//         //     .expect("Failed to load icon")
+//         //     .into_rgba8();
+//         Self {
+//             mode,
+//             light_icon,
+//             dark_icon,
+//         }
+//     }
+
+//     fn get_icon(&self) -> ImageBuffer<image::Rgba<u8>, Vec<u8>> {
+//         let mode = dark_light::detect().unwrap_or(Mode::Light);
+//         if mode == Mode::Dark {
+//             self.dark_icon.clone()
+//         } else {
+//             self.light_icon.clone()
+//         }
+//     }
+// }
 struct App {
     updater: Updater,
     tray_icon: TrayIcon,
-    // tray_icon_white: TrayIcon,
-    app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    // theme: AppTheme,
     menu_items: MenuItems,
     current_size: LogicalSize<u32>,
     menu: Menu,
@@ -514,12 +552,26 @@ JSON.stringify({
         });
     }
 
+    // fn check_theme(&mut self) {
+    //     if self.theme.mode != dark_light::detect().unwrap_or(Mode::Light) {
+    //         self.theme.mode = dark_light::detect().unwrap_or(Mode::Light);
+    //         let icon = tray_icon::Icon::from_rgba(
+    //             self.theme.get_icon().into_raw(),
+    //             self.theme.get_icon().width(),
+    //             self.theme.get_icon().height(),
+    //         )
+    //         .unwrap();
+    //         self.tray_icon.set_icon(Some(icon));
+    //     }
+    // }
+
     fn update_app_settings(&mut self, settings: AppSettings) {
         info!("Updating app settings: {:?}", settings);
         // Save to database
         if let Err(e) = self.db.set_settings(&settings) {
             error!("Failed to save settings to db: {:?}", e);
         }
+
         // update the tray icon
         if !settings.show_tray_icon {
             self.tray_icon.set_visible(false);
@@ -677,7 +729,7 @@ pub struct MenuItems {
 
 fn setup_tray_menu(
     user_version: LicenceTier,
-    app_icon: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    // theme: &AppTheme,
     proxy_clone: EventLoopProxy<UserEvent>,
 ) -> (MenuItems, TrayIcon) {
     let tray_menu = tray_icon::menu::Menu::new();
@@ -715,17 +767,23 @@ fn setup_tray_menu(
     let tray_show_titlebar_id = show_titlebar_item.id().0.clone();
     let tray_reset_database_id = reset_database_item.id().0.clone();
     let tray_check_updates_id = check_updates_item.id().0.clone();
-    let (width, height) = app_icon.dimensions();
+
+    // let icon = AppTheme::get_icon().clone();
+    let icon = image::load_from_memory(TRAY_ICON)
+        .expect("Failed to load icon")
+        .into_rgba8();
+    let (width, height) = icon.dimensions();
 
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("HoverPane")
-        .with_icon(tray_icon::Icon::from_rgba(app_icon.into_raw(), width, height).unwrap())
+        .with_icon(tray_icon::Icon::from_rgba(icon.into_raw(), width, height).unwrap())
         .with_menu(Box::new(tray_menu))
+        .with_icon_as_template(true)
         .build()
         .unwrap();
     let tray_icon_proxy = proxy_clone.clone();
     tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-        info!("Tray icon event: {:?}", event);
+        // info!("Tray icon event: {:?}", event);
         tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
     }));
 
@@ -885,13 +943,13 @@ impl ApplicationHandler<UserEvent> for App {
                 // info!("Cursor moved: {:?}", position);
             }
             WindowEvent::CursorEntered { device_id } => {
-                info!("Cursor entered: {:?}", device_id);
+                // info!("Cursor entered: {:?}", device_id);
             }
             WindowEvent::CursorLeft { device_id } => {
-                info!("Cursor left: {:?}", device_id);
+                // info!("Cursor left: {:?}", device_id);
             }
             WindowEvent::Moved(position) => {
-                info!("Window moved: {:?}", position);
+                // info!("Window moved: {:?}", position);
                 // TODO: Update widget position in the database
             }
             _ => {
@@ -943,7 +1001,23 @@ impl ApplicationHandler<UserEvent> for App {
                 self.create_widget(event_loop, widget_config.clone());
             }
             UserEvent::TrayIconEvent(trayevent) => {
-                info!("Unhandled Tray icon event: {:?}", trayevent);
+                match trayevent {
+                    tray_icon::TrayIconEvent::Move { id, position, rect } => {
+                        // info!("Tray icon moved: {:?}", position);
+                    }
+                    tray_icon::TrayIconEvent::Click {
+                        id,
+                        position,
+                        button,
+                        button_state,
+                        rect,
+                    } => {
+                        info!("Tray icon clicked: {:?}", position);
+                    }
+                    _ => {
+                        // info!("Unhandled Tray icon event: {:?}", trayevent);
+                    }
+                }
             }
             UserEvent::MenuEvent(menu_event) => {
                 info!("Menu event: {:?}", menu_event);
@@ -1128,45 +1202,32 @@ impl ApplicationHandler<UserEvent> for App {
                 let proxy = self.proxy.clone();
                 let updater = self.updater.clone();
                 let app_settings = self.settings.clone();
-                thread::spawn(move || {
-                    let rt = Runtime::new().unwrap();
-                    rt.block_on(async {
-                        match updater
-                            .check_for_updates(
-                                &app_settings.app_settings.licence_key,
-                                &app_settings.app_settings.machine_id,
-                                &app_settings.app_settings.email,
-                            )
-                            .await
-                        {
-                            Ok(Some(update_info)) => {
-                                info!("New update available: {:?}", update_info);
-                                // Show update notification to user
-                                proxy
-                                    .send_event(UserEvent::UpdateAvailable(update_info))
-                                    .unwrap();
-                            }
-                            Ok(None) => {
-                                info!("No updates available");
-                                // Show "up to date" notification
-                                proxy
-                                    .send_event(UserEvent::UpdateError(
-                                        "Already up to date".to_string(),
-                                    ))
-                                    .unwrap();
-                            }
-                            Err(e) => {
-                                error!("Failed to check for updates: {}", e);
-                                proxy
-                                    .send_event(UserEvent::UpdateError(format!(
-                                        "Failed to check for updates: {}",
-                                        e
-                                    )))
-                                    .unwrap();
-                            }
-                        }
-                    });
-                });
+                // thread::spawn(move || {
+                //     let rt = Runtime::new().unwrap();
+                //     rt.block_on(async {
+                match updater.check_for_updates(
+                    // &app_settings.app_settings.licence_key,
+                    // &app_settings.app_settings.machine_id,
+                    // &app_settings.app_settings.email,
+                    true,
+                ) {
+                    Ok(_) => {
+                        info!("Update completed");
+                        // Show update notification to user
+                        // proxy
+                        //     .send_event(UserEvent::UpdateAvailable(update_info))
+                        //     .unwrap();
+                    }
+                    Err(e) => {
+                        error!("Failed to check for updates: {}", e);
+                        // Show "up to date" notification
+                        proxy
+                            .send_event(UserEvent::UpdateError("Already up to date".to_string()))
+                            .unwrap();
+                    }
+                }
+                //     });
+                // });
             }
             UserEvent::UpdateAvailable(update_info) => {
                 let proxy = self.proxy.clone();
@@ -1400,18 +1461,18 @@ impl ApplicationHandler<UserEvent> for App {
     }
 }
 
-pub fn set_app_dock_icon(_window: &Window) {
-    unsafe {
-        let data = NSData::dataWithBytes_length_(
-            nil,
-            DOCK_ICON.as_ptr() as *const std::os::raw::c_void,
-            DOCK_ICON.len() as u64,
-        );
+// pub fn set_app_dock_icon(_window: &Window) {
+//     unsafe {
+//         let data = NSData::dataWithBytes_length_(
+//             nil,
+//             DOCK_ICON.as_ptr() as *const std::os::raw::c_void,
+//             DOCK_ICON.len() as u64,
+//         );
 
-        let ns_image = NSImage::initWithDataIgnoringOrientation_(NSImage::alloc(nil), data);
-        NSApplication::setApplicationIconImage_(NSApp(), ns_image);
-    }
-}
+//         let ns_image = NSImage::initWithDataIgnoringOrientation_(NSImage::alloc(nil), data);
+//         NSApplication::setApplicationIconImage_(NSApp(), ns_image);
+//     }
+// }
 
 fn setup_menu() -> Menu {
     let menu = Menu::new();
@@ -1662,6 +1723,12 @@ fn main() {
     } else {
         "http://localhost:3000/licence/check"
     };
+    let updater_api_url = if dotenvy::var("ENV").unwrap_or("prod".to_string()) == "prod" {
+        "https://api.hoverpane.com/apps/hoverpane/updates"
+    } else {
+        "http://localhost:3000/apps/hoverpane/updates"
+    };
+
     let api_base_url = if dotenvy::var("ENV").unwrap_or("prod".to_string()) == "prod" {
         "https://api.hoverpane.com"
     } else {
@@ -1707,15 +1774,9 @@ fn main() {
         proxy_clone_muda.send_event(UserEvent::MenuEvent(event));
     }));
 
-    // setup the icon
-    let img: ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::load_from_memory(TRAY_ICON)
-        .expect("Failed to load icon")
-        .into_rgba8();
-    let (width, height) = img.dimensions();
-
     let (menu_items, tray_icon) = setup_tray_menu(
         desktop_settings.app_settings.licence_tier.clone(),
-        img.clone(),
+        // &theme,
         event_loop_proxy.clone(),
     );
     tray_icon.set_visible(desktop_settings.app_settings.show_tray_icon);
@@ -1725,12 +1786,9 @@ fn main() {
             app_settings: desktop_settings.app_settings.clone(),
             messages: vec![],
         },
-        updater: Updater::new(
-            env!("CARGO_PKG_VERSION"),
-            &format!("{}/apps/hoverpane/latest", licence_check_url),
-        ),
+        updater: Updater::new(env!("CARGO_PKG_VERSION"), &updater_api_url),
         tray_icon,
-        app_icon: img,
+        // theme,
         db: app_db,
         settings: desktop_settings,
         menu_items,

@@ -30,6 +30,10 @@ landingpage:
     cd astro-landingpage && npm run build 
     wrangler pages deploy astro-landingpage/dist --project-name widget-maker-landing
 
+uploadnew:
+    aws s3 cp ./release/{{version}} s3://hoverpane-app/release/{{version}}/ --recursive
+
+
 logs:
     cat ~/Library/Application\ Support/com.jarde.hoverpane/hoverpane.log
 
@@ -38,11 +42,14 @@ release:
     cd hoverpane-app && cargo build --release
 
 final: release
-    cd hoverpane-app && cargo packager --release --formats app
+    cd hoverpane-app && cargo packager --release --private-key packager_secret.key --formats app
 
-version:
-    cd hoverpane-app && cargo version
+build-release:
+    mkdir -p release/{{version}}
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > release/{{version}}/published_at.txt
+    cp ./hoverpane-{{version}}.dmg release/{{version}}/
+    cp ./notes-{{version}}.md release/{{version}}/
+    cp ./target/release/hoverpane.app.tar.gz.sig release/{{version}}/
 
-
-all: final macos version
+all: final macos build-release uploadnew
 

@@ -1,6 +1,6 @@
 [package]
 name = "hoverpane"
-version = "0.10.0"
+version = "0.12.0"
 edition = "2021"
 
 [features]
@@ -9,7 +9,11 @@ basic = []
 pro = ["basic"]
 
 [dependencies]
-wry = { version = "0.50.4", features = ["protocol", "transparent", "os-webview"] }
+wry = { version = "0.50.4", features = [
+    "protocol",
+    "transparent",
+    "os-webview",
+] }
 winit = "0.30.9"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -41,6 +45,7 @@ machine-uid = "0.5.3"
 blake3 = "1.8.2"
 dotenvy = "0.15.7"
 open = "5.3.2"
+cargo-packager-updater = "0.2.2"
 
 
 # [[bin]]
@@ -58,15 +63,9 @@ open = "5.3.2"
 before-packaging-command = "cargo build --release --features pro"
 identifier = "com.jarde.hoverpane"
 name = "HoverPane"
-icons = [
-    "build_assets/icon.png",
-    "build_assets/icons.icns",
-]
-resources = [
-"build_assets",
-]
-macos = {info-plist-path = "build_assets/Info.plist"}
+icons = ["build_assets/icon.png", "build_assets/icons.icns"]
+resources = ["build_assets"]
+macos = { info-plist-path = "build_assets/Info.plist" }
 
 [package.metadata.packager.nsis]
 appdata-paths = ["$LOCALAPPDATA/$IDENTIFIER"]
-

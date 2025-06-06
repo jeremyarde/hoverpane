@@ -6,3 +6,7 @@ target/
 widget-util/src/product_config.json
 hoverpane-*.dmg
 *.md
+.secret
+*.pub
+*.key
+release/*
