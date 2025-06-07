@@ -105,14 +105,16 @@ const Desktop: React.FC = () => {
             <div className="text-white hero-content">
               <h1 className="hero-title">HoverPane</h1>
               <p className="text-white hero-subtitle">
-                Transform any website into a sleek desktop widget in seconds.
-                Keep your favorite content always visible and easily accessible.
+                Instantly turn any website into a beautiful desktop widget.
+                <br />
+                Keep what matters most always at your fingertips—effortlessly
+                accessible, always in view.
               </p>
               <button
                 onClick={handleDownload}
                 className="text-white hero-button"
               >
-                Get Started
+                Try HoverPane Free
               </button>
             </div>
           </header>
@@ -181,7 +183,7 @@ const Desktop: React.FC = () => {
                 }}
                 className="p-0 text-gray-800 no-underline bg-transparent border-none cursor-pointer font-inherit hover:text-gray-600"
               >
-                Features
+                Why You'll Love It
               </button>
               <button
                 onClick={() => {
@@ -199,7 +201,7 @@ const Desktop: React.FC = () => {
                 }}
                 className="p-0 text-gray-800 no-underline bg-transparent border-none cursor-pointer font-inherit hover:text-gray-600"
               >
-                Ideas
+                Inspiration
               </button>
               <button
                 onClick={() => {
@@ -208,16 +210,15 @@ const Desktop: React.FC = () => {
                 }}
                 className="p-0 text-gray-800 no-underline bg-transparent border-none cursor-pointer font-inherit hover:text-gray-600"
               >
-                Pricing
+                Plans & Pricing
               </button>
             </div>
             <div className="flex gap-6 items-center ml-auto">
-              {/* <span>{new Date().toLocaleTimeString()}</span>*/}
               <button
                 onClick={handleDownload}
                 className="p-2 text-gray-800 no-underline bg-transparent rounded-md border-none cursor-pointer font-inherit hover:text-gray-600 hover:bg-yellow-200"
               >
-                Download
+                Download HoverPane
               </button>
             </div>
           </div>
