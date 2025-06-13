@@ -1,6 +1,6 @@
 [package]
 name = "hoverpane"
-version = "0.12.0"
+version = "0.16.0"
 edition = "2021"
 
 [features]
@@ -60,12 +60,12 @@ cargo-packager-updater = "0.2.2"
 
 
 [package.metadata.packager]
+macos = { info-plist-path = "build_assets/Info.plist" }
+
 before-packaging-command = "cargo build --release --features pro"
 identifier = "com.jarde.hoverpane"
 name = "HoverPane"
 icons = ["build_assets/icon.png", "build_assets/icons.icns"]
 resources = ["build_assets"]
-macos = { info-plist-path = "build_assets/Info.plist" }
-
 [package.metadata.packager.nsis]
 appdata-paths = ["$LOCALAPPDATA/$IDENTIFIER"]

@@ -7,8 +7,8 @@ frontend:
     cd ../react-ui && npm run build
 
 # release: types frontend
-release:
-    cargo build --release
+# release:
+#     cargo build --release
 
 release-win: types frontend
     cargo build --release --target x86_64-pc-windows-gnu
@@ -45,9 +45,9 @@ icons:
 icons-win:
     convert build_assets/icon.png -define icon:auto-resize=16,32,48,64,128,256 build_assets/icon.ico
 
-final: release
+final:
     cargo packager --release --formats app
-
+    
 final-win: release-win
     cargo packager --release --formats nsis
 

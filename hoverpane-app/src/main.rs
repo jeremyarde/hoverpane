@@ -1239,215 +1239,6 @@ impl ApplicationHandler<UserEvent> for App {
                 if !update_confirmed {
                     return;
                 }
-
-                thread::spawn(move || {
-                    let rt = Runtime::new().unwrap();
-                    rt.block_on(async {
-                        // let progress_callback = Box::new(move |downloaded: u64, total: u64| {
-                        //     proxy
-                        //         .send_event(UserEvent::UpdateProgress { downloaded, total })
-                        //         .unwrap();
-                        // });
-
-                        match updater.download_update(&update_info).await {
-                            Ok(update_file) => {
-                                info!("Update downloaded to: {:?}", update_file);
-
-                                // Mount the DMG file
-                                let mount_output = match std::process::Command::new("hdiutil")
-                                    .args([
-                                        "attach",
-                                        "-nobrowse",
-                                        "-plist",
-                                        update_file.to_str().unwrap(),
-                                    ])
-                                    .output()
-                                {
-                                    Ok(output) => output,
-                                    Err(e) => {
-                                        error!("Failed to mount DMG: {}", e);
-                                        proxy
-                                            .send_event(UserEvent::UpdateError(format!(
-                                                "Failed to mount update: {}",
-                                                e
-                                            )))
-                                            .unwrap();
-                                        return;
-                                    }
-                                };
-
-                                // Parse the plist output to get the mount point
-                                let mount_info = String::from_utf8_lossy(&mount_output.stdout);
-                                let volume_path = mount_info
-                                    .lines()
-                                    .find(|line| line.contains("<key>mount-point</key>"))
-                                    .and_then(|_| {
-                                        mount_info.lines().nth(
-                                            mount_info
-                                                .lines()
-                                                .position(|line| {
-                                                    line.contains("<key>mount-point</key>")
-                                                })
-                                                .unwrap()
-                                                + 1,
-                                        )
-                                    })
-                                    .and_then(|line| {
-                                        line.trim()
-                                            .strip_prefix("<string>")
-                                            .and_then(|s| s.strip_suffix("</string>"))
-                                    })
-                                    .unwrap_or("/Volumes/HoverPane");
-
-                                info!("DMG mounted at: {}", volume_path);
-
-                                // Give a moment for the DMG to mount
-                                std::thread::sleep(std::time::Duration::from_secs(1));
-
-                                // Find the .app in the mounted volume
-                                let app_path = std::fs::read_dir(volume_path)
-                                    .ok()
-                                    .and_then(|mut entries| {
-                                        entries.find(|entry| {
-                                            entry
-                                                .as_ref()
-                                                .map(|e| {
-                                                    e.path()
-                                                        .extension()
-                                                        .map_or(false, |ext| ext == "app")
-                                                })
-                                                .unwrap_or(false)
-                                        })
-                                    })
-                                    .and_then(|entry| entry.ok())
-                                    .map(|entry| entry.path());
-
-                                if let Some(app_path) = app_path {
-                                    info!("Found app at: {:?}", app_path);
-
-                                    // Get the Applications directory
-                                    let applications_dir =
-                                        std::path::PathBuf::from("/Applications");
-                                    let target_path =
-                                        applications_dir.join(app_path.file_name().unwrap());
-
-                                    // Create backup of current app
-                                    if target_path.exists() {
-                                        let backup_path = target_path.with_extension("app.backup");
-                                        if let Err(e) = std::process::Command::new("cp")
-                                            .args([
-                                                "-R",
-                                                target_path.to_str().unwrap(),
-                                                backup_path.to_str().unwrap(),
-                                            ])
-                                            .output()
-                                        {
-                                            error!("Failed to create backup: {}", e);
-                                            proxy
-                                                .send_event(UserEvent::UpdateError(
-                                                    "Failed to create backup".to_string(),
-                                                ))
-                                                .unwrap();
-                                            // Try to unmount before returning
-                                            let _ = std::process::Command::new("hdiutil")
-                                                .args(["detach", volume_path])
-                                                .output();
-                                            return;
-                                        }
-                                    }
-
-                                    // Remove the old app if it exists
-                                    if target_path.exists() {
-                                        info!("Removing old app from Applications");
-                                        if let Err(e) = std::process::Command::new("rm")
-                                            .args(["-rf", target_path.to_str().unwrap()])
-                                            .output()
-                                        {
-                                            error!("Failed to remove old app: {}", e);
-                                            // Try to unmount before returning
-                                            let _ = std::process::Command::new("hdiutil")
-                                                .args(["detach", volume_path])
-                                                .output();
-                                            return;
-                                        }
-                                    }
-
-                                    // Copy the new app to Applications
-                                    info!("Copying new app to Applications");
-                                    if let Err(e) = std::process::Command::new("cp")
-                                        .args([
-                                            "-R",
-                                            app_path.to_str().unwrap(),
-                                            target_path.to_str().unwrap(),
-                                        ])
-                                        .output()
-                                    {
-                                        error!("Failed to copy new app: {}", e);
-                                        // Try to unmount before returning
-                                        let _ = std::process::Command::new("hdiutil")
-                                            .args(["detach", volume_path])
-                                            .output();
-                                        return;
-                                    }
-
-                                    // Unmount the DMG
-                                    if let Err(e) = std::process::Command::new("hdiutil")
-                                        .args(["detach", volume_path])
-                                        .output()
-                                    {
-                                        error!("Failed to unmount DMG: {}", e);
-                                    }
-
-                                    info!("Update completed successfully");
-
-                                    // Launch the new version
-                                    if let Err(e) = std::process::Command::new("open")
-                                        .arg(target_path.to_str().unwrap())
-                                        .spawn()
-                                    {
-                                        error!("Failed to launch new version: {}", e);
-                                        proxy
-                                            .send_event(UserEvent::UpdateError(
-                                                "Failed to launch new version".to_string(),
-                                            ))
-                                            .unwrap();
-                                        return;
-                                    }
-
-                                    // Give a moment for the new app to start
-                                    std::thread::sleep(std::time::Duration::from_secs(1));
-
-                                    // Exit the application
-                                    proxy
-                                        .send_event(UserEvent::MenuEvent(muda::MenuEvent {
-                                            id: MenuId::new(quit_id.clone()),
-                                        }))
-                                        .unwrap();
-                                } else {
-                                    error!("Could not find .app in mounted DMG");
-                                    proxy
-                                        .send_event(UserEvent::UpdateError(
-                                            "Could not find app in update package".to_string(),
-                                        ))
-                                        .unwrap();
-                                    // Try to unmount before returning
-                                    let _ = std::process::Command::new("hdiutil")
-                                        .args(["detach", volume_path])
-                                        .output();
-                                }
-                            }
-                            Err(e) => {
-                                error!("Failed to download update: {}", e);
-                                proxy
-                                    .send_event(UserEvent::UpdateError(format!(
-                                        "Failed to download update: {}",
-                                        e
-                                    )))
-                                    .unwrap();
-                            }
-                        }
-                    });
-                });
             }
             UserEvent::UpdateProgress { downloaded, total } => {
                 // TODO: Show progress in UI
@@ -1670,15 +1461,6 @@ fn load_app_settings(
 }
 
 fn setup_logging(config_dir: &Path) {
-    let log_file = config_dir.join("hoverpane.log");
-
-    // Create the log file if it doesn't exist
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_file)
-        .expect("Failed to create log file");
-
     // Configure the logger
     let mut logger = Builder::new();
     logger
@@ -1692,18 +1474,26 @@ fn setup_logging(config_dir: &Path) {
                 record.args()
             )
         })
-        .filter(None, LevelFilter::Info)
-        // Log to both file and stdout
-        .target(env_logger::Target::Pipe(Box::new(file)))
-        .target(env_logger::Target::Stdout);
+        .filter(None, LevelFilter::Info);
 
-    // Try to initialize the logger, but don't panic if it's already initialized
+    if dotenvy::var("ENV").unwrap_or("prod".to_string()) == "prod" {
+        let log_file = config_dir.join("hoverpane.log");
+        // Create the log file if it doesn't exist
+        let file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&log_file)
+            .expect("Failed to create log file");
+        logger.target(env_logger::Target::Pipe(Box::new(file)));
+        info!("Logging to file: {:?}", log_file);
+    } else {
+        logger.target(env_logger::Target::Stdout);
+        info!("Logging to stdout");
+    }
+
     if let Err(e) = logger.try_init() {
         warn!("Logger already initialized: {}", e);
     }
-
-    info!("Logging to file: {:?}", log_file);
-    info!("Logging to console");
 }
 
 fn main() {

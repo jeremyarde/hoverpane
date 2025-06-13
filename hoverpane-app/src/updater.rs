@@ -80,34 +80,28 @@ impl Updater {
                 info!("No update found");
             }
         }
-        // if let Ok(Some(update)) =
-        //     check_update(self.current_version.clone(), self.updater_config.clone())
-        // {
-        //     info!("Update info: {:?}", update);
-        //     update.download_and_install()?;
-        // }
 
         Ok(())
     }
 
-    pub async fn download_update(
-        &self,
-        update_info: &UpdateInfo,
-    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-        info!("Downloading update...");
+    // pub async fn download_update(
+    //     &self,
+    //     update_info: &UpdateInfo,
+    // ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    //     info!("Downloading update...");
 
-        let response = reqwest::get(&update_info.download_url).await?;
-        let bytes = response.bytes().await?;
+    //     let response = reqwest::get(&update_info.download_url).await?;
+    //     let bytes = response.bytes().await?;
 
-        // Create a temporary file to store the update
-        let temp_dir = std::env::temp_dir();
-        let update_file = temp_dir.join(format!("hoverpane-update-{}.dmg", update_info.version));
+    //     // Create a temporary file to store the update
+    //     let temp_dir = std::env::temp_dir();
+    //     let update_file = temp_dir.join(format!("hoverpane-update-{}.dmg", update_info.version));
 
-        std::fs::write(&update_file, bytes)?;
-        info!("Update downloaded to: {:?}", update_file);
+    //     std::fs::write(&update_file, bytes)?;
+    //     info!("Update downloaded to: {:?}", update_file);
 
-        Ok(update_file)
-    }
+    //     Ok(update_file)
+    // }
 }
 
 #[cfg(test)]
@@ -152,5 +146,16 @@ mod tests {
                 println!("No update found");
             }
         }
+    }
+
+    #[test]
+    fn test_signature_verification() {
+        let updater = Updater::new("0.13.0", "http://localhost:3000/apps/hoverpane/updates");
+        let update_info = UpdateInfo {
+            version: "0.13.0".to_string(),
+            download_url: "http://localhost:3000/apps/hoverpane/updates".to_string(),
+            release_notes: "".to_string(),
+        };
+        let update_file = updater.check_for_updates(false).unwrap();
     }
 }

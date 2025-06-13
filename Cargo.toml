@@ -1,16 +1,10 @@
 [workspace]
 resolver = "2"
-members = [
-    "hoverpane-app", "mcp-server",
-    "widget-db",
-    "widget-types",
-    "widget-util"
-]
+members = ["hoverpane-app", "mcp-server", "widget-db", "widget-types"]
 
 
 [workspace.package]
 edition = "2024"
-
 
 
 [workspace.dependencies]
