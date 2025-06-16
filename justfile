@@ -38,14 +38,14 @@ macos:
 
 pkg-sign:
     # only pkg and sign the app, the dmg can stay as .dmg
-    tar -czvf ./target/release/hoverpane_{{version}}_{{arch}}.app.tar.gz ./target/release/hoverpane.app
+    tar -czvf ./target/release/hoverpane_{{version}}_{{arch}}.app.tar.gz -C ./target/release hoverpane.app
     # sign the app, because dmg does not need to be signed (in theory)
     cargo packager signer sign --private-key $CARGO_PACKAGER_SIGN_PRIVATE_KEY ./target/release/hoverpane_{{version}}_{{arch}}.app.tar.gz
 
 build-release:
     mkdir -p ./release/{{version}}
     date -u +"%Y-%m-%dT%H:%M:%SZ" > ./release/{{version}}/published_at.txt
-    cp ./notes-{{version}}.md ./release/{{version}}/
+    [ -f ./notes-{{version}}.md ] && cp ./notes-{{version}}.md ./release/{{version}}/
     cp ./target/release/hoverpane_{{version}}_{{arch}}.dmg ./release/{{version}}/
     cp ./target/release/hoverpane_{{version}}_{{arch}}.app.tar.gz ./release/{{version}}/
     cp ./target/release/hoverpane_{{version}}_{{arch}}.app.tar.gz.sig ./release/{{version}}/

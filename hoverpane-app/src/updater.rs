@@ -58,30 +58,25 @@ impl Updater {
         }
     }
 
-    pub fn check_for_updates(
-        &self,
-        // licence_key: &str,
-        // machine_id: &str,
-        // email: &str,
-        install: bool,
-    ) -> Result<(), UpdaterError> {
-        // info!("Checking for updates at {}", self.update_check_url);
-
+    pub fn check_for_updates(&self, install: bool) -> Result<String, UpdaterError> {
         info!("Checking for updates at {:?}", self.updater_config);
-        match check_update(self.current_version.clone(), self.updater_config.clone()) {
+        let msg = match check_update(self.current_version.clone(), self.updater_config.clone()) {
             Ok(Some(update)) => {
                 info!("Update info: {:?}", update);
-                update.download_and_install()?;
+                match update.download_and_install() {
+                    Ok(_) => "Update downloaded and installed successfully.".to_string(),
+                    Err(e) => {
+                        let msg = format!("Error downloading and installing update: {:?}", e);
+                        info!("{}", msg);
+                        msg
+                    }
+                }
             }
-            Err(e) => {
-                error!("Error checking for updates: {:?}", e);
-            }
-            _ => {
-                info!("No update found");
-            }
-        }
+            Err(e) => format!("Error checking for updates: {:?}", e),
+            _ => "No update found".to_string(),
+        };
 
-        Ok(())
+        Ok(msg)
     }
 
     // pub async fn download_update(
@@ -106,24 +101,15 @@ impl Updater {
 
 #[cfg(test)]
 mod tests {
-    use crate::DesktopAppSettings;
-
     use super::*;
-
-    #[cfg(not(test))]
-    use log::{info, warn};
-    use widget_types::AppSettings;
-
-    #[cfg(test)]
-    use std::{println as info, println as warn};
 
     #[tokio::test]
     async fn test_version_comparison() {
         let updater = Updater::new("0.4.0", "http://localhost:3000/apps/hoverpane/updates");
 
         match updater.check_for_updates(false) {
-            Ok(()) => {
-                println!("Update found");
+            Ok(msg) => {
+                println!("Update found: {}", msg);
             }
             Err(e) => {
                 error!("Error: {:?}", e);
@@ -136,14 +122,11 @@ mod tests {
     fn test_download_update() {
         let updater = Updater::new("0.10.0", "http://localhost:3000/apps/hoverpane/updates");
         match updater.check_for_updates(false) {
-            Ok(()) => {
-                println!("Update found");
+            Ok(msg) => {
+                println!("Update found: {}", msg);
             }
             Err(e) => {
                 println!("Error: {:?}", e);
-            }
-            _ => {
-                println!("No update found");
             }
         }
     }
@@ -157,5 +140,23 @@ mod tests {
             release_notes: "".to_string(),
         };
         let update_file = updater.check_for_updates(false).unwrap();
+    }
+
+    #[test]
+    fn test_download_and_install() {
+        let updater = Updater::new("0.13.0", "http://localhost:3000/apps/hoverpane/updates");
+        let update_info = UpdateInfo {
+            version: "0.13.0".to_string(),
+            download_url: "http://localhost:3000/apps/hoverpane/updates".to_string(),
+            release_notes: "".to_string(),
+        };
+        match updater.check_for_updates(true) {
+            Ok(msg) => {
+                println!("Update found and installed: {}", msg);
+            }
+            Err(e) => {
+                println!("Error: {:?}", e);
+            }
+        }
     }
 }
